@@ -1,0 +1,1 @@
+{"name": "websentinel", "version": "2.0.0", "description": "WebSentinel — Browser Threat Detection Research Platform", "main": "main.js", "scripts": {"start": "electron .", "dev": "electron . --dev"}, "devDependencies": {"electron": "^27.3.11"}}

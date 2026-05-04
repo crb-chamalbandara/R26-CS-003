@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic
+playwright
+httpx
+Pillow
+imagehash
+pandas
+numpy
+scikit-learn
+xgboost

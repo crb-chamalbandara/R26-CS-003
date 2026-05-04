@@ -1,0 +1,1 @@
+# WebSentinel — Core shared infrastructure
