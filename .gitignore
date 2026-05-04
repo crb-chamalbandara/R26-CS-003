@@ -1,0 +1,62 @@
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environments ──────────────────────────────────────
+venv/
+.venv/
+env/
+.env
+
+# ── Node / Electron ───────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Trained models (large binary files) ──────────────────────
+models/*.pkl
+models/*.joblib
+models/*.h5
+models/*.pt
+models/*.bin
+
+# ── Runtime data / generated files ───────────────────────────
+data/urls_labeled.csv
+output/
+
+# ── Dataset (large zip — store separately) ───────────────────
+Dataset/
+
+# ── Playwright browser profile (user session data) ────────────
+.websentinel/
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+backend.log
+backend_out.log
+backend_err.log
+
+# ── OS / editor ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Secrets / API keys ────────────────────────────────────────
+.env
+.env.*
+secrets.json
