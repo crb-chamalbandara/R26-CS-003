@@ -759,7 +759,7 @@ button{font-family:inherit;cursor:pointer}
 // ══════════════════════════════════════════════════════════════
 //  Constants & state
 // ══════════════════════════════════════════════════════════════
-const API = 'http://127.0.0.1:8000';
+const API = 'http://127.0.0.1:8001';
 let alerts = [], timeline = [];
 let ct = 0, cp = 0, cs = 0, ck = 0;
 let backendUp = false;
@@ -814,7 +814,7 @@ async function startPwSession() {
 function connectPwWs() {
   if (pwWs && pwWs.readyState === WebSocket.OPEN) return;
   closePwWs();
-  pwWs = new WebSocket('ws://127.0.0.1:8000/ws/events');
+  pwWs = new WebSocket('ws://127.0.0.1:8001/ws/events');
 
   pwWs.onmessage = (evt) => {
     let msg; try { msg = JSON.parse(evt.data); } catch { return; }

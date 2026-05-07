@@ -1,0 +1,20 @@
+{
+  "paypal": "84336ad8356473de",
+  "microsoft": "b34cb3b34c4cb391",
+  "apple": "a4c6cf61389b65cc",
+  "amazon": "e464d33b14c3c3ce",
+  "google": "c4b4114b4fb59e96",
+  "facebook": "8c3334674f6c1e93",
+  "instagram": "d43e022f4b7e3c32",
+  "netflix": "c6cc32d932d932d9",
+  "dropbox": "d2e3691c37398cc6",
+  "linkedin": "ee6b39849c9ac465",
+  "wellsfargo": "c0b93f46c4bb91d1",
+  "bankofamerica": "ae39c1e6191e24f9",
+  "chase": "f5909eac6ae92ad0",
+  "hsbc": "8200280082008000",
+  "dhl": "bca4c34b3cb4c34b",
+  "fedex": "a606ddf93206c765",
+  "ups": "ea4ae18d973c9531",
+  "irs": "cfc9b830e102b2ef"
+}
