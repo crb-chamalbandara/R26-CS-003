@@ -60,3 +60,5 @@ desktop.ini
 .env
 .env.*
 secrets.json
+/core/c1/data/GoogleChromeExtension
+core/c1/data/MaliciousBrowserExtensions/
