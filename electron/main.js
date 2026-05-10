@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 // Prevent GPU process conflicts when Playwright launches its own Chromium window
@@ -8,10 +9,11 @@ app.disableHardwareAcceleration();
 let mainWindow;
 let backendProcess;
 
-const PYTHON = process.env.PYTHON_PATH || 'C:\\Python312\\python.exe';
 const BACKEND_DIR = path.join(__dirname, '..');   // project root — uvicorn runs from here
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 const BACKEND_PORT = 8001;
+const LOCAL_PYTHON = path.join(BACKEND_DIR, '.venv', 'Scripts', 'python.exe');
+const PYTHON = process.env.PYTHON_PATH || (fs.existsSync(LOCAL_PYTHON) ? LOCAL_PYTHON : 'python');
 
 // ── Start FastAPI backend ─────────────────────────────────────────────────────
 function startBackend() {

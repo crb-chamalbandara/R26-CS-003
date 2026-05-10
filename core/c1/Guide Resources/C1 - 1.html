@@ -1,0 +1,550 @@
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root{
+  --font-sans:'Space Grotesk', ui-sans-serif, system-ui;
+  --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular;
+  --color-background-primary:#F7F6F1;
+  --color-background-secondary:#FFFFFF;
+  --color-text-primary:#1B1A17;
+  --color-text-secondary:#57524B;
+  --color-border-tertiary:#E6E0D6;
+  --color-border-secondary:#D8D0C4;
+  --accent:#1A8C79;
+  --accent-2:#F08A24;
+  --accent-3:#0F5B66;
+  --shadow:0 10px 30px rgba(15,20,25,0.08),0 3px 8px rgba(15,20,25,0.05);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:linear-gradient(140deg,#F7F6F1 0%,#EFE9DC 60%,#F4F0E7 100%)}
+.root{
+  padding:1.2rem 0 3.5rem;
+  font-family:var(--font-sans);
+  max-width:980px;
+  margin:0 auto;
+  position:relative;
+}
+.root:before{
+  content:"";
+  position:absolute;
+  inset:-120px -80px auto;
+  height:260px;
+  background:radial-gradient(closest-side,rgba(240,138,36,0.18),rgba(240,138,36,0)),
+             radial-gradient(closest-side,rgba(26,140,121,0.18),rgba(26,140,121,0));
+  filter:blur(6px);
+  z-index:-1;
+}
+p{font-size:13px;color:var(--color-text-primary);line-height:1.75;margin-bottom:8px}
+p:last-child{margin-bottom:0}
+
+.tab-nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.6rem;border-bottom:1px solid var(--color-border-tertiary);padding-bottom:12px}
+.tab{padding:8px 16px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--color-border-secondary);color:var(--color-text-secondary);background:rgba(255,255,255,0.7);transition:transform .15s, box-shadow .15s, color .15s, border-color .15s}
+.tab:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(27,26,23,0.08)}
+.tab.active{background:linear-gradient(135deg,var(--accent),var(--accent-3));color:#fff;border-color:transparent}
+
+.sec{display:none}.sec.active{display:block}
+
+.banner{
+  background:linear-gradient(120deg,rgba(26,140,121,0.14),rgba(240,138,36,0.16));
+  border:1px solid #E0D7C8;
+  border-radius:14px;
+  padding:18px 20px;
+  margin-bottom:1.4rem;
+  box-shadow:var(--shadow);
+}
+.ban-tag{font-size:11px;font-weight:600;color:#0F5B66;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.ban-title{font-size:18px;font-weight:600;color:#14221F;margin-bottom:4px}
+.ban-sub{font-size:12px;color:#2E3A35;line-height:1.6}
+
+.card{border:1px solid var(--color-border-tertiary);border-radius:14px;overflow:hidden;margin-bottom:12px;background:rgba(255,255,255,0.86);box-shadow:var(--shadow);backdrop-filter:blur(6px)}
+.card-head{padding:13px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;user-select:none}
+.card-head:hover{background:rgba(255,255,255,0.95)}
+.card-icon{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;background:rgba(26,140,121,0.15);color:var(--accent-3)}
+.card-info{flex:1}
+.card-ttl{font-size:14px;font-weight:500;color:var(--color-text-primary)}
+.card-sub{font-size:12px;color:var(--color-text-secondary);margin-top:2px}
+.card-chev{font-size:11px;color:var(--color-text-secondary);transition:transform .2s;flex-shrink:0}
+.card-chev.op{transform:rotate(180deg)}
+.card-body{display:none;padding:14px 16px;border-top:1px solid var(--color-border-tertiary)}
+.card-body.op{display:block}
+
+.slabel{font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.divider{border:none;border-top:1px solid var(--color-border-tertiary);margin:12px 0}
+
+.hl{background:rgba(255,255,255,0.9);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:10px 13px;margin:10px 0;font-size:13px;color:var(--color-text-primary);line-height:1.7}
+.hl.green{border-left-color:#1A8C79}
+.hl.amber{border-left-color:#F08A24}
+.hl.red{border-left-color:#C6423E}
+.hl-label{font-size:10px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+
+.pill{display:inline-flex;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-right:4px}
+.p-done{background:#E3F3EC;color:#0F5B3F}
+.p-now{background:#E1F4EE;color:#0F5B66}
+.p-next{background:#FFF1E0;color:#7B4B10}
+.p-later{background:#F1EFE8;color:#5F5E5A}
+.p-mal{background:#FCEBEB;color:#791F1F}
+.p-ben{background:#EAF3DE;color:#27500A}
+.p-free{background:#E1F5EE;color:#085041}
+.p-req{background:#FAEEDA;color:#633806}
+
+.step-list{display:flex;flex-direction:column;gap:0;margin:8px 0}
+.step{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--color-border-tertiary);font-size:13px;color:var(--color-text-primary);line-height:1.65}
+.step:last-child{border-bottom:none;padding-bottom:0}
+.step:first-child{padding-top:0}
+.snum{width:22px;height:22px;border-radius:50%;background:rgba(26,140,121,0.15);color:#0F5B66;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;margin-top:1px}
+.snum.g{background:#E3F3EC;color:#0F5B3F}
+.snum.a{background:#FFF1E0;color:#7B4B10}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.mini{background:rgba(255,255,255,0.9);border-radius:10px;padding:10px 12px;border:1px solid var(--color-border-tertiary)}
+.mini h4{font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.mini p{font-size:12px;color:var(--color-text-primary);line-height:1.6;margin:0}
+
+.phase-block{border:1px solid var(--color-border-tertiary);border-radius:12px;padding:14px 16px;margin-bottom:12px;background:rgba(255,255,255,0.86);box-shadow:var(--shadow)}
+.phase-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.phase-num{width:32px;height:32px;border-radius:50%;background:rgba(26,140,121,0.15);color:#0F5B66;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0}
+.phase-num.g{background:#E3F3EC;color:#0F5B3F}
+.phase-num.a{background:#FFF1E0;color:#7B4B10}
+.phase-num.b{background:#E7F1F2;color:#0F5B66}
+.phase-title{font-size:14px;font-weight:500;color:var(--color-text-primary)}
+.phase-period{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+
+.ds-block{border:1px solid var(--color-border-tertiary);border-radius:12px;overflow:hidden;margin-bottom:12px;background:rgba(255,255,255,0.88);box-shadow:var(--shadow)}
+.ds-top{padding:14px 16px;background:linear-gradient(180deg,rgba(26,140,121,0.08),rgba(255,255,255,0.8))}
+.ds-num-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.ds-badge{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.db1{background:#FCE1DE;color:#7A2B22}
+.db2{background:#E3F3EC;color:#0F5B3F}
+.ds-name{font-size:15px;font-weight:500;color:var(--color-text-primary);margin-bottom:3px}
+.ds-url{font-size:12px;color:var(--color-text-secondary);word-break:break-all;margin-top:2px}
+.ds-body{padding:14px 16px}
+.info-row{display:flex;gap:6px;margin-bottom:7px;font-size:13px;color:var(--color-text-primary);line-height:1.6}
+.info-dot{width:6px;height:6px;border-radius:50%;background:var(--accent-3);flex-shrink:0;margin-top:7px}
+.info-dot.g{background:var(--accent)}
+.code-box{background:rgba(255,255,255,0.85);border-radius:8px;padding:8px 12px;font-family:var(--font-mono);font-size:12px;color:var(--color-text-primary);margin:8px 0;line-height:1.6;word-break:break-all;border:1px dashed #E0D7C8}
+
+.checklist{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.chk{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,0.9);font-size:13px;color:var(--color-text-primary);cursor:pointer;user-select:none;border:1px solid var(--color-border-tertiary);transition:transform .15s, box-shadow .15s}
+.chk:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(27,26,23,0.08)}
+.chk-box{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--color-border-secondary);flex-shrink:0;transition:all .15s;display:flex;align-items:center;justify-content:center}
+.chk-box.checked{background:var(--accent);border-color:var(--accent)}
+.chk-tick{color:#fff;font-size:10px;font-weight:500;display:none}
+.chk-box.checked .chk-tick{display:block}
+
+.warn-box{background:#FFF1E0;border:1px solid #F0B25B;border-radius:10px;padding:10px 13px;margin:10px 0;font-size:12px;color:#4A2E10;line-height:1.65}
+.warn-label{font-size:10px;font-weight:600;color:#7B4B10;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+
+.struct-table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0}
+.struct-table th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--color-border-tertiary);font-weight:600;color:var(--color-text-secondary)}
+.struct-table td{padding:6px 8px;border-bottom:1px solid var(--color-border-tertiary);color:var(--color-text-primary);vertical-align:top;line-height:1.5}
+
+.sec.active{animation:fadeUp .35s ease-out}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.struct-table tr:last-child td{border-bottom:none}
+</style>
+
+<div class="root">
+
+<div class="banner">
+  <div class="ban-tag">Component 1 — Diwanka K.A.W. | IT22276414 | R26-CS-003</div>
+  <div class="ban-title">Malicious Browser Extension Analyzer — Development Plan</div>
+  <div class="ban-sub">Based on your proposal presentation. Full analysis + development phases + data collection steps ready to start now.</div>
+</div>
+
+<div class="tab-nav">
+  <button class="tab active" onclick="showTab('overview')">Component overview</button>
+  <button class="tab" onclick="showTab('plan')">Development plan</button>
+  <button class="tab" onclick="showTab('data')">Data collection</button>
+  <button class="tab" onclick="showTab('checklist')">Start now</button>
+</div>
+
+<!-- ===== TAB 1: OVERVIEW ===== -->
+<div class="sec active" id="sec-overview">
+
+  <div class="slabel">What your presentation defines for Component 1</div>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('ov1')">
+      <div class="card-icon">P</div>
+      <div class="card-info">
+        <div class="card-ttl">Problem, objective and novelty — from your slides</div>
+        <div class="card-sub">Exactly what your proposal states</div>
+      </div>
+      <div class="card-chev op" id="chev-ov1">▼</div>
+    </div>
+    <div class="card-body op" id="body-ov1">
+      <div class="slabel">Problem (from slide 10)</div>
+      <p>Malicious browser extensions can pass store checks and get installed without raising any flags. After installation, they secretly steal data or track user activity. Traditional tools only scan the code statically and do not monitor real runtime behaviour — so hidden malicious actions go completely undetected.</p>
+      <div class="divider"></div>
+      <div class="slabel">Research objective</div>
+      <p>To develop a detection mechanism that identifies both known and unknown malicious browser extensions by combining static analysis and dynamic analysis into a single unified pipeline.</p>
+      <div class="divider"></div>
+      <div class="slabel">Novelty (your key claim)</div>
+      <div class="hl">
+        Unlike existing tools (CRXcavator, Tarnish) that only detect known threats using signatures and permission checks, Component 1 combines ML-based classification with live sandbox behaviour monitoring to detect malicious extensions — including brand new, never-seen-before ones — based on what they actually do at runtime.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('ov2')">
+      <div class="card-icon">M</div>
+      <div class="card-info">
+        <div class="card-ttl">Your three implementation modules — from WBS slide</div>
+        <div class="card-sub">Static Analysis, Dynamic Sandbox, Verdict Engine</div>
+      </div>
+      <div class="card-chev op" id="chev-ov2">▼</div>
+    </div>
+    <div class="card-body op" id="body-ov2">
+      <div class="step-list">
+        <div class="step">
+          <div class="snum">1</div>
+          <div><span style="font-weight:500">Static Analysis Module</span> — checks extension permissions and code structure, uses the XGBoost ML model, and outputs a static threat score. Covers: hash + signature detection, ML classification of manifest features, zero-day extension detection through permission patterns.</div>
+        </div>
+        <div class="step">
+          <div class="snum">2</div>
+          <div><span style="font-weight:500">Dynamic Analysis Module (Sandbox)</span> — only triggered when static score is above threshold. Runs the extension inside a Puppeteer headless browser isolated inside Docker. Monitors: sandbox execution, behaviour profiling, Chrome API call logging, outbound network request capture.</div>
+        </div>
+        <div class="step">
+          <div class="snum">3</div>
+          <div><span style="font-weight:500">Verdict Engine</span> — combines static score and dynamic behaviour findings into one final threat score, a list of specific alert flags, and a human-readable report. Saves to database and feeds the shared Central Dashboard.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('ov3')">
+      <div class="card-icon">T</div>
+      <div class="card-info">
+        <div class="card-ttl">Technologies confirmed in your presentation</div>
+        <div class="card-sub">From slide 12</div>
+      </div>
+      <div class="card-chev op" id="chev-ov3">▼</div>
+    </div>
+    <div class="card-body op" id="body-ov3">
+      <div class="two">
+        <div class="mini"><h4>ML model</h4><p>Python + scikit-learn / XGBoost for static permission-based classification</p></div>
+        <div class="mini"><h4>Sandbox</h4><p>Puppeteer (Node.js) — runs extension in a real headless Chrome instance safely</p></div>
+        <div class="mini"><h4>Isolation</h4><p>Docker — each extension analysis runs in a fully isolated container, no system risk</p></div>
+        <div class="mini"><h4>Baseline</h4><p>Tarnish / CRXcavator — used as baseline comparison tools for evaluation</p></div>
+      </div>
+      <div class="divider"></div>
+      <div class="slabel">ML approach (from slide 13)</div>
+      <div class="step-list">
+        <div class="step"><div class="snum">A</div><div><span style="font-weight:500">Random Forest</span> — handles mixed static and dynamic features well. Good for interpretability.</div></div>
+        <div class="step"><div class="snum">B</div><div><span style="font-weight:500">XGBoost</span> — high accuracy on tabular data, handles class imbalance. Your primary choice.</div></div>
+        <div class="step"><div class="snum">C</div><div><span style="font-weight:500">Isolation Forest</span> — detects zero-day extensions without needing fully labelled data. Anomaly detection approach.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('ov4')">
+      <div class="card-icon">E</div>
+      <div class="card-info">
+        <div class="card-ttl">Evaluation metrics — from slide 12</div>
+        <div class="card-sub">How you will measure your component's success</div>
+      </div>
+      <div class="card-chev op" id="chev-ov4">▼</div>
+    </div>
+    <div class="card-body op" id="body-ov4">
+      <p>The system is evaluated using <span style="font-weight:500">precision, recall, and F1-score</span>, comparing the full pipeline against static-only and dynamic-only approaches. False positives are measured using popular benign extensions, and the time taken from extension submission to final verdict is also recorded.</p>
+      <div class="two" style="margin-top:10px">
+        <div class="mini"><h4>Precision</h4><p>Of all extensions flagged as malicious, what percentage were actually malicious? Measures false alarm rate.</p></div>
+        <div class="mini"><h4>Recall</h4><p>Of all actually malicious extensions, what percentage did the system catch? Measures miss rate.</p></div>
+        <div class="mini"><h4>F1-score</h4><p>Harmonic mean of precision and recall. The single most important metric for imbalanced datasets.</p></div>
+        <div class="mini"><h4>Verdict time</h4><p>How fast does the system go from receiving the extension file to outputting a verdict? Must be practical.</p></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== TAB 2: DEVELOPMENT PLAN ===== -->
+<div class="sec" id="sec-plan">
+
+  <div class="slabel" style="margin-bottom:12px">Development phases — mapped to your Gantt chart timeline</div>
+
+  <div class="phase-block">
+    <div class="phase-header">
+      <div class="phase-num">1</div>
+      <div>
+        <div class="phase-title">Data Collection and Preparation</div>
+        <div class="phase-period">Now → 2 weeks — the current focus</div>
+      </div>
+      <span class="pill p-now" style="margin-left:auto">Current</span>
+    </div>
+    <div class="step-list">
+      <div class="step"><div class="snum g">1</div><div>Download all four confirmed malicious datasets from your presentation (chrome-mal-ids, palant list, chrome-stats corpus, refade CRX dataset)</div></div>
+      <div class="step"><div class="snum g">2</div><div>Collect benign extension manifests from Chrome Web Store top 500+ extensions — extract manifest.json files from each</div></div>
+      <div class="step"><div class="snum g">3</div><div>Build the unified CSV training dataset — one row per extension, feature columns for each permission, label column (0=benign, 1=malicious)</div></div>
+      <div class="step"><div class="snum g">4</div><div>Download malicious CRX samples from MalwareBazaar and GitHub for sandbox testing in Phase 3</div></div>
+    </div>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-header">
+      <div class="phase-num a">2</div>
+      <div>
+        <div class="phase-title">Static Analysis Module — Hash + ML</div>
+        <div class="phase-period">Weeks 3–5</div>
+      </div>
+      <span class="pill p-next" style="margin-left:auto">Next</span>
+    </div>
+    <div class="step-list">
+      <div class="step"><div class="snum a">1</div><div>Build the hash detection function — compute SHA-256 of .crx file, check against your malicious hash database built from the datasets</div></div>
+      <div class="step"><div class="snum a">2</div><div>Build the manifest parser — extract all permission fields from manifest.json and convert to a feature vector</div></div>
+      <div class="step"><div class="snum a">3</div><div>Train the XGBoost classifier on your prepared dataset. Evaluate precision, recall, F1. Compare with Random Forest and Isolation Forest</div></div>
+      <div class="step"><div class="snum a">4</div><div>Build the static threat scorer — combine hash verdict and ML score into a single static_score output (0–100)</div></div>
+    </div>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-header">
+      <div class="phase-num b">3</div>
+      <div>
+        <div class="phase-title">Dynamic Analysis Module — Sandbox</div>
+        <div class="phase-period">Weeks 6–9</div>
+      </div>
+      <span class="pill p-later" style="margin-left:auto">Later</span>
+    </div>
+    <div class="step-list">
+      <div class="step"><div class="snum">1</div><div>Set up Docker container with a headless Chrome instance controlled by Puppeteer (Node.js)</div></div>
+      <div class="step"><div class="snum">2</div><div>Write the behaviour monitoring hooks — intercept Chrome API calls, log outbound network requests, monitor DOM access, flag eval() calls</div></div>
+      <div class="step"><div class="snum">3</div><div>Test with your collected malicious CRX samples. Verify the sandbox correctly catches beaconing, credential scraping, and cookie theft behaviour</div></div>
+      <div class="step"><div class="snum">4</div><div>Define the threshold — if static_score > 50, trigger sandbox. Otherwise, skip sandbox for speed</div></div>
+    </div>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-header">
+      <div class="phase-num" style="background:#F1EFE8;color:#5F5E5A">4</div>
+      <div>
+        <div class="phase-title">Verdict Engine + Dashboard Integration</div>
+        <div class="phase-period">Weeks 10–12</div>
+      </div>
+      <span class="pill p-later" style="margin-left:auto">Later</span>
+    </div>
+    <div class="step-list">
+      <div class="step"><div class="snum">1</div><div>Build the verdict combiner — merge static_score and dynamic_behaviour_flags into a final_score and verdict (SAFE / SUSPICIOUS / MALICIOUS)</div></div>
+      <div class="step"><div class="snum">2</div><div>Output the Extension ID and threat score in the format required by Component 4 (C2 Beacon Detector) for attribution</div></div>
+      <div class="step"><div class="snum">3</div><div>Connect to the shared Central Dashboard — send verdict, score, and evidence list to the unified reporting module</div></div>
+      <div class="step"><div class="snum">4</div><div>Run full evaluation — compare full pipeline vs static-only vs dynamic-only. Measure false positive rate on benign extension set</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== TAB 3: DATA COLLECTION ===== -->
+<div class="sec" id="sec-data">
+
+  <div class="slabel" style="margin-bottom:12px">Your confirmed datasets — from slide 13 of your presentation</div>
+
+  <!-- DS 1 -->
+  <div class="ds-block">
+    <div class="ds-top">
+      <div class="ds-num-row">
+        <span class="ds-badge db1">Malicious class</span>
+        <span class="pill p-free">Free</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">Dataset 1 of 4</span>
+      </div>
+      <div class="ds-name">chrome-mal-ids — Malicious Extension ID Blocklist</div>
+      <div class="ds-url">github.com/mallorybowes/chrome-mal-ids</div>
+    </div>
+    <div class="ds-body">
+      <div class="info-row"><div class="info-dot"></div><div>A continuously updated GitHub repository maintained by security researcher Mallory Bowes. Contains a blocklist of known malicious Chrome Extension IDs — extensions confirmed as adware, spyware, data stealers, or policy violators.</div></div>
+      <div class="info-row"><div class="info-dot"></div><div>Contains a README.md and a malicious-extensions.txt or similar list file with one Extension ID per line. Each entry is a 32-character alphanumeric string (e.g., "hdokiejnpimakedhajhdlcegeplioahd").</div></div>
+      <div class="info-row"><div class="info-dot g"></div><div><span style="font-weight:500">How to use it:</span> Take each Extension ID → query Chrome Web Store for its manifest.json → extract permissions → label as malicious (1) in your training CSV. Also use the IDs to build your hash database by downloading the .crx file for each.</div></div>
+      <div class="slabel" style="margin-top:10px">How to download</div>
+      <div class="code-box">git clone https://github.com/mallorybowes/chrome-mal-ids.git</div>
+    </div>
+  </div>
+
+  <!-- DS 2 -->
+  <div class="ds-block">
+    <div class="ds-top">
+      <div class="ds-num-row">
+        <span class="ds-badge db1">Malicious class</span>
+        <span class="pill p-free">Free</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">Dataset 2 of 4</span>
+      </div>
+      <div class="ds-name">palant/malicious-extensions-list — Curated Malicious Extensions</div>
+      <div class="ds-url">github.com/palant/malicious-extensions-list</div>
+    </div>
+    <div class="ds-body">
+      <div class="info-row"><div class="info-dot"></div><div>Maintained by Wladimir Palant, the creator of Adblock Plus. Contains a detailed, manually curated list of malicious Chrome and Firefox extensions with descriptions of what each one does — spyware, search hijacker, credential thief, etc.</div></div>
+      <div class="info-row"><div class="info-dot"></div><div>Higher quality than a raw blocklist because each entry explains the malicious behaviour. This is valuable for your sandbox testing — you know exactly what behaviour to expect from each extension, so you can verify your sandbox catches it.</div></div>
+      <div class="info-row"><div class="info-dot g"></div><div><span style="font-weight:500">How to use it:</span> Use the Extension IDs to collect manifest data for your training set. Also use the behaviour descriptions to design your sandbox detection rules — e.g., if a listed extension is a "session cookie stealer", confirm your sandbox catches cookie access from that extension.</div></div>
+      <div class="code-box">git clone https://github.com/palant/malicious-extensions-list.git</div>
+    </div>
+  </div>
+
+  <!-- DS 3 -->
+  <div class="ds-block">
+    <div class="ds-top">
+      <div class="ds-num-row">
+        <span class="ds-badge db1">Malicious class</span>
+        <span class="pill p-free">Free</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">Dataset 3 of 4</span>
+      </div>
+      <div class="ds-name">Chrome-Stats Malware Corpus — Removed Extensions</div>
+      <div class="ds-url">chrome-stats.com/search?obsoleteReason=malware</div>
+    </div>
+    <div class="ds-body">
+      <div class="info-row"><div class="info-dot"></div><div>Chrome-Stats tracks every extension removed from the Chrome Web Store and the reason for removal. Filtering by obsoleteReason=malware gives you extensions confirmed removed by Google specifically due to malware classification — the highest quality malicious label you can get.</div></div>
+      <div class="info-row"><div class="info-dot"></div><div>The website lists Extension ID, name, removal date, install count at removal, and sometimes permission details. These are real-world confirmed malicious extensions that passed store checks before being caught — exactly the type your component needs to detect.</div></div>
+      <div class="info-row"><div class="info-dot g"></div><div><span style="font-weight:500">How to collect:</span> Visit the URL, scrape or manually export the Extension IDs. For each ID, retrieve the archived manifest.json from cached sources (Wayback Machine archives or CRXcavator historical data). Add to your malicious training set.</div></div>
+      <div class="warn-box">
+        <div class="warn-label">Note</div>
+        These extensions are no longer live on the Web Store. To get their manifest data, use the CRXcavator API (which archives extension data) or search the Internet Archive for cached versions. The Extension ID is still usable as a hash lookup key if you can find an archived .crx file.
+      </div>
+    </div>
+  </div>
+
+  <!-- DS 4 -->
+  <div class="ds-block">
+    <div class="ds-top">
+      <div class="ds-num-row">
+        <span class="ds-badge db1">Malicious class</span>
+        <span class="pill p-free">Free</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">Dataset 4 of 4 — most important for ML</span>
+      </div>
+      <div class="ds-name">refade/GoogleChromeExtension — 990 Malicious CRX + 1,098 Features</div>
+      <div class="ds-url">github.com/refade/GoogleChromeExtension</div>
+    </div>
+    <div class="ds-body">
+      <div class="info-row"><div class="info-dot"></div><div>This is your most immediately useful dataset for ML model training. It contains 990 confirmed malicious Chrome extensions with 1,098 pre-extracted features per extension — permissions, manifest metadata, code structure signals, and more. The feature extraction is already done, which means you can start ML training almost immediately.</div></div>
+      <div class="info-row"><div class="info-dot"></div><div>The dataset comes from an academic research paper on malicious extension detection. It is structured as a CSV or similar format ready for direct use with scikit-learn and XGBoost. This is the closest thing to a plug-and-play dataset for your exact use case.</div></div>
+      <div class="info-row"><div class="info-dot g"></div><div><span style="font-weight:500">How to use it:</span> Download the repository. Load the feature CSV into pandas. This becomes your malicious class (label=1). Combine with benign extension features (label=0) to create the full training dataset. Train XGBoost directly on this combined CSV.</div></div>
+      <div class="code-box">git clone https://github.com/refade/GoogleChromeExtension.git<br>pip install pandas scikit-learn xgboost<br># Load CSV and inspect feature columns</div>
+    </div>
+  </div>
+
+  <!-- BENIGN DATA -->
+  <div class="ds-block" style="border-color:#5DCAA5">
+    <div class="ds-top" style="background:#E1F5EE">
+      <div class="ds-num-row">
+        <span class="ds-badge db2">Benign class — self-collected</span>
+        <span class="pill p-free">Free</span>
+        <span style="font-size:11px;color:#0F6E56">You must collect this yourself</span>
+      </div>
+      <div class="ds-name" style="color:#04342C">Top Chrome Web Store Extensions — Safe Baseline</div>
+      <div class="ds-url" style="color:#0F6E56">chrome.google.com/webstore + CRXcavator API</div>
+    </div>
+    <div class="ds-body">
+      <div class="info-row"><div class="info-dot g"></div><div>The ML model cannot learn without seeing both malicious AND benign examples. Your benign class must be collected from the top-rated, high-install-count Chrome extensions that have been live for 1+ years without removal. Target 500–1000 extensions.</div></div>
+      <div class="info-row"><div class="info-dot g"></div><div><span style="font-weight:500">What to collect per extension:</span> Extension ID, all declared permissions (as binary features — 1 if requested, 0 if not), number of host permissions, content script targets, presence of background script, total permission count. Label = 0 (benign).</div></div>
+      <div class="info-row"><div class="info-dot g"></div><div><span style="font-weight:500">Best source:</span> CRXcavator API (crxcavator.io/api/v1) — query by Extension ID and get full metadata including all permissions. Also query the Chrome Web Store API for top extensions by category. Focus on productivity, developer tools, and accessibility categories which are dominated by legitimate extensions.</div></div>
+      <div class="slabel" style="margin-top:10px">Simple Python snippet to get you started</div>
+      <div class="code-box">import requests, json<br>ext_id = "cjpalhdlnbpafiamejdnhcphjbkeiagm"  # example<br>url = f"https://crxcavator.io/api/v1/report/{ext_id}"<br>r = requests.get(url)<br>data = r.json()<br>permissions = data['data']['manifest']['permissions']<br>print(permissions)</div>
+    </div>
+  </div>
+
+  <!-- FINAL STRUCTURE -->
+  <div class="card">
+    <div class="card-head" onclick="tog('ds5')">
+      <div class="card-icon ci5" style="background:#FAEEDA;color:#633806">F</div>
+      <div class="card-info">
+        <div class="card-ttl">Final training dataset structure — what your CSV should look like</div>
+        <div class="card-sub">One row per extension, ready for XGBoost</div>
+      </div>
+      <div class="card-chev op" id="chev-ds5">▼</div>
+    </div>
+    <div class="card-body op" id="body-ds5">
+      <table class="struct-table">
+        <thead>
+          <tr><th>Column name</th><th>Type</th><th>Example value</th><th>Source</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>extension_id</td><td>String</td><td>hdokiejnpimak...</td><td>All datasets</td></tr>
+          <tr><td>has_webRequest</td><td>0 or 1</td><td>1</td><td>manifest.json</td></tr>
+          <tr><td>has_all_urls</td><td>0 or 1</td><td>1</td><td>manifest.json</td></tr>
+          <tr><td>has_cookies</td><td>0 or 1</td><td>0</td><td>manifest.json</td></tr>
+          <tr><td>has_clipboardRead</td><td>0 or 1</td><td>1</td><td>manifest.json</td></tr>
+          <tr><td>has_nativeMessaging</td><td>0 or 1</td><td>0</td><td>manifest.json</td></tr>
+          <tr><td>has_tabs</td><td>0 or 1</td><td>1</td><td>manifest.json</td></tr>
+          <tr><td>has_background_script</td><td>0 or 1</td><td>1</td><td>manifest.json</td></tr>
+          <tr><td>host_permission_count</td><td>Integer</td><td>3</td><td>manifest.json</td></tr>
+          <tr><td>total_permission_count</td><td>Integer</td><td>12</td><td>manifest.json</td></tr>
+          <tr><td>has_content_scripts</td><td>0 or 1</td><td>1</td><td>manifest.json</td></tr>
+          <tr><td>external_domains_count</td><td>Integer</td><td>2</td><td>background.js</td></tr>
+          <tr><td><span style="font-weight:500">label</span></td><td><span style="font-weight:500">0 or 1</span></td><td><span style="font-weight:500">1 = malicious, 0 = benign</span></td><td>Dataset source</td></tr>
+        </tbody>
+      </table>
+      <div class="hl" style="margin-top:8px">
+        <div class="hl-label">Target dataset size</div>
+        Aim for at least 990 malicious rows (from refade dataset) + 1000 benign rows (self-collected) = ~2000 rows minimum. A balanced dataset of this size is sufficient to train a strong XGBoost classifier for your evaluation.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== TAB 4: START NOW CHECKLIST ===== -->
+<div class="sec" id="sec-checklist">
+
+  <div class="slabel" style="margin-bottom:10px">Immediate action checklist — do these this week</div>
+  <p style="margin-bottom:14px;color:var(--color-text-secondary);font-size:13px">Tick each item as you complete it. These are the concrete steps to begin development right now.</p>
+
+  <div class="slabel">Step 1 — Get the datasets</div>
+  <div class="checklist">
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Clone the chrome-mal-ids repository from GitHub</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Clone the palant/malicious-extensions-list repository from GitHub</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Clone the refade/GoogleChromeExtension repository — inspect the feature CSV inside</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Visit chrome-stats.com/search?obsoleteReason=malware — export the list of removed extension IDs</span></div>
+  </div>
+
+  <div class="slabel" style="margin-top:14px">Step 2 — Set up your environment</div>
+  <div class="checklist">
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Create a Python virtual environment for the project</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Install: pandas, scikit-learn, xgboost, requests, zipfile (all pip install)</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Install Node.js and Puppeteer (npm install puppeteer) — for sandbox module later</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Install Docker Desktop — for sandboxed extension execution environment</span></div>
+  </div>
+
+  <div class="slabel" style="margin-top:14px">Step 3 — Start the dataset CSV</div>
+  <div class="checklist">
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Open the refade dataset — check column names and understand the 1,098 features</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Write a Python script to parse a manifest.json file and extract the key permission columns</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Call the CRXcavator API for 5 known benign extensions — verify you can extract permission data</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Create the training CSV structure with the column names from the dataset table (previous tab)</span></div>
+  </div>
+
+  <div class="slabel" style="margin-top:14px">Step 4 — Update your logbook</div>
+  <div class="checklist">
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Record dataset sources accessed and confirmed in your logbook entry</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Document the training CSV structure design decision (which features to include and why)</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Note the choice of XGBoost as primary ML algorithm and reasoning (tabular data, class imbalance handling)</span></div>
+  </div>
+
+  <div class="hl green" style="margin-top:16px">
+    <div class="hl-label">What you will have at the end of this week</div>
+    All four malicious datasets downloaded and understood. Development environment ready. Training CSV structure defined. CRXcavator API working. First manifest.json parser written. You will be ready to start actual ML training in week 3.
+  </div>
+
+</div>
+
+</div>
+
+<script>
+function showTab(id){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  event.target.classList.add('active');
+}
+function tog(id){
+  const b=document.getElementById('body-'+id);
+  const c=document.getElementById('chev-'+id);
+  const op=b.classList.contains('op');
+  b.classList.toggle('op',!op);
+  c.classList.toggle('op',!op);
+}
+function chk(el){
+  const box=el.querySelector('.chk-box');
+  box.classList.toggle('checked');
+}
+</script>
