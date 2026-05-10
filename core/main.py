@@ -56,7 +56,24 @@ from .c4 import (
 from .playwright_session import pw_session, PROFILE_DIR as PW_PROFILE_DIR
 
 # ══════════════════════════════════════════════════════════════════════════════
-app = FastAPI(title="WebSentinel API", version="4.0.0")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
+    # Auto-start the Playwright browser when the server boots
+    global _session_starting
+    _session_starting = True
+    pw_session.clear_callbacks()
+    pw_session.add_nav_callback(_pw_nav_handler)
+    pw_session.add_click_callback(_on_extension_install_click)
+    asyncio.create_task(_bg_start_session())
+    yield
+    # Graceful shutdown
+    await c3_analyzer.stop_loop()
+    await c3_interceptor.stop()
+    await pw_session.stop()
+
+app = FastAPI(title="WebSentinel API", version="4.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
