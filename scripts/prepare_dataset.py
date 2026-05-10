@@ -27,6 +27,10 @@ DATASET_ZIP = REPO_ROOT / "Dataset" / "n96ncsr5g4-1.zip"
 MODEL_OUT   = REPO_ROOT / "models" / "url_classifier.pkl"
 CSV_OUT     = REPO_ROOT / "data"   / "urls_labeled.csv"
 
+# Make `core.*` importable when running this file directly
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 # ── Imports ───────────────────────────────────────────────────
 try:
     import pandas as pd
@@ -99,10 +103,11 @@ def train(df: pd.DataFrame):
     # Try XGBoost first, fall back to GBM
     try:
         from xgboost import XGBClassifier
+        # Note: `use_label_encoder` was removed in XGBoost 2.0. Don't pass it.
         model = XGBClassifier(
             n_estimators=300, max_depth=6, learning_rate=0.1,
             subsample=0.8, colsample_bytree=0.8,
-            use_label_encoder=False, eval_metric="logloss",
+            eval_metric="logloss",
             random_state=42
         )
         model_name = "XGBoost"

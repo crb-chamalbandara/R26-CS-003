@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "WebSentinel Sandbox Test (NOT real malware)",
+  "version": "1.0.0",
+  "description": "Synthetic extension for WebSentinel sandbox verification. Safe to run.",
+  "permissions": [
+    "webRequest",
+    "tabs",
+    "cookies",
+    "history"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

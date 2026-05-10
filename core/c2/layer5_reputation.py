@@ -37,17 +37,20 @@ async def _check_gsb(url: str, api_key: str) -> tuple[bool, str]:
 
 
 async def _check_phishtank(url: str) -> tuple[bool, str]:
+    # httpx form-encodes the data dict for us — passing a pre-`quote()`d value
+    # double-encodes the URL and PhishTank then never matches.
     try:
-        import urllib.parse as _up
-        encoded = _up.quote(url, safe="")
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.post(
                 PHISHTANK_URL,
-                data={"url": encoded, "format": "json"},
+                data={"url": url, "format": "json"},
                 headers={"User-Agent": "phishtank/websentinel"}
             )
+            if r.status_code != 200:
+                return False, ""
             data = r.json()
-            if data.get("results", {}).get("in_database") and data["results"].get("valid"):
+            results = data.get("results", {}) or {}
+            if results.get("in_database") and results.get("valid"):
                 return True, "PhishTank match"
     except Exception:
         pass

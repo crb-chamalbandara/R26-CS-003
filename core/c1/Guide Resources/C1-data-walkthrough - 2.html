@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Component 1 — Data Collection Walkthrough</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root{
+  --font-sans:'Space Grotesk', ui-sans-serif, system-ui;
+  --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular;
+  --bg:#F7F6F1;
+  --bg-2:#FFFFFF;
+  --text:#1B1A17;
+  --muted:#57524B;
+  --border:#E6E0D6;
+  --accent:#1A8C79;
+  --accent-2:#F08A24;
+  --accent-3:#0F5B66;
+  --shadow:0 10px 30px rgba(15,20,25,0.08),0 3px 8px rgba(15,20,25,0.05);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:linear-gradient(140deg,#F7F6F1 0%,#EFE9DC 60%,#F4F0E7 100%);color:var(--text);font-family:var(--font-sans)}
+.root{max-width:1000px;margin:0 auto;padding:1.5rem 1rem 3.5rem;position:relative}
+.root:before{content:"";position:absolute;inset:-120px -80px auto;height:260px;background:radial-gradient(closest-side,rgba(240,138,36,0.18),rgba(240,138,36,0)),radial-gradient(closest-side,rgba(26,140,121,0.18),rgba(26,140,121,0));filter:blur(6px);z-index:-1}
+
+.banner{background:linear-gradient(120deg,rgba(26,140,121,0.14),rgba(240,138,36,0.16));border:1px solid #E0D7C8;border-radius:14px;padding:18px 20px;margin-bottom:1.4rem;box-shadow:var(--shadow)}
+.ban-tag{font-size:11px;font-weight:600;color:#0F5B66;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.ban-title{font-size:20px;font-weight:600;color:#14221F;margin-bottom:6px}
+.ban-sub{font-size:13px;color:#2E3A35;line-height:1.6}
+
+.section{background:rgba(255,255,255,0.9);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
+.section h2{font-size:15px;font-weight:600;margin-bottom:8px}
+.section p{font-size:13px;color:var(--text);line-height:1.7}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.card{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--bg-2)}
+.card h3{font-size:14px;font-weight:600;margin-bottom:4px}
+.card p{font-size:12px;color:var(--muted);line-height:1.6}
+
+.badge{display:inline-flex;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.badge.mal{background:#FCE1DE;color:#7A2B22}
+.badge.ben{background:#E3F3EC;color:#0F5B3F}
+.badge.free{background:#E3F3EC;color:#0F5B3F}
+
+.step-list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.step{display:flex;gap:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.9)}
+.snum{width:24px;height:24px;border-radius:50%;background:rgba(26,140,121,0.15);color:#0F5B66;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;margin-top:2px}
+.step .text{font-size:13px;line-height:1.65}
+
+.callout{background:rgba(255,255,255,0.9);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:10px 13px;margin-top:10px;font-size:13px;line-height:1.7}
+
+.code{background:rgba(255,255,255,0.85);border-radius:8px;padding:8px 12px;font-family:var(--font-mono);font-size:12px;border:1px dashed #E0D7C8;margin-top:8px;line-height:1.6;word-break:break-all}
+
+.table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.table th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:600}
+.table td{padding:6px 8px;border-bottom:1px solid var(--border);line-height:1.5}
+
+.checklist{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.check{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.9);font-size:12px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+
+@media (max-width: 860px){
+  .grid{grid-template-columns:1fr}
+  .checklist{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="root">
+
+  <div class="banner">
+    <div class="ban-tag">Component 1 — Data Collection Walkthrough</div>
+    <div class="ban-title">How to prepare the datasets so development can start</div>
+    <div class="ban-sub">This page turns the Data Collection phase into a step-by-step action plan, from downloading sources to building the final training CSV.</div>
+  </div>
+
+  <div class="section">
+    <h2>Goal of this phase</h2>
+    <p>You need a clean, labeled dataset with both malicious and benign extensions, ready for ML training. The output of this phase is a single CSV with one row per extension and a label column (1 = malicious, 0 = benign).</p>
+    <div class="callout">You are ready to start development when you have: (1) all malicious sources downloaded, (2) a benign baseline list, (3) a unified CSV structure, and (4) a small test batch proving your pipeline works end-to-end.</div>
+  </div>
+
+  <div class="section">
+    <h2>Datasets you will use</h2>
+    <div class="grid">
+      <div class="card">
+        <span class="badge mal">Malicious</span>
+        <h3>chrome-mal-ids</h3>
+        <p>Blocklist of known malicious extension IDs. Best for hash list + ID-based manifest collection.</p>
+        <div class="code">git clone https://github.com/mallorybowes/chrome-mal-ids.git</div>
+      </div>
+      <div class="card">
+        <span class="badge mal">Malicious</span>
+        <h3>palant/malicious-extensions-list</h3>
+        <p>Curated list with behavior descriptions. Use it to design sandbox checks later.</p>
+        <div class="code">git clone https://github.com/palant/malicious-extensions-list.git</div>
+      </div>
+      <div class="card">
+        <span class="badge mal">Malicious</span>
+        <h3>Chrome-Stats malware removals</h3>
+        <p>Extensions removed by Google as malware. High-quality labels but may require archived manifests.</p>
+        <div class="code">https://chrome-stats.com/search?obsoleteReason=malware</div>
+      </div>
+      <div class="card">
+        <span class="badge mal">Malicious</span>
+        <h3>refade/GoogleChromeExtension</h3>
+        <p>990 malicious extensions with 1,098 features extracted. Fastest way to start ML training.</p>
+        <div class="code">git clone https://github.com/refade/GoogleChromeExtension.git</div>
+      </div>
+      <div class="card">
+        <span class="badge ben">Benign (self)</span>
+        <h3>Top Chrome Web Store extensions</h3>
+        <p>Collect 500–1000 popular, long-lived extensions using CRXcavator + Web Store metadata.</p>
+        <div class="code">https://crxcavator.io/api/v1/report/EXTENSION_ID</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Walkthrough — end-to-end steps</h2>
+    <div class="step-list">
+      <div class="step"><div class="snum">1</div><div class="text">Create a local folder called <b>datasets</b> and clone the three GitHub sources (chrome-mal-ids, palant list, refade dataset). This gives you the initial malicious IDs and one ready-made feature CSV.</div></div>
+      <div class="step"><div class="snum">2</div><div class="text">From each malicious list, extract the Extension IDs into a single file (one ID per line). Remove duplicates so you have a clean malicious ID pool.</div></div>
+      <div class="step"><div class="snum">3</div><div class="text">Visit Chrome-Stats malware removals and export the ID list. Add these IDs to the same pool.</div></div>
+      <div class="step"><div class="snum">4</div><div class="text">For each malicious ID, collect metadata from CRXcavator (permissions, manifest info). If CRXcavator has no data, skip or mark as “archived needed”.</div></div>
+      <div class="step"><div class="snum">5</div><div class="text">Build a benign list: pick 500–1000 top extensions, then fetch their permissions and manifest metadata via CRXcavator. Label them as benign (0).</div></div>
+      <div class="step"><div class="snum">6</div><div class="text">Create one unified CSV schema. Merge malicious and benign rows into one dataset. Ensure consistent columns (missing permissions become 0).</div></div>
+      <div class="step"><div class="snum">7</div><div class="text">Run a quick validation: check label balance, ensure no empty rows, and confirm every row has an extension_id and label.</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Minimum CSV schema (example)</h2>
+    <table class="table">
+      <thead>
+        <tr><th>Column</th><th>Type</th><th>Example</th><th>Source</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>extension_id</td><td>string</td><td>hdokiejnpimak...</td><td>All datasets</td></tr>
+        <tr><td>has_webRequest</td><td>0/1</td><td>1</td><td>manifest.json</td></tr>
+        <tr><td>has_all_urls</td><td>0/1</td><td>1</td><td>manifest.json</td></tr>
+        <tr><td>has_cookies</td><td>0/1</td><td>0</td><td>manifest.json</td></tr>
+        <tr><td>host_permission_count</td><td>int</td><td>3</td><td>manifest.json</td></tr>
+        <tr><td>total_permission_count</td><td>int</td><td>12</td><td>manifest.json</td></tr>
+        <tr><td>has_background_script</td><td>0/1</td><td>1</td><td>manifest.json</td></tr>
+        <tr><td>has_content_scripts</td><td>0/1</td><td>1</td><td>manifest.json</td></tr>
+        <tr><td>label</td><td>0/1</td><td>1</td><td>dataset source</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Ready-to-start checklist</h2>
+    <div class="checklist">
+      <div class="check"><span class="dot"></span>All malicious sources cloned and IDs merged</div>
+      <div class="check"><span class="dot"></span>Benign ID list created (500–1000)</div>
+      <div class="check"><span class="dot"></span>CRXcavator API tested on 5 IDs</div>
+      <div class="check"><span class="dot"></span>Unified CSV schema created</div>
+      <div class="check"><span class="dot"></span>At least 50 rows collected end-to-end</div>
+      <div class="check"><span class="dot"></span>Label balance checked</div>
+    </div>
+    <div class="callout">When you can collect 50 rows end-to-end without errors, you are ready to scale to 2000+ rows and start model training.</div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -11,7 +11,7 @@ let backendProcess;
 const PYTHON = process.env.PYTHON_PATH || 'C:\\Python312\\python.exe';
 const BACKEND_DIR = path.join(__dirname, '..');   // project root — uvicorn runs from here
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
-const BACKEND_PORT = 8000;
+const BACKEND_PORT = 8765;
 
 // ── Start FastAPI backend ─────────────────────────────────────────────────────
 function startBackend() {
@@ -79,11 +79,17 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (backendProcess) {
+  // On macOS the app is allowed to keep running with no windows; only
+  // quit on other platforms. Don't kill the backend here — `activate`
+  // can re-open the window and would otherwise find a dead backend.
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  if (backendProcess && !backendProcess.killed) {
     backendProcess.kill('SIGTERM');
     console.log('[Main] Backend killed');
   }
-  if (process.platform !== 'darwin') app.quit();
 });
 
 // ── IPC: native window controls ───────────────────────────────────────────────
