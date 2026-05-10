@@ -1,124 +1,132 @@
-# Component 4 — Forensics: Browser Artifact Forensic Correlation Engine
+# Component 4 - Browser Artifact Forensic Correlation Engine
 
-> **Status:** 🔲 Not yet implemented — contributor welcome
+> **Status:** Implemented and integrated with the WebSentinel FastAPI backend.
 
 ## Research Question
-Can automated cross-artifact correlation of browser forensic data (history, cookies,
-downloads, localStorage) reliably reconstruct attack timelines and map them to
-MITRE ATT&CK techniques?
 
----
+Can automated cross-artifact correlation of browser forensic data reliably
+reconstruct suspicious activity timelines and map findings to MITRE ATT&CK
+techniques?
 
 ## Architecture Overview
 
-```
-Browser Profile Directory (Chromium)
-      │
-      ├── History.db (SQLite)
-      ├── Cookies (SQLite)
-      ├── Login Data (SQLite)
-      ├── Cache/
-      ├── Local Storage/
-      └── IndexedDB/
-              │
-              ▼
-        Artifact Extractor
-        (normalise → unified event timeline)
-              │
-              ▼
-        Sliding-Window Correlator
-        (detect multi-artifact attack patterns)
-              │
-              ▼
-        MITRE ATT&CK Mapper
-              │
-              ▼
-        Forensic JSON Report
-```
-
----
-
-## Tech Stack
-| Layer | Recommended Technology |
-|-------|----------------------|
-| SQLite reading | Python `sqlite3` (stdlib) |
-| Normalisation | Custom data classes / Pydantic models |
-| Correlation | Sliding window (pure Python or pandas) |
-| ATT&CK mapping | MITRE ATT&CK Python library (`mitreattack-python`) |
-| Report format | JSON → exportable PDF (optional: `reportlab`) |
-
----
-
-## File Map
-
-| File | Role |
-|------|------|
-| `__init__.py` | Package marker |
-| `extractor.py` | **(create)** Read + normalise SQLite browser artifacts |
-| `integrity.py` | **(create)** SHA-256 + WAL tamper detection |
-| `anomaly.py` | **(create)** Behavioural anomaly detection on artifact data |
-| `chain.py` | **(create)** Sliding-window cross-artifact chain correlator |
-| `mitre.py` | **(create)** Map detected chains to ATT&CK techniques |
-
----
-
-## Integration Interface
-`core/main.py` will call (once implemented):
-
-```python
-from c4.extractor  import extract_artifacts
-from c4.integrity  import check_integrity
-from c4.anomaly    import detect_anomalies
-from c4.chain      import correlate_chains
-
-# Combined forensic report
-report = {
-    "artifacts": await extract_artifacts(),
-    "integrity": await check_integrity(),
-    "anomalies": await detect_anomalies(artifacts),
-    "chains":    await correlate_chains(artifacts),
-    "timestamp": datetime.now().isoformat(),
-}
+```text
+Browser profile directory
+      |
+      |-- History SQLite database
+      |-- Cookies SQLite database
+      |-- Login Data SQLite database
+      |-- Downloads table
+      |-- Extensions manifests
+      |
+      v
+Artifact Extractor
+      |
+      v
+Single-Artifact Rule Engine
+      |
+      v
+Cross-Artifact Correlation
+      |-- Co-occurrence analysis
+      |-- Orphan artifact detection
+      |-- Temporal anomaly detection
+      |-- Ordered attack-chain detection
+      |-- Domain risk clustering
+      |
+      v
+MITRE ATT&CK Mapper
+      |
+      v
+JSON report, HTML forensic report, SIEM export
 ```
 
-Endpoint: `POST /forensic/extract` → triggers scan; `GET /forensic/report` → latest JSON.
+## Runtime Files
 
----
+| File             | Role                                                                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `extractor.py`   | Finds browser profiles, copies locked SQLite artifacts safely, extracts history, cookies, downloads, credentials, extensions, and artifact hashes. |
+| `rules.py`       | Applies single-artifact rules for suspicious domains, dangerous downloads, sensitive cookies, credentials, risky extensions, and URL bursts.       |
+| `correlation.py` | Runs the cross-artifact correlation algorithms: co-occurrence, orphan detection, temporal anomaly detection, ordered attack-chain detection, and domain risk clustering. |
+| `mitre.py`       | Maps rule and correlation findings to MITRE ATT&CK techniques with Low, Medium, and High severity.                                                 |
+| `reporter.py`    | Generates the detailed HTML forensic report, JSON report, and SIEM-compatible export.                                                              |
+| `service.py`     | WebSentinel adapter that runs the full pipeline and stores the latest result for FastAPI endpoints.                                                |
+| `__init__.py`    | Package exports for the C4 service API.                                                                                                            |
 
-## Chromium Profile Path
-Default Playwright persistent context profile: `~/.websentinel/profile/`
-Override via environment variable: `WEBSENTINEL_BROWSER_PROFILE`
+## Browser Profile Resolution
 
----
+C4 scans the first available profile in this order:
 
-## Implementation TODO
-- [ ] Implement `extractor.py` — History, Cookies, Login Data SQLite readers
-- [ ] Implement `integrity.py` — WAL/SHM tamper checks + SHA-256 hashing
-- [ ] Implement `anomaly.py` — Late-night browsing, URL burst, suspicious TLD detection
-- [ ] Implement `chain.py` — 2-minute sliding window, BROWSE+CREDENTIAL+COOKIE patterns
-- [ ] Implement `mitre.py` — Map chains to ATT&CK T-codes (T1539, T1555, T1074, etc.)
-- [ ] Add `/forensic/extract` + `/forensic/report` endpoints to `core/main.py`
-- [ ] Add C4 live panel to frontend dashboard with timeline visualisation
+1. `WEBSENTINEL_BROWSER_PROFILE` environment variable
+2. WebSentinel Playwright profile: `~/.websentinel/profile`
+3. Local Chrome default profile
+4. Local Chrome `Profile 1`
+5. Local Chromium default profile
+6. Local Microsoft Edge default profile
 
----
+If the browser databases are locked, stop the WebSentinel Playwright session or
+close Chrome/Edge and run the scan again.
 
-## MITRE ATT&CK Technique Mapping (suggested)
-| Chain Pattern | Technique |
-|---------------|-----------|
-| Credential + Cookie in window | T1539 Steal Web Session Cookie |
-| Login Data access | T1555.003 Credentials from Web Browsers |
-| Download + Browse sequence | T1074 Data Staged |
-| Extension install + exfil | T1176 Browser Extensions |
+## FastAPI Integration
 
----
+`core/main.py` exposes these C4 endpoints:
 
-## AI Session Starter
-> Paste this into a new AI chat to get instant context:
->
-> "I'm building Component 4 of WebSentinel — a Browser Artifact Forensic Correlation Engine.
-> Project root: `WebSentinel/`. Shared infra in `core/`. My component code goes in `c4/`.
-> The browser profile is at `~/.websentinel/profile/` (Playwright persistent context).
-> I need to extract SQLite artifacts (History, Cookies, Login Data), detect anomalies,
-> run sliding-window cross-artifact correlation, and map findings to MITRE ATT&CK.
-> Endpoints `POST /forensic/extract` and `GET /forensic/report` live in `core/main.py`.
-> I need help with: [YOUR TASK]"
+| Endpoint                    | Purpose                                                                             |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `GET /forensic/debug`       | Shows the detected default browser profile and whether it exists.                   |
+| `POST /forensic/extract`    | Runs the full C4 pipeline. Body: `{ "profile_path": "...", "save_outputs": true }`. |
+| `GET /forensic/report`      | Returns the latest full C4 result and compact summary.                              |
+| `GET /forensic/summary`     | Returns only the compact latest summary.                                            |
+| `GET /forensic/timeline`    | Returns extracted events, optionally filtered by artifact type and flagged state.   |
+| `GET /forensic/mitre`       | Returns all MITRE-mapped findings from the latest run.                              |
+| `GET /forensic/report/html` | Downloads the latest HTML forensic report.                                          |
+| `GET /forensic/report/json` | Downloads the latest JSON forensic report.                                          |
+| `GET /forensic/report/siem` | Downloads the latest SIEM export.                                                   |
+
+Example request:
+
+```bash
+curl -X POST http://127.0.0.1:8000/forensic/extract \
+  -H "Content-Type: application/json" \
+  -d "{\"save_outputs\": true}"
+```
+
+## Output Location
+
+When `save_outputs` is true, reports are written to:
+
+```text
+core/c4/output/
+```
+
+The generated files are:
+
+- `c4_report_<timestamp>.json`
+- `c4_report_<timestamp>.html`
+- `c4_siem_<timestamp>.json`
+
+## MITRE ATT&CK Examples
+
+| Pattern                           | Technique                                 |
+| --------------------------------- | ----------------------------------------- |
+| Cookie + credential co-occurrence | `T1539` Steal Web Session Cookie          |
+| Browser credential records        | `T1555.003` Credentials from Web Browsers |
+| Dangerous download                | `T1204.002` Malicious File                |
+| Orphan download                   | `T1105` Ingress Tool Transfer             |
+| Risky extension permissions       | `T1176` Browser Extensions                |
+
+## Test Result From Bundled Source Profile
+
+The adapted service was verified against the archive's `scenario_B` sample
+profile:
+
+```text
+total_events: 31
+flagged_events: 14
+total_findings: 6
+high: 3
+medium: 1
+low: 2
+cooccurrence: 2
+orphans: 2
+temporal: 2
+```
