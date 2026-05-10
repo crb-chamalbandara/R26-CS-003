@@ -62,8 +62,10 @@ async def check_reputation(url: str, gsb_key: str = "") -> dict:
     pt_hit,  pt_detail = await _check_phishtank(url)
 
     if gsb_hit:
-        return {"score": 0.85, "detail": f"Google Safe Browsing: {gsb_type}"}
+        detail = f"Google Safe Browsing: {gsb_type}"
+        return {"score": 0.85, "flagged": True, "source": "GSB", "detail": detail}
     if pt_hit:
-        return {"score": 0.90, "detail": pt_detail}
+        return {"score": 0.90, "flagged": True, "source": "PhishTank", "detail": pt_detail}
 
-    return {"score": 0.0, "detail": "Clean" if gsb_key else "GSB key not configured"}
+    detail = "Clean" if gsb_key else "GSB key not configured"
+    return {"score": 0.0, "flagged": False, "source": "none", "detail": detail}

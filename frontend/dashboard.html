@@ -31,16 +31,18 @@ button{font-family:inherit;cursor:pointer}
 #hdr{
   display:flex;align-items:center;gap:12px;
   padding:0 14px;height:50px;flex-shrink:0;
-  background:var(--bg1);border-bottom:1px solid var(--b1);
+  background:linear-gradient(90deg,var(--bg1) 0%,#0b1220 100%);
+  border-bottom:1px solid var(--b1);box-shadow:0 1px 0 rgba(255,255,255,.03);
   -webkit-app-region:drag
 }
 #hdr-brand{display:flex;align-items:center;gap:9px;flex-shrink:0}
 #hdr-logo{
   width:30px;height:30px;border-radius:8px;
-  background:linear-gradient(135deg,var(--c1),var(--c2));
-  display:flex;align-items:center;justify-content:center;font-size:16px
+  background:linear-gradient(135deg,var(--c1) 0%,var(--c2) 100%);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(59,130,246,.25)
 }
-#hdr-title{font-size:14px;font-weight:800;letter-spacing:.01em}
+#hdr-title{font-size:14px;font-weight:800;letter-spacing:.02em}
 #hdr-divider{width:1px;height:22px;background:var(--b2);flex-shrink:0}
 #hdr-monitor{
   -webkit-app-region:no-drag;
@@ -81,7 +83,8 @@ button{font-family:inherit;cursor:pointer}
 #sidebar{
   width:66px;flex-shrink:0;
   background:var(--bg1);border-right:1px solid var(--b1);
-  display:flex;flex-direction:column;padding:8px 0
+  display:flex;flex-direction:column;padding:8px 0;
+  box-shadow:1px 0 0 rgba(255,255,255,.02)
 }
 .nav-group{flex:1;display:flex;flex-direction:column;gap:3px;padding:0 7px}
 .nav-bottom{padding:0 7px 8px}
@@ -96,11 +99,17 @@ button{font-family:inherit;cursor:pointer}
 .nav-item[data-panel="c3"].active{color:var(--c3);background:var(--c3b)}
 .nav-item[data-panel="c4"].active{color:var(--c4);background:var(--c4b)}
 .nav-item[data-panel="settings"].active{color:var(--t1);background:var(--bg3)}
-.nav-icon{font-size:17px;line-height:1}
+.nav-item[data-panel="tests"].active{color:#a78bfa;background:rgba(167,139,250,.12)}
+.nav-icon{width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav-icon svg{width:20px;height:20px}
 .nav-label{font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;line-height:1}
+.nav-item.active::before{
+  content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:3px;height:26px;border-radius:0 3px 3px 0;background:currentColor;opacity:.9
+}
 .nav-item.has-data::after{
   content:'';position:absolute;top:7px;right:7px;
-  width:6px;height:6px;border-radius:50%;background:var(--c2)
+  width:5px;height:5px;border-radius:50%;background:var(--c2)
 }
 
 /* ── Content ────────────────────────────────────────────────── */
@@ -111,7 +120,10 @@ button{font-family:inherit;cursor:pointer}
 /* ── Panel header ───────────────────────────────────────────── */
 .panel-hdr{
   display:flex;align-items:center;gap:11px;
-  padding:10px 15px;background:var(--bg1);border-bottom:1px solid var(--b1);flex-shrink:0
+  padding:10px 15px;
+  background:linear-gradient(90deg,var(--bg1) 0%,#0b1220 100%);
+  border-bottom:1px solid var(--b1);flex-shrink:0;
+  box-shadow:0 1px 0 rgba(255,255,255,.02)
 }
 .comp-badge{
   width:30px;height:30px;border-radius:7px;flex-shrink:0;
@@ -148,7 +160,8 @@ button{font-family:inherit;cursor:pointer}
   padding:0 10px;flex-shrink:0}
 .tab{padding:8px 13px;background:none;border:none;
   border-bottom:2px solid transparent;color:var(--t2);
-  font-size:11.5px;cursor:pointer;transition:all .15s;white-space:nowrap}
+  font-size:11.5px;cursor:pointer;transition:all .15s;white-space:nowrap;
+  display:flex;align-items:center;gap:5px}
 .tab:hover{color:var(--t0)}
 .tab.active{color:var(--c2);border-bottom-color:var(--c2)}
 #tab-content{flex:1;overflow:hidden;position:relative}
@@ -174,7 +187,8 @@ button{font-family:inherit;cursor:pointer}
 .live-det{font-size:9.5px;color:var(--t3);font-style:italic;margin-top:-2px}
 #live-empty{display:flex;flex-direction:column;align-items:center;
   justify-content:center;flex:1;gap:10px;color:var(--t3)}
-#live-empty .e-icon{font-size:38px;opacity:.3}
+#live-empty .e-icon{width:44px;height:44px;opacity:.28;display:flex;align-items:center;justify-content:center}
+#live-empty .e-icon svg{width:44px;height:44px}
 #live-empty .e-msg{font-size:12.5px}
 
 /* ── Alert cards ────────────────────────────────────────────── */
@@ -224,7 +238,8 @@ button{font-family:inherit;cursor:pointer}
 /* ── Empty states ───────────────────────────────────────────── */
 .empty{display:flex;flex-direction:column;align-items:center;
   justify-content:center;padding:40px;gap:10px;color:var(--t3);flex:1}
-.empty .eicon{font-size:36px;opacity:.3}
+.empty .eicon{width:40px;height:40px;opacity:.28;display:flex;align-items:center;justify-content:center}
+.empty .eicon svg{width:40px;height:40px}
 .empty .emsg{font-size:12.5px}
 
 /* ── C3 live monitor ────────────────────────────────────────── */
@@ -242,7 +257,8 @@ button{font-family:inherit;cursor:pointer}
   margin-top:4px;display:inline-block;letter-spacing:.04em}
 .c3-tabs{display:flex;background:var(--bg1);border-bottom:1px solid var(--b1);padding:0 10px;flex-shrink:0}
 .c3-tab{padding:8px 13px;background:none;border:none;border-bottom:2px solid transparent;
-  color:var(--t2);font-size:11.5px;transition:all .15s;white-space:nowrap}
+  color:var(--t2);font-size:11.5px;transition:all .15s;white-space:nowrap;
+  display:flex;align-items:center;gap:5px}
 .c3-tab:hover{color:var(--t0)}
 .c3-tab.active{color:var(--c3);border-bottom-color:var(--c3)}
 .c3-content{flex:1;overflow:hidden;position:relative}
@@ -384,7 +400,8 @@ button{font-family:inherit;cursor:pointer}
   background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.5);
   display:flex;align-items:center;justify-content:center
 }
-#c3-beacon-icon{font-size:26px;animation:beaconIconPop .4s ease both}
+#c3-beacon-icon{display:flex;align-items:center;justify-content:center;animation:beaconIconPop .4s ease both}
+#c3-beacon-icon svg{width:30px;height:30px}
 #c3-beacon-mitre{
   font-size:9px;font-weight:700;font-family:monospace;letter-spacing:.1em;
   color:rgba(239,68,68,.6);text-transform:uppercase;margin-bottom:6px
@@ -455,7 +472,8 @@ button{font-family:inherit;cursor:pointer}
 .lab-card-blocked{display:flex;flex-direction:column;gap:8px}
 .lab-card-export{display:flex;flex-direction:column;gap:8px}
 .lab-card-hdr{display:flex;align-items:flex-start;gap:10px}
-.lab-card-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.lab-card-icon{width:20px;height:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.lab-card-icon svg{width:18px;height:18px}
 .lab-card-title{font-size:12px;font-weight:700;color:var(--t0)}
 .lab-card-sub{font-size:10px;color:var(--t3);margin-top:2px}
 .lab-badge-count{margin-left:auto;font-size:10px;font-weight:700;
@@ -603,7 +621,8 @@ button{font-family:inherit;cursor:pointer}
   text-align:center;cursor:pointer;transition:all .2s;background:var(--bg0)}
 #c1-dropzone.over{border-color:var(--c1);background:var(--c1b)}
 #c1-dropzone:hover{border-color:var(--b3)}
-#c1-dropzone .dz-icon{font-size:32px;margin-bottom:8px;opacity:.5}
+#c1-dropzone .dz-icon{display:flex;align-items:center;justify-content:center;margin:0 auto 10px;opacity:.45;width:36px;height:36px}
+#c1-dropzone .dz-icon svg{width:36px;height:36px}
 #c1-dropzone .dz-title{font-size:13px;font-weight:600;color:var(--t1);margin-bottom:4px}
 #c1-dropzone .dz-sub{font-size:10.5px;color:var(--t3)}
 #c1-file-input{display:none}
@@ -784,6 +803,29 @@ button{font-family:inherit;cursor:pointer}
   .c4-grid{grid-template-columns:repeat(4,1fr)}
   .c4-layout{grid-template-columns:1fr}
   .c4-method-grid{grid-template-columns:1fr}
+
+/* ── Tests panel ── */
+/* ── Live Test Runner ─────────────────────────────────────── */
+.tlist-item{display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border-radius:7px;margin-bottom:5px;background:var(--bg1);border:1px solid var(--bdr);transition:border-color .2s}
+.tlist-item.running{border-color:#60a5fa;background:rgba(96,165,250,.05)}
+.tlist-item.pass{border-color:var(--safe);background:rgba(52,211,153,.04)}
+.tlist-item.fail{border-color:var(--danger);background:rgba(248,113,113,.04)}
+.tlist-item.pending{opacity:.45}
+.tlist-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.tlist-body{flex:1;min-width:0}
+.tlist-label{font-size:12px;color:var(--t1);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tlist-detail{font-size:10.5px;color:var(--t2);font-family:monospace}
+.tlist-meta{display:flex;align-items:center;gap:8px;margin-top:4px}
+.tlist-comp{font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border-radius:4px}
+.tlist-comp.c1{background:var(--c1b);color:var(--c1)}
+.tlist-comp.c2{background:var(--c2b);color:var(--c2)}
+.tlist-comp.c3{background:var(--c3b);color:var(--c3)}
+.tlist-comp.c4{background:var(--c4b);color:var(--c4)}
+.tlist-time{font-size:10px;color:var(--t3)}
+.tlist-url{font-size:10px;color:#60a5fa;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.tlist-url:hover{color:#93c5fd}
+.tring{width:14px;height:14px;border:2px solid var(--bg3);border-top-color:#60a5fa;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -793,7 +835,7 @@ button{font-family:inherit;cursor:pointer}
 ═══════════════════════════════════════════════════════════ -->
 <header id="hdr">
   <div id="hdr-brand">
-    <div id="hdr-logo">&#128737;</div>
+    <div id="hdr-logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
     <span id="hdr-title">WebSentinel</span>
   </div>
   <div id="hdr-divider"></div>
@@ -817,26 +859,30 @@ button{font-family:inherit;cursor:pointer}
 ═══════════════════════════════════════════════════════════ -->
 <nav id="sidebar">
   <div class="nav-group">
-    <button class="nav-item active" data-panel="c2" title="BitB Phishing Detector">
-      <span class="nav-icon">&#128737;&#65039;</span>
-      <span class="nav-label">C2</span>
-    </button>
-    <button class="nav-item" data-panel="c1" title="Extension Analyzer">
-      <span class="nav-icon">&#129513;</span>
+    <button class="nav-item active" data-panel="c1" title="Extension Analyzer">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 7V4M12 7V4M15 7V4M9 17v3M12 17v3M15 17v3M7 9H4M7 12H4M7 15H4M17 9h3M17 12h3M17 15h3"/></svg></span>
       <span class="nav-label">C1</span>
     </button>
+    <button class="nav-item" data-panel="c2" title="BitB Phishing Detector">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
+      <span class="nav-label">C2</span>
+    </button>
     <button class="nav-item" data-panel="c3" title="C2 Beacon Detector">
-      <span class="nav-icon">&#128225;</span>
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
       <span class="nav-label">C3</span>
     </button>
     <button class="nav-item" data-panel="c4" title="Forensic Engine">
-      <span class="nav-icon">&#128300;</span>
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
       <span class="nav-label">C4</span>
+    </button>
+    <button class="nav-item" data-panel="tests" title="Self-Test Runner">
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0h10m-10 0a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2m-10 0V9m10 5V9m0 0H9"/></svg></span>
+      <span class="nav-label">Test</span>
     </button>
   </div>
   <div class="nav-bottom">
     <button class="nav-item" data-panel="settings" title="Settings">
-      <span class="nav-icon">&#9881;&#65039;</span>
+      <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span>
       <span class="nav-label">Set</span>
     </button>
   </div>
@@ -848,7 +894,7 @@ button{font-family:inherit;cursor:pointer}
 <main id="content">
 
 <!-- ─── C2: BitB Phishing Detector (ACTIVE) ──────────────── -->
-<div class="panel active" id="panel-c2">
+<div class="panel" id="panel-c2">
 
   <div class="panel-hdr">
     <div class="comp-badge c2">C2</div>
@@ -867,10 +913,10 @@ button{font-family:inherit;cursor:pointer}
   </div>
 
   <div id="tabs">
-    <button class="tab active" data-tab="live">&#9889; Live Analysis</button>
-    <button class="tab" data-tab="alerts">&#128680; Alerts</button>
-    <button class="tab" data-tab="timeline">&#128336; Timeline</button>
-    <button class="tab" data-tab="c2settings">&#9881; Settings</button>
+    <button class="tab active" data-tab="live"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Live Analysis</button>
+    <button class="tab" data-tab="alerts"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Alerts</button>
+    <button class="tab" data-tab="timeline"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Timeline</button>
+    <button class="tab" data-tab="c2settings"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
   </div>
 
   <div id="tab-content">
@@ -889,7 +935,7 @@ button{font-family:inherit;cursor:pointer}
         <div class="live-layers" id="live-layers"></div>
       </div>
       <div id="live-empty">
-        <div class="e-icon">&#128737;</div>
+        <div class="e-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
         <div class="e-msg">Navigate to a URL to start analysis</div>
       </div>
     </div>
@@ -897,7 +943,7 @@ button{font-family:inherit;cursor:pointer}
     <!-- ALERTS -->
     <div class="pane" id="pane-alerts">
       <div class="empty" id="empty-alerts">
-        <div class="eicon">&#128680;</div>
+        <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
         <div class="emsg">No alerts yet &mdash; results will appear here</div>
       </div>
     </div>
@@ -905,7 +951,7 @@ button{font-family:inherit;cursor:pointer}
     <!-- TIMELINE -->
     <div class="pane" id="pane-timeline">
       <div class="empty" id="empty-timeline">
-        <div class="eicon">&#128336;</div>
+        <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
         <div class="emsg">No browsing history yet</div>
       </div>
     </div>
@@ -956,7 +1002,7 @@ button{font-family:inherit;cursor:pointer}
 </div><!-- /panel-c2 -->
 
 <!-- ─── C1: Extension Analyzer (PLACEHOLDER) ─────────────── -->
-<div class="panel" id="panel-c1">
+<div class="panel active" id="panel-c1">
   <div class="panel-hdr">
     <div class="comp-badge c1">C1</div>
     <div>
@@ -972,19 +1018,19 @@ button{font-family:inherit;cursor:pointer}
     <div class="c1-card">
       <div class="c1-tabs">
         <button class="c1-tab" id="c1-tab-live" onclick="c1Tab('live',this)">
-          &#128308; Live <span id="c1-live-badge" style="display:none;background:var(--danger);
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> Live <span id="c1-live-badge" style="display:none;background:var(--danger);
             color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;
             margin-left:4px;vertical-align:middle"></span>
         </button>
-        <button class="c1-tab active" onclick="c1Tab('upload',this)">&#128229; Upload CRX</button>
-        <button class="c1-tab"        onclick="c1Tab('webstore',this)">&#127760; Web Store</button>
-        <button class="c1-tab"        onclick="c1Tab('manual',this)">&#128196; Manual</button>
+        <button class="c1-tab active" onclick="c1Tab('upload',this)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload CRX</button>
+        <button class="c1-tab"        onclick="c1Tab('webstore',this)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Web Store</button>
+        <button class="c1-tab"        onclick="c1Tab('manual',this)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Manual</button>
       </div>
 
       <!-- Tab: Live Analyzer -->
       <div class="c1-pane" id="c1-pane-live">
         <div id="c1-live-empty" style="padding:24px 0;text-align:center">
-          <div style="font-size:28px;margin-bottom:8px;opacity:.3">&#128737;&#65039;</div>
+          <div style="width:32px;height:32px;margin:0 auto 10px;opacity:.28;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 7V4M12 7V4M15 7V4M9 17v3M12 17v3M15 17v3M7 9H4M7 12H4M7 15H4M17 9h3M17 12h3M17 15h3"/></svg></div>
           <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:4px">
             Browser session is being monitored
           </div>
@@ -995,7 +1041,7 @@ button{font-family:inherit;cursor:pointer}
           <button class="c1-btn ghost" onclick="c1SimulateClick()"
             style="margin-top:16px;padding:6px 16px;font-size:11px;opacity:.7"
             title="Runs the full click-intercept pipeline using the local test extension">
-            &#9654; Simulate Click (Test Pipeline)
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg> Simulate Click (Test Pipeline)
           </button>
         </div>
         <div id="c1-live-cards"></div>
@@ -1008,7 +1054,7 @@ button{font-family:inherit;cursor:pointer}
              ondragover="event.preventDefault();this.classList.add('over')"
              ondragleave="this.classList.remove('over')"
              ondrop="c1OnDrop(event)">
-          <div class="dz-icon">&#128193;</div>
+          <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
           <div class="dz-title">Drop a .crx file here, or click to browse</div>
           <div class="dz-sub">The extension file is parsed locally — nothing leaves your machine until you click Analyze</div>
         </div>
@@ -1019,7 +1065,7 @@ button{font-family:inherit;cursor:pointer}
           <span id="c1-fname"></span>
         </div>
         <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-          <button class="c1-btn primary" id="c1-upload-btn" onclick="c1UploadAnalyze()" disabled>&#128269; Analyze File</button>
+          <button class="c1-btn primary" id="c1-upload-btn" onclick="c1UploadAnalyze()" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze File</button>
           <div id="c1-spinner"><div class="c1-ring"></div><span id="c1-spin-label">Analyzing...</span></div>
         </div>
       </div>
@@ -1034,7 +1080,7 @@ button{font-family:inherit;cursor:pointer}
           WebSentinel downloads the extension from Google's servers and analyzes it.
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <button class="c1-btn primary" id="c1-ws-btn" onclick="c1WebstoreAnalyze()">&#128269; Check Extension</button>
+          <button class="c1-btn primary" id="c1-ws-btn" onclick="c1WebstoreAnalyze()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Check Extension</button>
           <div id="c1-ws-spinner" style="display:none;align-items:center;gap:8px;font-size:11px;color:var(--t2)">
             <div class="c1-ring"></div><span>Downloading from Chrome Web Store...</span>
           </div>
@@ -1064,7 +1110,7 @@ button{font-family:inherit;cursor:pointer}
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <button class="c1-btn primary" id="c1-submit-btn" onclick="c1Analyze()">&#128269; Analyze</button>
+          <button class="c1-btn primary" id="c1-submit-btn" onclick="c1Analyze()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze</button>
           <button class="c1-btn ghost" onclick="c1FillMalicious()">Try malicious example</button>
           <button class="c1-btn ghost" onclick="c1ClearManual()">Clear</button>
         </div>
@@ -1103,7 +1149,7 @@ button{font-family:inherit;cursor:pointer}
         <div id="c1-install-bar" style="display:none;margin-top:12px;padding-top:12px;
              border-top:1px solid var(--b1);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <button id="c1-install-btn" class="c1-btn primary" onclick="c1InstallIntoBrowser()">
-            &#128640; Install into Browser
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install into Browser
           </button>
           <span style="font-size:10px;color:var(--t3)">
             Downloads the extension directly and loads it into the live browser session
@@ -1166,10 +1212,10 @@ button{font-family:inherit;cursor:pointer}
       <div class="c3-sbox"><div class="c3-snum" style="font-size:11px;padding-top:4px" id="c3-model-info">—</div><div class="c3-slbl">Engine</div></div>
     </div>
     <div class="c3-tabs">
-      <button class="c3-tab active" data-c3tab="monitor">&#9685; Live Monitor</button>
-      <button class="c3-tab" data-c3tab="c3alerts">&#128680; Alerts</button>
-      <button class="c3-tab" data-c3tab="hosts">&#128202; Host Analysis</button>
-      <button class="c3-tab" data-c3tab="lab">&#9879; Detection Lab</button>
+      <button class="c3-tab active" data-c3tab="monitor"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Live Monitor</button>
+      <button class="c3-tab" data-c3tab="c3alerts"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Alerts</button>
+      <button class="c3-tab" data-c3tab="hosts"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Host Analysis</button>
+      <button class="c3-tab" data-c3tab="lab"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v6l-2 4a4 4 0 0 0 3.46 6h5.08a4 4 0 0 0 3.46-6l-2-4V2"/><line x1="6" y1="2" x2="18" y2="2"/></svg> Detection Lab</button>
     </div>
     <div class="c3-content">
 
@@ -1184,7 +1230,7 @@ button{font-family:inherit;cursor:pointer}
           <tbody id="c3-request-rows"></tbody>
         </table>
         <div class="empty" id="c3-empty-requests">
-          <div class="eicon">&#128225;</div>
+          <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
           <div class="emsg">No requests captured yet &mdash; browsing activity will appear here</div>
         </div>
       </div>
@@ -1192,7 +1238,7 @@ button{font-family:inherit;cursor:pointer}
       <!-- ALERTS TAB -->
       <div class="c3-pane" id="c3-pane-c3alerts">
         <div class="empty" id="c3-empty-alerts">
-          <div class="eicon">&#128680;</div>
+          <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
           <div class="emsg">No beacon alerts yet &mdash; C3 is monitoring all outbound requests</div>
         </div>
       </div>
@@ -1207,7 +1253,7 @@ button{font-family:inherit;cursor:pointer}
           <tbody id="c3-host-rows"></tbody>
         </table>
         <div class="empty" id="c3-empty-hosts">
-          <div class="eicon">&#128202;</div>
+          <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></div>
           <div class="emsg">Hosts appear after browsing traffic is captured</div>
         </div>
       </div>
@@ -1221,7 +1267,7 @@ button{font-family:inherit;cursor:pointer}
           <!-- Blocked Hosts card -->
           <div class="lab-card lab-card-blocked">
             <div class="lab-card-hdr">
-              <span class="lab-card-icon">&#128683;</span>
+              <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
               <div>
                 <div class="lab-card-title">Blocked Hosts</div>
                 <div class="lab-card-sub">Hosts auto-blocked after BEACON detection</div>
@@ -1236,7 +1282,7 @@ button{font-family:inherit;cursor:pointer}
           <!-- Log Export card -->
           <div class="lab-card lab-card-export">
             <div class="lab-card-hdr">
-              <span class="lab-card-icon">&#128190;</span>
+              <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
               <div>
                 <div class="lab-card-title">Detection Log</div>
                 <div class="lab-card-sub">Export all alerts as a JSON log file</div>
@@ -1248,7 +1294,7 @@ button{font-family:inherit;cursor:pointer}
                 <span class="lab-export-lbl">alerts recorded this session</span>
               </div>
               <button type="button" class="lab-btn-export" onclick="downloadC3Log()">
-                &#8659; Download Log (last 24h)
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download Log (last 24h)
               </button>
               <div class="lab-export-hint">Downloads as <code>c3_detection_log.json</code></div>
             </div>
@@ -1259,13 +1305,13 @@ button{font-family:inherit;cursor:pointer}
         <!-- Row 2: Beacon Test -->
         <div class="lab-card">
           <div class="lab-card-hdr">
-            <span class="lab-card-icon">&#128225;</span>
+            <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
             <div>
               <div class="lab-card-title">Beacon Simulation Test</div>
               <div class="lab-card-sub">Load a test page that fires a POST beacon every 5 seconds into the monitored Playwright browser</div>
             </div>
             <button type="button" class="lab-btn-test" onclick="openC3BeaconTest()">
-              &#9654; Run Test
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Test
             </button>
           </div>
           <div class="lab-test-steps">
@@ -1279,7 +1325,7 @@ button{font-family:inherit;cursor:pointer}
         <!-- Row 3: Detection Engine Reference -->
         <div class="lab-card">
           <div class="lab-card-hdr">
-            <span class="lab-card-icon">&#129302;</span>
+            <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M12 11V7"/><circle cx="12" cy="5" r="2"/><line x1="8" y1="16" x2="8.01" y2="16"/><line x1="16" y1="16" x2="16.01" y2="16"/></svg></span>
             <div>
               <div class="lab-card-title">Detection Engine Reference</div>
               <div class="lab-card-sub">Model pipeline &amp; MITRE ATT&amp;CK coverage</div>
@@ -1344,7 +1390,7 @@ button{font-family:inherit;cursor:pointer}
         </div>
       </div>
       <button type="button" class="btn-c4" id="c4-run-btn" onclick="runC4Scan()" style="align-self:end">
-        &#128300; Scan Browser Artifacts
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Scan Browser Artifacts
       </button>
       <button type="button" class="btn-c4 secondary" onclick="loadC4Report()" style="align-self:end">Refresh</button>
       <span id="c4-refresh-countdown" style="font-size:10px;color:var(--t3);align-self:center"></span>
@@ -1410,32 +1456,32 @@ button{font-family:inherit;cursor:pointer}
 
       <!-- History -->
       <div class="c4-apane active" id="apane-history">
-        <div class="empty"><div class="eicon">&#128336;</div><div class="emsg">Run a scan to view browsing history</div></div>
+        <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="emsg">Run a scan to view browsing history</div></div>
       </div>
 
       <!-- Downloads -->
       <div class="c4-apane" id="apane-download">
-        <div class="empty"><div class="eicon">&#11015;</div><div class="emsg">Run a scan to view downloads</div></div>
+        <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div><div class="emsg">Run a scan to view downloads</div></div>
       </div>
 
       <!-- Cookies -->
       <div class="c4-apane" id="apane-cookie">
-        <div class="empty"><div class="eicon">&#127850;</div><div class="emsg">Run a scan to view cookies</div></div>
+        <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="12" rx="10" ry="10"/><path d="M12 8v4M12 16h.01"/></svg></div><div class="emsg">Run a scan to view cookies</div></div>
       </div>
 
       <!-- Login Data -->
       <div class="c4-apane" id="apane-credential">
-        <div class="empty"><div class="eicon">&#128274;</div><div class="emsg">Run a scan to view saved login data</div></div>
+        <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div class="emsg">Run a scan to view saved login data</div></div>
       </div>
 
       <!-- Extensions -->
       <div class="c4-apane" id="apane-extension">
-        <div class="empty"><div class="eicon">&#129520;</div><div class="emsg">Run a scan to view installed extensions</div></div>
+        <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 7V4M12 7V4M15 7V4M9 17v3M12 17v3M15 17v3M7 9H4M7 12H4M7 15H4M17 9h3M17 12h3M17 15h3"/></svg></div><div class="emsg">Run a scan to view installed extensions</div></div>
       </div>
 
       <!-- Sessions / Clusters -->
       <div class="c4-apane" id="apane-cluster">
-        <div class="empty"><div class="eicon">&#128202;</div><div class="emsg">Run a scan to view Chrome session clusters (Chrome 110+)</div></div>
+        <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></div><div class="emsg">Run a scan to view Chrome session clusters (Chrome 110+)</div></div>
       </div>
     </div>
 
@@ -1462,7 +1508,7 @@ button{font-family:inherit;cursor:pointer}
           <span class="c4-muted" id="c4-extracted">No scan yet</span>
         </div>
         <div class="c4-card-b" id="c4-mitre-list">
-          <div class="empty"><div class="eicon">&#128300;</div><div class="emsg">Run a C4 scan to map forensic findings</div></div>
+          <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div class="emsg">Run a C4 scan to map forensic findings</div></div>
         </div>
       </div>
 
@@ -1505,7 +1551,7 @@ button{font-family:inherit;cursor:pointer}
 </div>
 <div class="panel" id="panel-settings">
   <div class="panel-hdr">
-    <div class="comp-badge cfg">&#9881;</div>
+    <div class="comp-badge cfg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
     <div>
       <div class="panel-title">Global Settings</div>
       <div class="panel-sub">Playwright session, API keys, and domain whitelist</div>
@@ -1552,6 +1598,47 @@ button{font-family:inherit;cursor:pointer}
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════ Tests Panel -->
+<!-- ══════════════════════════════════════════════════════ Tests Panel -->
+<div class="panel" id="panel-tests">
+  <div class="panel-hdr">
+    <span>Live Test Runner</span>
+    <span class="panel-sub">Executes each test case live — browser tests navigate the Playwright window</span>
+  </div>
+
+  <div style="padding:16px 20px 0">
+    <!-- Controls -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="c1-btn primary" id="tests-run-all" onclick="testsRunAll()" style="display:inline-flex;align-items:center;gap:6px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Run All Tests
+      </button>
+      <button class="c1-btn ghost" onclick="testsRunComponent('c1')" style="font-size:11px;padding:5px 12px">C1 Only</button>
+      <button class="c1-btn ghost" onclick="testsRunComponent('c2')" style="font-size:11px;padding:5px 12px">C2 Only</button>
+      <button class="c1-btn ghost" onclick="testsRunComponent('c3')" style="font-size:11px;padding:5px 12px">C3 Only</button>
+      <button class="c1-btn ghost" onclick="testsRunComponent('c4')" style="font-size:11px;padding:5px 12px">C4 Only</button>
+      <button class="c1-btn ghost" id="tests-stop-btn" onclick="testsStop()" style="font-size:11px;padding:5px 12px;display:none">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Stop
+      </button>
+      <span id="tests-summary" style="margin-left:auto;font-size:12px;color:var(--t2)"></span>
+    </div>
+
+    <!-- Progress bar -->
+    <div id="tests-progress-wrap" style="display:none;margin-bottom:12px">
+      <div style="height:3px;background:var(--bg3);border-radius:2px">
+        <div id="tests-progress-bar" style="height:100%;width:0%;background:var(--safe);border-radius:2px;transition:width .3s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-top:4px">
+        <span id="tests-progress-label">0 / 0</span>
+        <span id="tests-elapsed">0.0s</span>
+      </div>
+    </div>
+
+    <!-- Test list -->
+    <div id="tests-list"></div>
+  </div>
+</div>
+
 </main>
 </div>
 
@@ -1561,7 +1648,7 @@ button{font-family:inherit;cursor:pointer}
     <!-- Animated threat ring -->
     <div id="c3-beacon-ring">
       <div id="c3-beacon-ring-inner">
-        <div id="c3-beacon-icon">&#9888;</div>
+        <div id="c3-beacon-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
       </div>
     </div>
     <!-- MITRE tag -->
@@ -2968,11 +3055,11 @@ function c1Render(data) {
   if (data.verdict === 'MALICIOUS') {
     btn.style.background = 'var(--danger)';
     btn.title = 'Extension is MALICIOUS — click to force-install for research purposes';
-    btn.textContent = '⚠️ Force Install (MALICIOUS)';
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Force Install (MALICIOUS)';
   } else {
     btn.style.background = '';
     btn.title = '';
-    btn.textContent = '🚀 Install into Browser';
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Install into Browser';
   }
 }
 
@@ -3003,16 +3090,16 @@ async function c1InstallIntoBrowser() {
     if (data.status === 'blocked') {
       alert('Installation blocked: ' + data.reason +
             '\n\nClick "Force Install" if you want to load it anyway for research.');
-      btn.textContent = '⚠️ Force Install (MALICIOUS)';
+      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Force Install (MALICIOUS)';
       btn.style.background = 'var(--danger)';
     } else if (data.status === 'installed') {
       stat.textContent = 'Registered! Extension active on next session start.';
-      showToast('✅ Extension registered — restart session to activate');
-      btn.textContent = '✅ Registered';
+      showToast('Extension registered — restart session to activate');
+      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Registered';
       btn.style.background = 'var(--safe)';
     } else if (data.status === 'ready') {
       showToast('Extension ready — start the browser session to load it');
-      btn.textContent = '⏳ Start session to load';
+      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Start session to load';
     } else {
       alert('Unexpected response: ' + JSON.stringify(data));
     }
@@ -3216,7 +3303,7 @@ function c1HandleWsMsg(msg) {
 
   } else if (msg.type === 'c1_install_approved') {
     c1LiveMarkDone(msg.ext_id, 'installed');
-    showToast('✅ Browser restarted with extension loaded — returning to extension page');
+    showToast('Browser restarted with extension loaded — returning to extension page');
 
   } else if (msg.type === 'c1_install_blocked') {
     c1LiveMarkDone(msg.ext_id, 'blocked');
@@ -3252,8 +3339,8 @@ function c1LiveCreateCard(extId, url) {
       '<div class="c1-ring" style="width:13px;height:13px;flex-shrink:0"></div>Analyzing extension…' +
     '</div>' +
     '<div class="c1-lc-actions" id="c1-lc-actions-' + extId + '">' +
-      '<button class="c1-btn ghost" style="padding:5px 12px;font-size:11px" onclick="c1LiveBlock(\'' + extId + '\')">&#128683; Block</button>' +
-      '<button class="c1-btn primary" id="c1-lc-approve-' + extId + '" disabled style="padding:5px 12px;font-size:11px;opacity:.35">&#9203; Analyzing…</button>' +
+      '<button class="c1-btn ghost" style="padding:5px 12px;font-size:11px;display:inline-flex;align-items:center;gap:5px" onclick="c1LiveBlock(\'' + extId + '\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Block</button>' +
+      '<button class="c1-btn primary" id="c1-lc-approve-' + extId + '" disabled style="padding:5px 12px;font-size:11px;opacity:.35;display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Analyzing…</button>' +
     '</div>';
 
   document.getElementById('c1-live-cards').insertBefore(card, document.getElementById('c1-live-cards').firstChild);
@@ -3286,7 +3373,12 @@ function c1LiveUpdateCard(extId, state, result, error) {
   dot.className = 'c1-lc-dot ' + state;
 
   const clrMap = { safe:'var(--safe)', suspicious:'var(--warn)', malicious:'var(--danger)', error:'var(--t3)' };
-  const iconMap = { safe:'&#9989;', suspicious:'&#9888;&#65039;', malicious:'&#128683;', error:'&#10060;' };
+  const iconMap = {
+    safe:       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    suspicious: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    malicious:  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+    error:      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+  };
 
   if (state === 'error') {
     body.innerHTML = '<span style="color:var(--danger)">' + (iconMap.error) + ' Analysis failed: ' + (error || 'Unknown') + '</span>';
@@ -3321,7 +3413,9 @@ function c1LiveUpdateCard(extId, state, result, error) {
     if (btn) {
       btn.disabled = !isSafe;
       btn.style.opacity = isSafe ? '1' : '0.35';
-      btn.textContent = isSafe ? '✅ Approve Install' : '🚫 ' + verdict;
+      btn.innerHTML = isSafe
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Approve Install'
+        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>' + verdict;
       if (isSafe) btn.onclick = () => c1LiveApprove(extId);
     }
 
@@ -3338,8 +3432,8 @@ function c1LiveMarkDone(extId, outcome) {
     actions.innerHTML =
       '<span style="font-size:11px;color:' + (outcome==='installed' ? 'var(--safe)' : 'var(--t3)') + '">' +
       (outcome === 'installed'
-        ? '&#9989; Browser restarted with extension loaded'
-        : '&#128683; Blocked') +
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>Browser restarted with extension loaded'
+        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Blocked') +
       '</span>' +
       '<button class="c1-btn ghost" style="padding:4px 10px;font-size:10px;margin-left:auto" onclick="c1LiveDismiss(\'' + extId + '\')">Dismiss</button>';
   }
@@ -3366,11 +3460,11 @@ async function c1LiveApprove(extId) {
     const data = await res.json();
     if (!res.ok) {
       alert('Cannot approve: ' + (data.detail || JSON.stringify(data)));
-      if (btn) { btn.disabled = false; btn.textContent = '✅ Approve Install'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Approve Install'; }
     }
   } catch (err) {
     alert('Approve failed: ' + err.message);
-    if (btn) { btn.disabled = false; btn.textContent = '✅ Approve Install'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Approve Install'; }
   }
 }
 
@@ -3435,11 +3529,11 @@ async function runC4Scan() {
     showToast('C4 forensic scan complete — ' + (d.summary?.total_events ?? 0) + ' events');
   } catch (err) {
     document.getElementById('c4-mitre-list').innerHTML =
-      `<div class="empty"><div class="eicon">&#9888;</div><div class="emsg">${escapeHtml(err.message || 'C4 scan failed')}</div></div>`;
+      `<div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="emsg">${escapeHtml(err.message || 'C4 scan failed')}</div></div>`;
     showToast(err.message || 'C4 scan failed');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '&#128300; Scan Browser Artifacts';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Scan Browser Artifacts';
   }
 }
 
@@ -3493,7 +3587,7 @@ function openC4Drawer(type) {
           <span class="c4-pill type">${escapeHtml(e.artifact_type)}</span>
         </div>
         <div class="c4-dr-sub">${fmtDateTime(e.timestamp)} · score: ${e.anomaly_score||0}</div>
-        ${(e.risk_reasons||[]).map(r => `<div class="c4-dr-sub" style="color:var(--warn)">&#9888; ${escapeHtml(r)}</div>`).join('')}
+        ${(e.risk_reasons||[]).map(r => `<div class="c4-dr-sub" style="color:var(--warn)"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px;vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${escapeHtml(r)}</div>`).join('')}
         ${(e.anomaly_reasons||[]).map(r => `<div class="c4-dr-sub" style="color:var(--c4)">&#9679; ${escapeHtml(r)}</div>`).join('')}
       </div>`;
     });
@@ -3718,7 +3812,7 @@ function renderC4Clusters(clusters) {
   if (!pane) return;
   setText('cnt-cluster', (clusters || []).length);
   if (!clusters || !clusters.length) {
-    pane.innerHTML = '<div class="empty"><div class="eicon">&#128202;</div><div class="emsg">No session clusters found (Chrome 110+ required, or not enough browsing data)</div></div>';
+    pane.innerHTML = '<div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="emsg">No session clusters found (Chrome 110+ required, or not enough browsing data)</div></div>';
     return;
   }
   pane.innerHTML = clusters.slice(0, 50).map(cl => {
@@ -3851,7 +3945,7 @@ function renderArtifactDownloads(events) {
     <tbody>${sorted.slice(0,200).map(e => {
       const d = e.detail || {};
       const kb     = d.size_bytes ? Math.round(d.size_bytes/1024) + ' KB' : '—';
-      const danger = d.danger_type > 0 ? `<span style="color:var(--danger)">&#9888; ${d.danger_type}</span>` : '—';
+      const danger = d.danger_type > 0 ? `<span style="color:var(--danger);display:inline-flex;align-items:center;gap:3px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${d.danger_type}</span>` : '—';
       const hash   = d.sha256 || '—';
       const hashShort = hash.length === 64 ? hash.slice(0,16) + '…' : hash;
       const hashColor = hash.length === 64 ? (e.risk_flag ? 'var(--danger)' : 'var(--c4)') : 'var(--t3)';
@@ -4091,6 +4185,139 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({
     '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
   }[ch]));
+}
+
+// ── Live Test Runner ──────────────────────────────────────────────────────────
+let _testsES = null;
+let _testsItems = {};
+let _testsStartTime = 0;
+let _testsTotal = 0;
+let _testsDone = 0;
+let _testsTimer = null;
+
+const _COMP_COLORS = {c1:'var(--c1)',c2:'var(--c2)',c3:'var(--c3)',c4:'var(--c4)'};
+
+function testsRunAll() { _testsStart('all'); }
+function testsRunComponent(c) { _testsStart(c); }
+
+function testsStop() {
+  if (_testsES) { _testsES.close(); _testsES = null; }
+  if (_testsTimer) { clearInterval(_testsTimer); _testsTimer = null; }
+  document.getElementById('tests-stop-btn').style.display = 'none';
+  document.getElementById('tests-run-all').disabled = false;
+  document.getElementById('tests-summary').textContent = 'Stopped';
+}
+
+function _testsStart(component) {
+  if (_testsES) { _testsES.close(); _testsES = null; }
+  if (_testsTimer) { clearInterval(_testsTimer); _testsTimer = null; }
+
+  _testsItems = {};
+  _testsTotal = 0;
+  _testsDone  = 0;
+  _testsStartTime = Date.now();
+
+  document.getElementById('tests-run-all').disabled = true;
+  document.getElementById('tests-stop-btn').style.display = 'inline-flex';
+  document.getElementById('tests-summary').textContent = 'Starting…';
+  document.getElementById('tests-progress-wrap').style.display = 'block';
+  document.getElementById('tests-progress-bar').style.width = '0%';
+  document.getElementById('tests-list').innerHTML = '';
+
+  // Elapsed timer
+  _testsTimer = setInterval(() => {
+    document.getElementById('tests-elapsed').textContent =
+      ((Date.now() - _testsStartTime) / 1000).toFixed(1) + 's';
+  }, 200);
+
+  _testsES = new EventSource(API + '/dev/run_tests_stream?component=' + component);
+
+  _testsES.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'init') {
+      _testsTotal = msg.total;
+      document.getElementById('tests-progress-label').textContent = '0 / ' + msg.total;
+    } else if (msg.type === 'start') {
+      _testsAddItem(msg);
+    } else if (msg.type === 'result') {
+      _testsUpdateItem(msg);
+      _testsDone++;
+      const pct = _testsTotal > 0 ? Math.round((_testsDone / _testsTotal) * 100) : 0;
+      document.getElementById('tests-progress-bar').style.width = pct + '%';
+      document.getElementById('tests-progress-label').textContent = _testsDone + ' / ' + _testsTotal;
+    } else if (msg.type === 'done') {
+      _testsES.close(); _testsES = null;
+      clearInterval(_testsTimer); _testsTimer = null;
+      document.getElementById('tests-stop-btn').style.display = 'none';
+      document.getElementById('tests-run-all').disabled = false;
+      const col = msg.failed > 0 ? 'var(--danger)' : 'var(--safe)';
+      document.getElementById('tests-summary').innerHTML =
+        `<span style="color:${col}">${msg.passed}/${msg.total} passed</span> · ` +
+        `<span style="color:var(--t3)">${((Date.now()-_testsStartTime)/1000).toFixed(1)}s total</span>`;
+      document.getElementById('tests-progress-bar').style.background =
+        msg.failed > 0 ? 'var(--danger)' : 'var(--safe)';
+    }
+  };
+
+  _testsES.onerror = () => {
+    if (_testsES) { _testsES.close(); _testsES = null; }
+    clearInterval(_testsTimer);
+    document.getElementById('tests-stop-btn').style.display = 'none';
+    document.getElementById('tests-run-all').disabled = false;
+    document.getElementById('tests-summary').textContent = 'Connection error';
+  };
+}
+
+function _testsAddItem(msg) {
+  const list = document.getElementById('tests-list');
+  const el = document.createElement('div');
+  el.className = 'tlist-item running';
+  el.id = 'titem-' + msg.id;
+  const compCls = msg.component || 'c1';
+  const browserBadge = msg.browser
+    ? `<span style="font-size:9px;color:#60a5fa;margin-left:6px">[browser]</span>` : '';
+  el.innerHTML = `
+    <div class="tlist-icon"><div class="tring"></div></div>
+    <div class="tlist-body">
+      <div class="tlist-label">${escapeHtml(msg.label)}${browserBadge}</div>
+      <div class="tlist-detail" id="tdetail-${msg.id}" style="color:var(--t3)">Running…</div>
+      <div class="tlist-meta">
+        <span class="tlist-comp ${compCls}">${compCls.toUpperCase()}</span>
+        <span class="tlist-time" id="ttime-${msg.id}"></span>
+        <span id="turl-${msg.id}"></span>
+      </div>
+    </div>`;
+  list.appendChild(el);
+  el.scrollIntoView({behavior:'smooth', block:'nearest'});
+  _testsItems[msg.id] = el;
+}
+
+function _testsUpdateItem(msg) {
+  const el = _testsItems[msg.id];
+  if (!el) return;
+
+  const iconOk  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color:var(--safe)"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const iconFail= `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger)"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+  el.className = 'tlist-item ' + (msg.status === 'pass' ? 'pass' : 'fail');
+  el.querySelector('.tlist-icon').innerHTML = msg.status === 'pass' ? iconOk : iconFail;
+
+  const detailEl = document.getElementById('tdetail-' + msg.id);
+  if (detailEl) {
+    detailEl.style.color = msg.status === 'pass' ? 'var(--t2)' : 'var(--danger)';
+    detailEl.textContent = msg.detail || (msg.status === 'pass' ? 'OK' : 'Failed');
+  }
+
+  const timeEl = document.getElementById('ttime-' + msg.id);
+  if (timeEl) timeEl.textContent = msg.elapsed + 's';
+
+  // Show browser URL as clickable link that navigates Playwright
+  if (msg.browser_url) {
+    const urlEl = document.getElementById('turl-' + msg.id);
+    if (urlEl) {
+      urlEl.innerHTML = `<span class="tlist-url" onclick="pwNavigate('${escapeHtml(msg.browser_url)}')" title="Click to re-open in Playwright browser">${escapeHtml(msg.browser_url)}</span>`;
+    }
+  }
 }
 
 </script>

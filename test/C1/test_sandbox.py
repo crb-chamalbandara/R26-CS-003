@@ -2,7 +2,7 @@
 WebSentinel C1 — Sandbox verification script.
 
 Run from the project root:
-    python core/c1/scripts/test_sandbox.py
+    python Test/C1/test_sandbox.py
 
 What this tests:
   1. Static analysis on the synthetic test extension (should score ~55-60, verdict SUSPICIOUS)
@@ -22,11 +22,11 @@ import os
 import sys
 
 # Allow running from project root without installing the package
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-_EXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test_malicious_ext")
+_EXT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_malicious_ext")
 
 
 def _sep(title: str) -> None:

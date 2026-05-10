@@ -248,6 +248,12 @@ class PlaywrightSession:
 
         pages = self._ctx.pages
         self._page = pages[0] if pages else await self._ctx.new_page()
+        # Navigate to Google if the tab is blank (fresh start)
+        if self._page.url in ("", "about:blank"):
+            try:
+                await self._page.goto("https://www.google.com", wait_until="domcontentloaded", timeout=15_000)
+            except Exception:
+                pass
         for page in self._ctx.pages:
             self._attach_nav_listener(page)
 

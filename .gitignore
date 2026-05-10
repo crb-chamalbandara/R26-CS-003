@@ -60,3 +60,7 @@ desktop.ini
 .env
 .env.*
 secrets.json
+core/settings.json
+
+# ── Claude Code internal state ────────────────────────────────
+.claude/

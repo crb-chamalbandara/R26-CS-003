@@ -1,7 +1,7 @@
 """
 C4 Correlation Algorithm Test Suite
 Runs 5 synthetic attack scenarios through the full C4 pipeline.
-Usage:  python -m core.c4.test_correlation   (from project root)
+Usage:  python Test/C4/test_correlation.py   (from project root)
 """
 import sys, os
 sys.stdout.reconfigure(encoding="utf-8")
