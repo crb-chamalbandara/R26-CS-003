@@ -187,6 +187,51 @@ def extract_extensions(profile):
             except: continue
     return events
 
+def extract_clusters(profile, tmp):
+    """Read Chrome 110+ browsing session clusters from the History DB."""
+    db = os.path.join(tmp, "History_c4")
+    if not os.path.exists(db):
+        db = safe_copy(find_file(profile, "History"), tmp, "History_c4")
+    if not db:
+        return [], None
+    try:
+        c = sqlite3.connect(db)
+        tables = {r[0] for r in c.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        c.close()
+    except Exception:
+        return [], None
+    if "clusters" not in tables or "clusters_and_visits" not in tables:
+        return [], None   # Chrome < 110 or Playwright build without cluster tables
+    rows = query(db, """
+        SELECT c.id AS cid, c.raw_label,
+               cv.url_for_display, cv.score, cv.engagement_score,
+               v.visit_time
+        FROM clusters_and_visits cv
+        JOIN clusters c ON cv.cluster_id = c.id
+        JOIN visits v ON cv.url_id = v.url
+        WHERE v.visit_time > 0
+        ORDER BY c.id, v.visit_time DESC
+        LIMIT 2000
+    """)
+    from collections import defaultdict as _dd
+    cluster_map = _dd(lambda: {"label": "", "urls": [], "max_score": 0.0})
+    for r in rows:
+        cid = r["cid"]
+        cluster_map[cid]["label"] = r["raw_label"] or f"Cluster {cid}"
+        score = float(r["score"] or 0)
+        cluster_map[cid]["max_score"] = max(cluster_map[cid]["max_score"], score)
+        cluster_map[cid]["urls"].append({
+            "url":        r["url_for_display"] or "",
+            "score":      round(score, 4),
+            "engagement": round(float(r["engagement_score"] or 0), 4),
+            "ts":         chrome_time(r["visit_time"]),
+        })
+    clusters = [{"cluster_id": cid, **v} for cid, v in cluster_map.items()]
+    clusters.sort(key=lambda x: x["max_score"], reverse=True)
+    return clusters, None
+
+
 def collect_manifest(profile):
     files = {"History":find_file(profile,"History"),
              "Cookies":find_file(profile,os.path.join("Network","Cookies"),"Cookies"),
@@ -219,6 +264,7 @@ def run_extraction(profile_path=None, tmp_dir=None):
     downloads, w = extract_downloads(profile_path, tmp_dir); warnings += [w] if w else []
     creds,     w = extract_credentials(profile_path, tmp_dir); warnings += [w] if w else []
     extensions = extract_extensions(profile_path)
+    clusters, _w = extract_clusters(profile_path, tmp_dir)
     manifest   = collect_manifest(profile_path)
 
     all_events = history + cookies + downloads + creds + extensions
@@ -226,4 +272,5 @@ def run_extraction(profile_path=None, tmp_dir=None):
         raise ValueError("No events extracted. Close Chrome completely and try again.")
 
     return {"profile_path":profile_path,"extracted_at":datetime.now().isoformat(),
-            "warnings":warnings,"artifact_manifest":manifest,"events":all_events}
+            "warnings":warnings,"artifact_manifest":manifest,
+            "events":all_events,"clusters":clusters}

@@ -711,7 +711,38 @@ button{font-family:inherit;cursor:pointer}
 .c4-input{background:var(--bg0);border:1px solid var(--b1);color:var(--t0);
   padding:7px 9px;border-radius:var(--radius);font-size:11.5px;outline:none}
 .c4-input:focus{border-color:var(--c4)}
-.c4-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.c4-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}
+.c4-stat{cursor:pointer}
+.c4-stat:hover{border-color:var(--c4);background:var(--bg1)}
+/* Stat drawer */
+.c4-drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;opacity:0;pointer-events:none;transition:opacity .2s}
+.c4-drawer-overlay.open{opacity:1;pointer-events:all}
+.c4-drawer{position:fixed;top:0;right:0;height:100vh;width:480px;max-width:95vw;background:var(--bg2);
+  border-left:1px solid var(--b1);z-index:901;display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .22s cubic-bezier(.4,0,.2,1)}
+.c4-drawer.open{transform:translateX(0)}
+.c4-drawer-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+  border-bottom:1px solid var(--b1);flex-shrink:0}
+.c4-drawer-title{font-size:13px;font-weight:800;color:var(--t0)}
+.c4-drawer-close{background:none;border:none;color:var(--t3);font-size:18px;cursor:pointer;
+  line-height:1;padding:2px 6px;border-radius:4px}
+.c4-drawer-close:hover{background:var(--bg0);color:var(--t0)}
+.c4-drawer-body{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.c4-dr-row{background:var(--bg1);border:1px solid var(--b1);border-radius:var(--radius);padding:9px 11px}
+.c4-dr-head{font-size:11px;font-weight:700;color:var(--t0);margin-bottom:4px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px}
+.c4-dr-sub{font-size:10px;color:var(--t3);line-height:1.5;word-break:break-all}
+.c4-dr-sev-high{color:var(--danger)}
+.c4-dr-sev-med{color:var(--warn)}
+.c4-dr-sev-low{color:var(--safe)}
+.c4-heatmap-grid{display:grid;grid-template-columns:32px repeat(24,1fr);gap:2px;padding:6px 2px}
+.c4-hm-cell{height:13px;border-radius:2px;cursor:default;transition:opacity .15s}
+.c4-hm-cell:hover{opacity:.7}
+.c4-hm-hlabel{font-size:8px;color:var(--t3);text-align:center;line-height:13px}
+.c4-hm-dlabel{font-size:9px;color:var(--t3);display:flex;align-items:center;padding-right:4px}
+.c4-cluster-row{background:var(--bg1);border:1px solid var(--b1);border-radius:var(--radius);padding:8px 10px;margin-bottom:6px}
+.c4-cluster-label{font-size:12px;font-weight:700;color:var(--t0);margin-bottom:4px}
+.c4-cluster-url{font-size:10px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .c4-stat{background:var(--bg2);border:1px solid var(--b1);border-radius:var(--radius);
   padding:10px;text-align:center;min-width:0}
 .c4-stat .num{font-size:21px;font-weight:900;line-height:1}
@@ -750,7 +781,7 @@ button{font-family:inherit;cursor:pointer}
   border-radius:5px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .c4-method-sample{font-size:10px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .c4-toolbar{grid-template-columns:1fr 1fr}
-  .c4-grid{grid-template-columns:repeat(3,1fr)}
+  .c4-grid{grid-template-columns:repeat(4,1fr)}
   .c4-layout{grid-template-columns:1fr}
   .c4-method-grid{grid-template-columns:1fr}
 </style>
@@ -1316,15 +1347,50 @@ button{font-family:inherit;cursor:pointer}
         &#128300; Scan Browser Artifacts
       </button>
       <button type="button" class="btn-c4 secondary" onclick="loadC4Report()" style="align-self:end">Refresh</button>
+      <span id="c4-refresh-countdown" style="font-size:10px;color:var(--t3);align-self:center"></span>
     </div>
 
     <div class="c4-grid">
-      <div class="c4-stat"><div class="num" id="c4-total">0</div><div class="lbl">Events</div></div>
-      <div class="c4-stat"><div class="num" id="c4-flagged" style="color:var(--warn)">0</div><div class="lbl">Flagged</div></div>
-      <div class="c4-stat"><div class="num" id="c4-high" style="color:var(--danger)">0</div><div class="lbl">High</div></div>
-      <div class="c4-stat"><div class="num" id="c4-medium" style="color:var(--warn)">0</div><div class="lbl">Medium</div></div>
-      <div class="c4-stat"><div class="num" id="c4-low" style="color:var(--safe)">0</div><div class="lbl">Low</div></div>
-      <div class="c4-stat"><div class="num" id="c4-findings" style="color:var(--c4)">0</div><div class="lbl">Findings</div></div>
+      <div class="c4-stat" onclick="openC4Drawer('events')" title="View all events"><div class="num" id="c4-total">0</div><div class="lbl">Events</div></div>
+      <div class="c4-stat" onclick="openC4Drawer('flagged')" title="View flagged events"><div class="num" id="c4-flagged" style="color:var(--warn)">0</div><div class="lbl">Flagged</div></div>
+      <div class="c4-stat" onclick="openC4Drawer('high')" title="View High severity findings"><div class="num" id="c4-high" style="color:var(--danger)">0</div><div class="lbl">High</div></div>
+      <div class="c4-stat" onclick="openC4Drawer('medium')" title="View Medium severity findings"><div class="num" id="c4-medium" style="color:var(--warn)">0</div><div class="lbl">Medium</div></div>
+      <div class="c4-stat" onclick="openC4Drawer('low')" title="View Low severity findings"><div class="num" id="c4-low" style="color:var(--safe)">0</div><div class="lbl">Low</div></div>
+      <div class="c4-stat" onclick="openC4Drawer('findings')" title="View all MITRE findings"><div class="num" id="c4-findings" style="color:var(--c4)">0</div><div class="lbl">Findings</div></div>
+      <div class="c4-stat" onclick="openC4Drawer('risk_score')" title="View score breakdown"><div class="num" id="c4-risk-score" style="color:var(--t1)">—</div><div class="lbl">Risk Score</div></div>
+      <div class="c4-stat" onclick="openC4Drawer('verdict')" title="View verdict details"><div class="num" id="c4-verdict" style="font-size:13px;color:var(--t1)">—</div><div class="lbl">Verdict</div></div>
+    </div>
+
+    <!-- Charts row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div class="c4-card">
+        <div class="c4-card-h">Artifact Distribution</div>
+        <div class="c4-card-b" style="min-height:180px;display:flex;align-items:center;justify-content:center">
+          <canvas id="c4-chart-artifacts" style="max-height:160px"></canvas>
+        </div>
+      </div>
+      <div class="c4-card">
+        <div class="c4-card-h">Algorithm Findings</div>
+        <div class="c4-card-b" style="min-height:180px;display:flex;align-items:center;justify-content:center">
+          <canvas id="c4-chart-algorithms" style="max-height:160px"></canvas>
+        </div>
+      </div>
+      <div class="c4-card">
+        <div class="c4-card-h">Hourly Activity</div>
+        <div class="c4-card-b" style="min-height:180px;display:flex;align-items:center;justify-content:center">
+          <canvas id="c4-chart-hours" style="max-height:160px"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Heatmap -->
+    <div class="c4-card">
+      <div class="c4-card-h">Activity Heatmap
+        <span class="c4-muted">Hour × Day-of-week from browsing history</span>
+      </div>
+      <div class="c4-card-b" id="c4-heatmap">
+        <div class="c4-muted">Run a scan to see activity patterns</div>
+      </div>
     </div>
 
     <!-- Artifact Viewer -->
@@ -1339,6 +1405,7 @@ button{font-family:inherit;cursor:pointer}
         <button class="c4-atab" data-atype="cookie">Cookies <span class="c4-tabcount" id="cnt-cookie">0</span></button>
         <button class="c4-atab" data-atype="credential">Login Data <span class="c4-tabcount" id="cnt-credential">0</span></button>
         <button class="c4-atab" data-atype="extension">Extensions <span class="c4-tabcount" id="cnt-extension">0</span></button>
+        <button class="c4-atab" data-atype="cluster">Sessions <span class="c4-tabcount" id="cnt-cluster">0</span></button>
       </div>
 
       <!-- History -->
@@ -1364,6 +1431,11 @@ button{font-family:inherit;cursor:pointer}
       <!-- Extensions -->
       <div class="c4-apane" id="apane-extension">
         <div class="empty"><div class="eicon">&#129520;</div><div class="emsg">Run a scan to view installed extensions</div></div>
+      </div>
+
+      <!-- Sessions / Clusters -->
+      <div class="c4-apane" id="apane-cluster">
+        <div class="empty"><div class="eicon">&#128202;</div><div class="emsg">Run a scan to view Chrome session clusters (Chrome 110+)</div></div>
       </div>
     </div>
 
@@ -1544,11 +1616,27 @@ button{font-family:inherit;cursor:pointer}
 // ══════════════════════════════════════════════════════════════
 //  Constants & state
 // ══════════════════════════════════════════════════════════════
-const API = 'http://127.0.0.1:8001';
+const API = 'http://127.0.0.1:8765';
 let alerts = [], timeline = [];
 let c3Alerts = [], c3Hosts = [], c3Requests = [], c3Status = {};
 let ct = 0, cp = 0, cs = 0, ck = 0;
 let backendUp = false;
+let c4Loaded = false;
+let c4LastResult = null;
+let _c4Charts = {};
+let c4AutoRefreshTimer = null;
+let c4AutoRefreshCountdown = 0;
+
+// HTML-escape for any backend-controlled string we put in innerHTML.
+// Phishing URLs and DOM-derived layer details are untrusted by definition.
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 // Session boundary: alerts before this timestamp are "previous session"
 const SESSION_START_TS = Date.now();
 let _showPrevAlerts = false;
@@ -1603,7 +1691,7 @@ async function startPwSession() {
 function connectPwWs() {
   if (pwWs && pwWs.readyState === WebSocket.OPEN) return;
   closePwWs();
-  pwWs = new WebSocket('ws://127.0.0.1:8001/ws/events');
+  pwWs = new WebSocket('ws://127.0.0.1:8765/ws/events');
 
   pwWs.onmessage = (evt) => {
     let msg; try { msg = JSON.parse(evt.data); } catch { return; }
@@ -1625,6 +1713,12 @@ function connectPwWs() {
       setMonActive(false); showToast('Session error \u2014 check backend logs');
     } else if (msg.type === 'init') {
       if (msg.session_running && msg.url) { updateMonUrl(msg.url); setMonActive(true); }
+    } else if (msg.type === 'c1_install_intercepted'
+            || msg.type === 'c1_install_approved'
+            || msg.type === 'c1_install_blocked') {
+      try { c1HandleWsMsg(msg); } catch (e) { console.error('[C1] handler error', e); }
+    } else if (msg.type === 'c1_extension_installed') {
+      try { c1HandleInstallMsg(msg); } catch (e) { console.error('[C1] install msg error', e); }
     }
   };
   pwWs.onerror = () => {};
@@ -2334,11 +2428,11 @@ function renderLive(r) {
     const p  = Math.round(l.score * 100);
     const lc = p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)';
     return `<div class="live-lrow">
-      <span class="live-lname">${l.name || l.id}</span>
+      <span class="live-lname">${esc(l.name || l.id)}</span>
       <div class="live-bar-w"><div class="live-bar" style="width:${p}%;background:${lc}"></div></div>
       <span class="live-val" style="color:${lc}">${p}%</span>
     </div>
-    <div class="live-det">${l.detail || ''}</div>`;
+    <div class="live-det">${esc(l.detail || '')}</div>`;
   }).join('');
 }
 
@@ -2360,9 +2454,9 @@ function makeAlertCard(a) {
   card.className = 'acard ' + vc;
   card.innerHTML = `
     <div class="ahdr">
-      <span class="vbadge ${vc}">${a.verdict}</span>
-      <span class="aurl" title="${a.url}">${a.url}</span>
-      <span class="atime">${fmtTime(a.timestamp)}</span>
+      <span class="vbadge ${vc}">${esc(a.verdict)}</span>
+      <span class="aurl" title="${esc(a.url)}">${esc(a.url)}</span>
+      <span class="atime">${esc(fmtTime(a.timestamp))}</span>
     </div>
     <div class="rbar-row">
       <span class="rbar-lbl">Risk</span>
@@ -2378,11 +2472,11 @@ function layerHTML(l) {
   const p   = Math.round(l.score * 100);
   const col = p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)';
   return `<div class="lrow">
-    <span class="lname">${l.id}</span>
+    <span class="lname">${esc(l.id)}</span>
     <div class="lbar-w"><div class="lbar" style="width:${p}%;background:${col}"></div></div>
     <span class="lval" style="color:${col}">${p}%</span>
   </div>
-  <div class="ldet">${l.detail || ''}</div>`;
+  <div class="ldet">${esc(l.detail || '')}</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -2397,9 +2491,9 @@ function renderTimeline() {
     const el = document.createElement('div'); el.className = 'titem';
     el.innerHTML = `
       <div class="tdot" style="background:${col}"></div>
-      <span class="turl" title="${a.url}">${a.url}</span>
+      <span class="turl" title="${esc(a.url)}">${esc(a.url)}</span>
       <span class="tscore" style="color:${col}">${Math.round(a.risk_score)}%</span>
-      <span class="ttime">${fmtTime(a.timestamp)}</span>`;
+      <span class="ttime">${esc(fmtTime(a.timestamp))}</span>`;
     el.addEventListener('click', () => navigatePw(a.url));
     pane.appendChild(el);
   });
@@ -2416,6 +2510,12 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     const panel = document.getElementById('panel-' + btn.dataset.panel);
     if (panel) panel.classList.add('active');
     if (btn.dataset.panel === 'c3') refreshC3();
+    if (btn.dataset.panel === 'c4') {
+      if (!c4Loaded) { c4Loaded = true; loadC4Debug(); loadC4Report(); }
+      _c4StartAutoRefresh();
+    } else {
+      _c4StopAutoRefresh();
+    }
   });
 });
 
@@ -2906,9 +3006,9 @@ async function c1InstallIntoBrowser() {
       btn.textContent = '⚠️ Force Install (MALICIOUS)';
       btn.style.background = 'var(--danger)';
     } else if (data.status === 'installed') {
-      stat.textContent = 'Installed! Browser is reloading...';
-      showToast('✅ Extension installed into browser session');
-      btn.textContent = '✅ Installed';
+      stat.textContent = 'Registered! Extension active on next session start.';
+      showToast('✅ Extension registered — restart session to activate');
+      btn.textContent = '✅ Registered';
       btn.style.background = 'var(--safe)';
     } else if (data.status === 'ready') {
       showToast('Extension ready — start the browser session to load it');
@@ -3161,7 +3261,7 @@ function c1LiveCreateCard(extId, url) {
 }
 
 function c1SimulateClick() {
-  fetch('http://127.0.0.1:8001/dev/simulate_click', { method: 'POST' })
+  fetch('http://127.0.0.1:8765/dev/simulate_click', { method: 'POST' })
     .then(r => r.json())
     .then(d => console.log('[C1-SIM]', d.status))
     .catch(e => console.error('[C1-SIM] error', e));
@@ -3282,250 +3382,6 @@ async function c1LiveBlock(extId) {
 }
 
 // ══ C4 Forensic Engine JS ══════════════════════════════════
-// ══════════════════════════════════════════════════════════════
-//  Constants & state
-// ══════════════════════════════════════════════════════════════
-const API = 'http://127.0.0.1:8000';
-let alerts = [], timeline = [];
-let ct = 0, cp = 0, cs = 0, ck = 0;
-let backendUp = false;
-
-// ══════════════════════════════════════════════════════════════
-//  Backend health + auto-start Playwright
-// ══════════════════════════════════════════════════════════════
-let _autoStarted = false;
-
-async function checkBackend() {
-  try {
-    const r = await fetch(API + '/health', { signal: AbortSignal.timeout(2000) });
-    if (r.ok) {
-      setOnline(true);
-      if (!_autoStarted) { _autoStarted = true; startPwSession(); loadSettings(); }
-      return true;
-    }
-  } catch {}
-  setOnline(false); return false;
-}
-
-function setOnline(on) {
-  backendUp = on;
-  const pill = document.getElementById('online-pill');
-  pill.classList.remove('on', 'off'); pill.classList.add(on ? 'on' : 'off');
-  document.getElementById('online-txt').textContent = on ? 'Online' : 'Offline';
-}
-
-checkBackend();
-setInterval(checkBackend, 6000);
-
-// ══════════════════════════════════════════════════════════════
-//  Playwright session
-// ══════════════════════════════════════════════════════════════
-let pwWs = null, pwWsRetry = null;
-
-async function startPwSession() {
-  try {
-    const r = await fetch(API + '/session/start', { method: 'POST' });
-    const d = await r.json();
-    if (d.status === 'starting' || d.status === 'started' || d.status === 'already_running') {
-      connectPwWs();
-    }
-  } catch {
-    try {
-      const sd = await (await fetch(API + '/session/status')).json();
-      if (sd.running) connectPwWs();
-    } catch {}
-  }
-}
-
-function connectPwWs() {
-  if (pwWs && pwWs.readyState === WebSocket.OPEN) return;
-  closePwWs();
-  pwWs = new WebSocket('ws://127.0.0.1:8000/ws/events');
-
-  pwWs.onmessage = (evt) => {
-    let msg; try { msg = JSON.parse(evt.data); } catch { return; }
-    if (msg.type === 'analysis' && msg.data) {
-      ingestResult(msg.data);
-    } else if (msg.type === 'url_change') {
-      updateMonUrl(msg.url || '');
-    } else if (msg.type === 'session_started') {
-      updateMonUrl(msg.url || 'Ready');
-      setMonActive(true);
-      showToast('Session started \u2014 monitoring active');
-    } else if (msg.type === 'session_stopped') {
-      setMonActive(false); updateMonUrl('Session stopped');
-    } else if (msg.type === 'session_error') {
-      setMonActive(false); showToast('Session error \u2014 check backend logs');
-    } else if (msg.type === 'forensic_analysis' && msg.data) {
-      document.querySelector('[data-panel="c4"]').classList.add('has-data');
-      loadC4Report();
-    } else if (msg.type === 'init') {
-      if (msg.session_running && msg.url) { updateMonUrl(msg.url); setMonActive(true); }
-    }
-  };
-  pwWs.onerror = () => {};
-  pwWs.onclose = () => { pwWsRetry = setTimeout(connectPwWs, 3000); };
-}
-
-function closePwWs() {
-  clearTimeout(pwWsRetry);
-  if (pwWs) { try { pwWs.close(); } catch {} pwWs = null; }
-}
-
-function updateMonUrl(url) {
-  document.getElementById('mon-url').textContent = url || 'Idle';
-}
-
-function setMonActive(on) {
-  document.getElementById('mon-dot').classList.toggle('idle', !on);
-}
-
-// ── Navigation input ──────────────────────────────────────────
-async function navigatePw(url) {
-  if (!url) return;
-  if (!url.match(/^https?:\/\//)) {
-    url = url.includes('.') ? 'https://' + url
-      : 'https://www.google.com/search?q=' + encodeURIComponent(url);
-  }
-  updateMonUrl(url);
-  try {
-    await fetch(API + '/session/navigate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-  } catch {}
-}
-
-document.getElementById('nav-input').addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  const v = document.getElementById('nav-input').value.trim();
-  if (!v) return;
-  document.getElementById('nav-input').value = '';
-  navigatePw(v);
-});
-document.getElementById('nav-go').addEventListener('click', () => {
-  const v = document.getElementById('nav-input').value.trim();
-  if (!v) return;
-  document.getElementById('nav-input').value = '';
-  navigatePw(v);
-});
-
-// ══════════════════════════════════════════════════════════════
-//  Ingest & display
-// ══════════════════════════════════════════════════════════════
-function ingestResult(r) {
-  ct++; if (r.verdict === 'PHISHING') cp++; else if (r.verdict === 'SUSPICIOUS') cs++; else ck++;
-  document.getElementById('s-total').textContent = ct;
-  document.getElementById('s-phish').textContent = cp;
-  document.getElementById('s-sus').textContent   = cs;
-  document.getElementById('s-safe').textContent  = ck;
-  document.querySelector('[data-panel="c2"]').classList.add('has-data');
-
-  alerts.unshift(r); if (alerts.length > 200) alerts.pop();
-  timeline.unshift(r);
-
-  renderLive(r);
-  renderAlerts();
-  renderTimeline();
-}
-
-// ══════════════════════════════════════════════════════════════
-//  Live Analysis pane
-// ══════════════════════════════════════════════════════════════
-function renderLive(r) {
-  document.getElementById('live-empty').style.display = 'none';
-  document.getElementById('live-current').style.display = 'block';
-  const vc  = r.verdict.toLowerCase();
-  const col = vc === 'phishing' ? 'var(--danger)' : vc === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
-  const pct = Math.round(r.risk_score);
-  document.getElementById('live-url').textContent = r.url;
-  const se = document.getElementById('live-score');
-  se.textContent = pct; se.style.color = col;
-  const ve = document.getElementById('live-verdict');
-  ve.textContent = r.verdict; ve.className = 'live-verdict ' + vc;
-  document.getElementById('live-layers').innerHTML = (r.layers || []).map(l => {
-    const p  = Math.round(l.score * 100);
-    const lc = p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)';
-    return `<div class="live-lrow">
-      <span class="live-lname">${l.name || l.id}</span>
-      <div class="live-bar-w"><div class="live-bar" style="width:${p}%;background:${lc}"></div></div>
-      <span class="live-val" style="color:${lc}">${p}%</span>
-    </div>
-    <div class="live-det">${l.detail || ''}</div>`;
-  }).join('');
-}
-
-// ══════════════════════════════════════════════════════════════
-//  Render Alerts
-// ══════════════════════════════════════════════════════════════
-function renderAlerts() {
-  const pane = document.getElementById('pane-alerts');
-  document.getElementById('empty-alerts').style.display = alerts.length ? 'none' : 'flex';
-  pane.querySelectorAll('.acard').forEach(e => e.remove());
-  alerts.forEach(a => pane.appendChild(makeAlertCard(a)));
-}
-
-function makeAlertCard(a) {
-  const vc  = a.verdict.toLowerCase();
-  const col = vc === 'phishing' ? 'var(--danger)' : vc === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
-  const pct = Math.round(a.risk_score);
-  const card = document.createElement('div');
-  card.className = 'acard ' + vc;
-  card.innerHTML = `
-    <div class="ahdr">
-      <span class="vbadge ${vc}">${a.verdict}</span>
-      <span class="aurl" title="${a.url}">${a.url}</span>
-      <span class="atime">${fmtTime(a.timestamp)}</span>
-    </div>
-    <div class="rbar-row">
-      <span class="rbar-lbl">Risk</span>
-      <div class="rbar-wrap"><div class="rbar" style="width:${pct}%;background:${col}"></div></div>
-      <span class="rbar-val" style="color:${col}">${pct}%</span>
-    </div>
-    <div class="layers">${(a.layers || []).map(layerHTML).join('')}</div>`;
-  card.querySelector('.ahdr').addEventListener('click', () => card.classList.toggle('open'));
-  return card;
-}
-
-function layerHTML(l) {
-  const p   = Math.round(l.score * 100);
-  const col = p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)';
-  return `<div class="lrow">
-    <span class="lname">${l.id}</span>
-    <div class="lbar-w"><div class="lbar" style="width:${p}%;background:${col}"></div></div>
-    <span class="lval" style="color:${col}">${p}%</span>
-  </div>
-  <div class="ldet">${l.detail || ''}</div>`;
-}
-
-// ══════════════════════════════════════════════════════════════
-//  Render Timeline
-// ══════════════════════════════════════════════════════════════
-function renderTimeline() {
-  const pane = document.getElementById('pane-timeline');
-  document.getElementById('empty-timeline').style.display = timeline.length ? 'none' : 'flex';
-  pane.querySelectorAll('.titem').forEach(e => e.remove());
-  timeline.forEach(a => {
-    const col = a.verdict === 'PHISHING' ? 'var(--danger)' : a.verdict === 'SUSPICIOUS' ? 'var(--warn)' : 'var(--safe)';
-    const el = document.createElement('div'); el.className = 'titem';
-    el.innerHTML = `
-      <div class="tdot" style="background:${col}"></div>
-      <span class="turl" title="${a.url}">${a.url}</span>
-      <span class="tscore" style="color:${col}">${Math.round(a.risk_score)}%</span>
-      <span class="ttime">${fmtTime(a.timestamp)}</span>`;
-    el.addEventListener('click', () => navigatePw(a.url));
-    pane.appendChild(el);
-  });
-}
-
-// ══════════════════════════════════════════════════════════════
-//  Sidebar + C2 tab switching
-// ══════════════════════════════════════════════════════════════
-// C4 forensic dashboard
-let c4Loaded = false;
-let c4LastResult = null;
-
 async function loadC4Debug() {
   try {
     const d = await (await fetch(API + '/forensic/debug')).json();
@@ -3587,6 +3443,296 @@ async function runC4Scan() {
   }
 }
 
+// ── Stat Drawer ───────────────────────────────────────────────
+function openC4Drawer(type) {
+  if (!c4LastResult) { showToast('Run a scan first'); return; }
+  const overlay = document.getElementById('c4-drawer-overlay');
+  const drawer  = document.getElementById('c4-drawer');
+  const title   = document.getElementById('c4-drawer-title');
+  const body    = document.getElementById('c4-drawer-body');
+  const result  = c4LastResult;
+  const mitre   = result.mitre_result || {};
+  const allFindings = mitre.all_findings || [];
+  const events  = result.events || [];
+
+  let titleText = '';
+  let html = '';
+
+  if (type === 'events') {
+    titleText = `All Events (${events.length})`;
+    const types = ['history','download','cookie','credential','extension'];
+    types.forEach(t => {
+      const evts = events.filter(e => e.artifact_type === t);
+      if (!evts.length) return;
+      html += `<div style="font-size:10px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;padding:4px 0 2px">${t} — ${evts.length}</div>`;
+      evts.slice(0,100).forEach(e => {
+        const d = e.detail || {};
+        const label = d.url || d.host || d.filename || d.origin || d.name || t;
+        const ts = e.timestamp ? fmtDateTime(e.timestamp) : '';
+        html += `<div class="c4-dr-row">
+          <div class="c4-dr-head">
+            <span style="color:${e.risk_flag?'var(--warn)':'var(--t1)'}">${escapeHtml(label)}</span>
+            ${e.risk_flag ? '<span class="c4-pill high">FLAGGED</span>' : ''}
+          </div>
+          <div class="c4-dr-sub">${ts}${e.anomaly_score > 0 ? ` · score: ${e.anomaly_score}` : ''}${(e.risk_reasons||[]).length ? ' · ' + escapeHtml(e.risk_reasons.join(', ')) : ''}</div>
+        </div>`;
+      });
+    });
+    if (!html) html = '<div class="c4-muted">No events found</div>';
+
+  } else if (type === 'flagged') {
+    const flagged = events.filter(e => e.risk_flag);
+    titleText = `Flagged Events (${flagged.length})`;
+    if (!flagged.length) { html = '<div class="c4-muted">No flagged events — profile looks clean</div>'; }
+    else flagged.forEach(e => {
+      const d = e.detail || {};
+      const label = d.url || d.host || d.filename || d.origin || d.name || e.artifact_type;
+      html += `<div class="c4-dr-row">
+        <div class="c4-dr-head">
+          <span>${escapeHtml(label)}</span>
+          <span class="c4-pill type">${escapeHtml(e.artifact_type)}</span>
+        </div>
+        <div class="c4-dr-sub">${fmtDateTime(e.timestamp)} · score: ${e.anomaly_score||0}</div>
+        ${(e.risk_reasons||[]).map(r => `<div class="c4-dr-sub" style="color:var(--warn)">&#9888; ${escapeHtml(r)}</div>`).join('')}
+        ${(e.anomaly_reasons||[]).map(r => `<div class="c4-dr-sub" style="color:var(--c4)">&#9679; ${escapeHtml(r)}</div>`).join('')}
+      </div>`;
+    });
+
+  } else if (type === 'high' || type === 'medium' || type === 'low') {
+    const sevMap = { high: 'High', medium: 'Medium', low: 'Low' };
+    const sev = sevMap[type];
+    const filtered = allFindings.filter(f => f.severity === sev);
+    const colorMap = { High: 'var(--danger)', Medium: 'var(--warn)', Low: 'var(--safe)' };
+    titleText = `${sev} Severity Findings (${filtered.length})`;
+    if (!filtered.length) { html = `<div class="c4-muted">No ${sev} severity findings</div>`; }
+    else filtered.forEach(f => {
+      html += `<div class="c4-dr-row">
+        <div class="c4-dr-head">
+          <span style="color:${colorMap[sev]}">${escapeHtml(f.technique_id || '')} ${escapeHtml(f.technique_name || f.description || '')}</span>
+          <span class="c4-pill ${type}">${sev}</span>
+        </div>
+        <div class="c4-dr-sub">${escapeHtml(f.tactic || '')}${f.score != null ? ` · score: ${f.score}` : ''}</div>
+        ${f.description ? `<div class="c4-dr-sub">${escapeHtml(f.description)}</div>` : ''}
+        ${(f.evidence||[]).slice(0,3).map(ev => `<div class="c4-dr-sub" style="color:var(--t2)">&#8227; ${escapeHtml(String(ev))}</div>`).join('')}
+      </div>`;
+    });
+
+  } else if (type === 'findings') {
+    titleText = `All MITRE Findings (${allFindings.length})`;
+    if (!allFindings.length) { html = '<div class="c4-muted">No findings yet — run a scan</div>'; }
+    const sevOrder = { High: 0, Medium: 1, Low: 2 };
+    const sorted = [...allFindings].sort((a,b) => (sevOrder[a.severity]??3) - (sevOrder[b.severity]??3));
+    const colorMap = { High: 'var(--danger)', Medium: 'var(--warn)', Low: 'var(--safe)' };
+    const pillClass = { High: 'high', Medium: 'medium', Low: 'low' };
+    sorted.forEach(f => {
+      html += `<div class="c4-dr-row">
+        <div class="c4-dr-head">
+          <span style="color:${colorMap[f.severity]||'var(--t1)'}">${escapeHtml(f.technique_id || '')} ${escapeHtml(f.technique_name || f.description || '')}</span>
+          <span class="c4-pill ${pillClass[f.severity]||'type'}">${escapeHtml(f.severity||'')}</span>
+        </div>
+        <div class="c4-dr-sub">${escapeHtml(f.tactic || '')}${f.score != null ? ` · score: ${f.score}` : ''}</div>
+        ${f.description ? `<div class="c4-dr-sub">${escapeHtml(f.description)}</div>` : ''}
+      </div>`;
+    });
+
+  } else if (type === 'risk_score' || type === 'verdict') {
+    const summary = (result._summary_cache) || {};
+    const sev = (mitre.by_severity) || {};
+    const h = sev.High || 0, m = sev.Medium || 0, l = sev.Low || 0;
+    const riskScore = parseFloat(document.getElementById('c4-risk-score')?.textContent) || 0;
+    const verdictText = document.getElementById('c4-verdict')?.textContent || 'CLEAN';
+    titleText = type === 'verdict' ? 'Verdict Details' : 'Risk Score Breakdown';
+    html = `
+      <div class="c4-dr-row">
+        <div class="c4-dr-head">Score Formula</div>
+        <div class="c4-dr-sub">Weighted average: (High×100 + Medium×55 + Low×20) ÷ total findings</div>
+        <div class="c4-dr-sub">Dampened by saturation: more findings raise score with diminishing returns</div>
+      </div>
+      <div class="c4-dr-row">
+        <div class="c4-dr-head">Finding Counts</div>
+        <div class="c4-dr-sub"><span class="c4-dr-sev-high">High: ${h}</span> &nbsp;·&nbsp; <span class="c4-dr-sev-med">Medium: ${m}</span> &nbsp;·&nbsp; <span class="c4-dr-sev-low">Low: ${l}</span></div>
+        <div class="c4-dr-sub">Total findings: ${h+m+l}</div>
+      </div>
+      <div class="c4-dr-row">
+        <div class="c4-dr-head">Result</div>
+        <div class="c4-dr-sub">Risk Score: <strong style="color:${riskScore>=60?'var(--danger)':riskScore>=35?'var(--warn)':'var(--safe)'}">${riskScore} / 100</strong></div>
+        <div class="c4-dr-sub">Verdict: <strong style="color:${verdictText==='CLEAN'||verdictText==='LOW'?'var(--safe)':verdictText==='MEDIUM'?'var(--warn)':'var(--danger)'}">${escapeHtml(verdictText)}</strong></div>
+      </div>
+      <div class="c4-dr-row">
+        <div class="c4-dr-head">Verdict Scale</div>
+        <div class="c4-dr-sub"><span class="c4-dr-sev-low">CLEAN</span> — score = 0</div>
+        <div class="c4-dr-sub"><span class="c4-dr-sev-low">LOW</span> — score 1–34</div>
+        <div class="c4-dr-sub"><span class="c4-dr-sev-med">MEDIUM</span> — score 35–59</div>
+        <div class="c4-dr-sub"><span class="c4-dr-sev-high">HIGH</span> — score 60–79</div>
+        <div class="c4-dr-sub"><span class="c4-dr-sev-high">CRITICAL</span> — score ≥ 80</div>
+      </div>`;
+  }
+
+  title.textContent = titleText;
+  body.innerHTML = html || '<div class="c4-muted">No data</div>';
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+}
+
+function closeC4Drawer() {
+  document.getElementById('c4-drawer-overlay').classList.remove('open');
+  document.getElementById('c4-drawer').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeC4Drawer(); });
+
+// ── Auto-refresh ─────────────────────────────────────────────
+function _c4StartAutoRefresh() {
+  _c4StopAutoRefresh();
+  c4AutoRefreshCountdown = 120;
+  _c4Tick();
+  c4AutoRefreshTimer = setInterval(_c4Tick, 1000);
+}
+
+function _c4StopAutoRefresh() {
+  if (c4AutoRefreshTimer) { clearInterval(c4AutoRefreshTimer); c4AutoRefreshTimer = null; }
+  const el = document.getElementById('c4-refresh-countdown');
+  if (el) el.textContent = '';
+}
+
+async function _c4Tick() {
+  c4AutoRefreshCountdown--;
+  const el = document.getElementById('c4-refresh-countdown');
+  if (el) el.textContent = `Auto-refresh in ${c4AutoRefreshCountdown}s`;
+  if (c4AutoRefreshCountdown <= 0) {
+    c4AutoRefreshCountdown = 120;
+    await loadC4Report();
+  }
+}
+
+// ── Charts ────────────────────────────────────────────────────
+function renderC4Charts(result, summary) {
+  Object.values(_c4Charts).forEach(c => c.destroy());
+  _c4Charts = {};
+
+  const isDark = true;
+  const gridColor = 'rgba(255,255,255,0.08)';
+  const textColor = '#94a3b8';
+
+  // Chart A — Artifact distribution doughnut
+  const ctxA = document.getElementById('c4-chart-artifacts');
+  if (ctxA) {
+    const types = ['history','download','cookie','credential','extension'];
+    const counts = types.map(t => (result.events || []).filter(e => e.artifact_type === t).length);
+    _c4Charts.artifacts = new Chart(ctxA, {
+      type: 'doughnut',
+      data: {
+        labels: ['History','Downloads','Cookies','Credentials','Extensions'],
+        datasets: [{
+          data: counts,
+          backgroundColor: ['rgba(16,185,129,.75)','rgba(245,158,11,.75)','rgba(59,130,246,.75)','rgba(239,68,68,.75)','rgba(139,92,246,.75)'],
+          borderColor: 'transparent',
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { labels: { color: textColor, font: { size: 10 }, boxWidth: 12, padding: 8 } } }
+      }
+    });
+  }
+
+  // Chart B — Algorithm findings horizontal bar
+  const ctxB = document.getElementById('c4-chart-algorithms');
+  if (ctxB) {
+    const vals = [
+      summary.cooccurrence ?? 0, summary.orphans ?? 0, summary.temporal ?? 0,
+      summary.attack_chains ?? 0, summary.domain_clusters ?? 0
+    ];
+    const barColors = vals.map(v => v === 0 ? 'rgba(16,185,129,.6)' : v <= 2 ? 'rgba(245,158,11,.75)' : 'rgba(239,68,68,.75)');
+    _c4Charts.algorithms = new Chart(ctxB, {
+      type: 'bar',
+      data: {
+        labels: ['Co-occur','Orphan','Temporal','Attack Chain','Domain Cluster'],
+        datasets: [{ data: vals, backgroundColor: barColors, borderColor: 'transparent', borderRadius: 4 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 10 } }, beginAtZero: true },
+          y: { grid: { display: false }, ticks: { color: textColor, font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  // Chart C — Hourly baseline bar
+  const ctxC = document.getElementById('c4-chart-hours');
+  if (ctxC) {
+    const baseline = (result.correlation || {}).baseline || {};
+    const hours = Array.from({length: 24}, (_, i) => i);
+    const hvals = hours.map(h => baseline[h] || baseline[String(h)] || 0);
+    _c4Charts.hours = new Chart(ctxC, {
+      type: 'bar',
+      data: {
+        labels: hours.map(h => h + ':00'),
+        datasets: [{ data: hvals, backgroundColor: 'rgba(16,185,129,.6)', borderColor: 'transparent', borderRadius: 3 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: textColor, font: { size: 9 }, maxRotation: 0 } },
+          y: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 9 } }, beginAtZero: true }
+        }
+      }
+    });
+  }
+}
+
+// ── Activity Heatmap ──────────────────────────────────────────
+function renderC4Heatmap(dayHourBaseline) {
+  const el = document.getElementById('c4-heatmap');
+  if (!el) return;
+  const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const vals = Object.values(dayHourBaseline || {});
+  if (!vals.length) {
+    el.innerHTML = '<div class="c4-muted">Not enough history data yet (need ≥10 visits)</div>';
+    return;
+  }
+  const maxVal = Math.max(1, ...vals);
+  let html = '<div class="c4-heatmap-grid">';
+  html += '<div class="c4-hm-dlabel"></div>';
+  for (let h = 0; h < 24; h++) html += `<div class="c4-hm-hlabel">${h}</div>`;
+  for (let d = 0; d < 7; d++) {
+    html += `<div class="c4-hm-dlabel">${DAYS[d]}</div>`;
+    for (let h = 0; h < 24; h++) {
+      const v = dayHourBaseline[`${d}_${h}`] || 0;
+      const a = (v / maxVal * 0.85 + (v > 0 ? 0.1 : 0)).toFixed(2);
+      html += `<div class="c4-hm-cell" title="${DAYS[d]} ${h}:00 — ${v} visits" style="background:rgba(16,185,129,${a})"></div>`;
+    }
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ── Session Clusters ──────────────────────────────────────────
+function renderC4Clusters(clusters) {
+  const pane = document.getElementById('apane-cluster');
+  if (!pane) return;
+  setText('cnt-cluster', (clusters || []).length);
+  if (!clusters || !clusters.length) {
+    pane.innerHTML = '<div class="empty"><div class="eicon">&#128202;</div><div class="emsg">No session clusters found (Chrome 110+ required, or not enough browsing data)</div></div>';
+    return;
+  }
+  pane.innerHTML = clusters.slice(0, 50).map(cl => {
+    const topUrls = (cl.urls || []).sort((a,b) => (b.engagement||0)-(a.engagement||0)).slice(0,3);
+    return `<div class="c4-cluster-row">
+      <div class="c4-cluster-label">${escapeHtml(cl.label || 'Cluster ' + cl.cluster_id)}
+        <span class="c4-pill type" style="margin-left:6px">${(cl.urls||[]).length} URLs</span>
+        <span style="font-size:10px;color:var(--t3);margin-left:6px">score: ${(cl.max_score||0).toFixed(2)}</span>
+      </div>
+      ${topUrls.map(u => `<div class="c4-cluster-url" title="${escapeHtml(u.url)}">${escapeHtml(u.url)}</div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
 function renderC4Result(result, summary = {}) {
   c4LastResult = result;
   const mitre = result.mitre_result || {};
@@ -3598,6 +3744,19 @@ function renderC4Result(result, summary = {}) {
   setText('c4-medium', summary.medium ?? sev.Medium ?? 0);
   setText('c4-low', summary.low ?? sev.Low ?? 0);
   setText('c4-findings', summary.total_findings ?? alg.total_findings ?? 0);
+  // Risk score + verdict
+  const riskScore = summary.risk_score ?? 0;
+  const verdict = summary.verdict ?? 'CLEAN';
+  const riskEl = document.getElementById('c4-risk-score');
+  const verdictEl = document.getElementById('c4-verdict');
+  if (riskEl) {
+    riskEl.textContent = riskScore;
+    riskEl.style.color = riskScore >= 60 ? 'var(--danger)' : riskScore >= 35 ? 'var(--warn)' : 'var(--safe)';
+  }
+  if (verdictEl) {
+    verdictEl.textContent = verdict;
+    verdictEl.style.color = verdict === 'CLEAN' ? 'var(--safe)' : verdict === 'LOW' ? 'var(--safe)' : verdict === 'MEDIUM' ? 'var(--warn)' : 'var(--danger)';
+  }
   setText('c4-extracted', result.extracted_at ? fmtDateTime(result.extracted_at) : 'No scan yet');
   setText('c4-profile-label', shortPath(result.profile_path || 'Profile not loaded'));
   const display = document.getElementById('c4-profile-path-display');
@@ -3611,6 +3770,9 @@ function renderC4Result(result, summary = {}) {
   renderC4Events((result.events || []).filter(e => e.risk_flag));
   renderC4Manifest(result.artifact_manifest || {});
   renderC4Warnings(result.warnings || []);
+  renderC4Charts(result, summary);
+  renderC4Heatmap((result.correlation || {}).day_hour_baseline ?? {});
+  renderC4Clusters(result.clusters || []);
 }
 
 // ── Artifact tab switching ────────────────────────────────────
@@ -3918,11 +4080,6 @@ function shortPath(path) {
   return parts.length > 3 ? '...' + parts.slice(-3).join('/') : path;
 }
 
-function setText(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
-}
-
 function fmtDateTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -3936,162 +4093,17 @@ function escapeHtml(value) {
   }[ch]));
 }
 
-document.querySelectorAll('.nav-item').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    const panel = document.getElementById('panel-' + btn.dataset.panel);
-    if (panel) panel.classList.add('active');
-    if (btn.dataset.panel === 'c4' && !c4Loaded) {
-      c4Loaded = true;
-      loadC4Debug();
-      loadC4Report();
-    }
-  });
-});
-
-document.querySelectorAll('.tab').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-    document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    const pane = document.getElementById('pane-' + t.dataset.tab);
-    if (pane) pane.classList.add('active');
-  });
-});
-
-// ══════════════════════════════════════════════════════════════
-//  Settings — load on startup
-// ══════════════════════════════════════════════════════════════
-async function loadSettings() {
-  if (!backendUp) return;
-  try {
-    const s = await (await fetch(API + '/settings')).json();
-    if (s.gsb_key)     document.getElementById('gsb-key').value      = s.gsb_key;
-    if (s.pw_home_url) document.getElementById('pw-home-url').value  = s.pw_home_url;
-    if (s.whitelist)   document.getElementById('whitelist').value    = s.whitelist.join('\n');
-    if (s.layers) {
-      ['l1','l2','l3','l4','l5'].forEach(k => {
-        const el = document.getElementById('tog-' + k);
-        if (el) el.checked = !!s.layers[k];
-      });
-    }
-  } catch {}
-}
-
-// ── Global settings (Playwright + API keys + whitelist) ───────
-async function saveSettings() {
-  const payload = {
-    layers:      { l1: togVal('l1'), l2: togVal('l2'), l3: togVal('l3'), l4: togVal('l4'), l5: togVal('l5') },
-    gsb_key:     document.getElementById('gsb-key').value.trim(),
-    whitelist:   document.getElementById('whitelist').value.split('\n').map(s => s.trim()).filter(Boolean),
-    pw_home_url: document.getElementById('pw-home-url').value.trim(),
-  };
-  if (backendUp) {
-    try { await fetch(API + '/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
-    catch {}
-  }
-  const btn = document.querySelector('#panel-settings .btn-primary');
-  const orig = btn.textContent;
-  btn.textContent = '\u2713 Saved!'; setTimeout(() => btn.textContent = orig, 1800);
-}
-
-// ── C2 component settings (detection layer toggles) ───────────
-async function saveC2Settings() {
-  const payload = {
-    layers:      { l1: togVal('l1'), l2: togVal('l2'), l3: togVal('l3'), l4: togVal('l4'), l5: togVal('l5') },
-    gsb_key:     document.getElementById('gsb-key').value.trim(),
-    whitelist:   document.getElementById('whitelist').value.split('\n').map(s => s.trim()).filter(Boolean),
-    pw_home_url: document.getElementById('pw-home-url').value.trim(),
-  };
-  if (backendUp) {
-    try { await fetch(API + '/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
-    catch {}
-  }
-  const btn = document.querySelector('#pane-c2settings .btn-primary');
-  const orig = btn.textContent;
-  btn.textContent = '\u2713 Saved!'; setTimeout(() => btn.textContent = orig, 1800);
-}
-
-function togVal(id) { return document.getElementById('tog-' + id).checked; }
-
-// ── Session status display (in global settings panel) ─────────
-async function refreshSessionStatus() {
-  const el = document.getElementById('session-status-txt');
-  if (!el) return;
-  try {
-    const s = await (await fetch(API + '/session/status')).json();
-    el.textContent = s.running ? ('Active \u2014 ' + (s.url || 'browsing')) : 'Stopped';
-    el.style.color = s.running ? 'var(--safe)' : 'var(--t3)';
-  } catch {
-    el.textContent = 'Backend offline';
-    el.style.color = 'var(--danger)';
-  }
-}
-
-document.getElementById('btn-restart-session')?.addEventListener('click', async () => {
-  const btn = document.getElementById('btn-restart-session');
-  btn.textContent = 'Restarting\u2026'; btn.disabled = true;
-  try { await fetch(API + '/session/stop', { method: 'POST' }); } catch {}
-  await new Promise(r => setTimeout(r, 800));
-  await startPwSession();
-  btn.textContent = 'Restart'; btn.disabled = false;
-  refreshSessionStatus();
-});
-
-setInterval(refreshSessionStatus, 8000);
-
-// ══════════════════════════════════════════════════════════════
-//  AI Starter Context
-// ══════════════════════════════════════════════════════════════
-const AI_CTX = {
-  c1: `I'm building Component 1 of WebSentinel -- a Malicious Browser Extension Analyzer.
-Project root: WebSentinel/. Shared infrastructure in core/ (FastAPI + Playwright).
-My component code lives in c1/. Entry-point stubs in c1/analyzer.py:
-  analyze_extension(manifest, source_code) -> {score: float, detail: str}
-  sandbox_extension(extension_path)        -> {score: float, detail: str}
-I need help with: [YOUR TASK]`,
-
-  c3: `I'm building Component 3 of WebSentinel -- a Browser Execution Aware C2 Beacon Detector.
-Project root: WebSentinel/. Shared infra in core/ (FastAPI + Playwright session at core/playwright_session.py).
-My component code goes in c3/. Goal: intercept all outbound browser network requests via
-Playwright route API or CDP, tag each with tab/extension/user-activity context, then apply
-ML to detect C2 beaconing patterns.
-I need help with: [YOUR TASK]`,
-
-  c4: `I'm building Component 4 of WebSentinel -- a Browser Artifact Forensic Correlation Engine.
-Project root: WebSentinel/. Shared infra in core/. My component code goes in c4/.
-Browser profile: ~/.websentinel/profile/ (Playwright persistent context).
-I need to extract SQLite artifacts (History, Cookies, Login Data), detect anomalies,
-run sliding-window cross-artifact correlation, map findings to MITRE ATT&CK.
-Endpoints POST /forensic/extract and GET /forensic/report live in core/main.py.
-I need help with: [YOUR TASK]`
-};
-
-function copyAiCtx(comp) {
-  const ctx = AI_CTX[comp] || '';
-  navigator.clipboard.writeText(ctx).then(() => showToast('AI starter context copied to clipboard'));
-}
-
-// ══════════════════════════════════════════════════════════════
-//  Toast & utilities
-// ══════════════════════════════════════════════════════════════
-function showToast(msg, duration = 4000) {
-  document.getElementById('pw-toast-msg').textContent = msg;
-  const t = document.getElementById('pw-toast');
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), duration);
-}
-
-function fmtTime(iso) {
-  const d = new Date(iso), diff = Math.floor((Date.now() - d) / 1000);
-  if (diff < 5)    return 'just now';
-  if (diff < 60)   return diff + 's ago';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
 </script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 
+<!-- C4 stat drawer -->
+<div class="c4-drawer-overlay" id="c4-drawer-overlay" onclick="closeC4Drawer()"></div>
+<div class="c4-drawer" id="c4-drawer">
+  <div class="c4-drawer-hdr">
+    <span class="c4-drawer-title" id="c4-drawer-title">Details</span>
+    <button class="c4-drawer-close" onclick="closeC4Drawer()">&#10005;</button>
+  </div>
+  <div class="c4-drawer-body" id="c4-drawer-body"></div>
+</div>
 </body>
 </html>

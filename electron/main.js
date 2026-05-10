@@ -79,11 +79,17 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (backendProcess) {
+  // On macOS the app is allowed to keep running with no windows; only
+  // quit on other platforms. Don't kill the backend here — `activate`
+  // can re-open the window and would otherwise find a dead backend.
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  if (backendProcess && !backendProcess.killed) {
     backendProcess.kill('SIGTERM');
     console.log('[Main] Backend killed');
   }
-  if (process.platform !== 'darwin') app.quit();
 });
 
 // ── IPC: native window controls ───────────────────────────────────────────────

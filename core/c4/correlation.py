@@ -46,7 +46,10 @@ def run_cooccurrence(events):
     Count how many artifact types touch the same domain.
     """
     results = []
-    candidates = [e for e in events if e.get("risk_flag")]
+    # Use all events as anchors — risk_flag is a score booster, not a gate.
+    # Restricting to pre-flagged events caused the algorithm to silently produce
+    # zero results whenever the rule engine found nothing individually suspicious.
+    candidates = [e for e in events if e.get("timestamp")]
     candidates.sort(key=lambda x: x["timestamp"])
 
     seen = set()
@@ -78,8 +81,14 @@ def run_cooccurrence(events):
             key = f"{dom}_{anchor['timestamp']}"
             if key in seen: continue
             seen.add(key)
-            score = COOCCURRENCE_SCORES.get(len(type_map),
-                                            min(100, len(type_map)*20))
+            base_score = COOCCURRENCE_SCORES.get(len(type_map),
+                                                 min(100, len(type_map)*20))
+            # Boost score when individual events are already rule-flagged
+            flagged_count = sum(
+                1 for elist in type_map.values()
+                for e in elist if e.get("risk_flag")
+            )
+            score = min(100, base_score + flagged_count * 5)
             results.append({
                 "algorithm":    "co_occurrence",
                 "domain":       dom,
@@ -167,18 +176,20 @@ def run_temporal_anomaly(events):
     Build personal hourly baseline from history visits.
     Flag risk events at hours with near-zero personal activity.
     """
-    # Build hourly baseline from ALL history events
-    hour_counts = defaultdict(int)
+    # Build hourly + day×hour baseline from ALL history events
+    hour_counts     = defaultdict(int)
+    day_hour_counts = defaultdict(int)   # key: (weekday 0=Mon, hour)
     total = 0
     for e in events:
         if e["artifact_type"] == "history":
             t = _ts(e["timestamp"])
             if t:
                 hour_counts[t.hour] += 1
+                day_hour_counts[(t.weekday(), t.hour)] += 1
                 total += 1
 
     if total < 10:
-        return [], hour_counts  # Not enough data for baseline
+        return [], hour_counts, day_hour_counts  # Not enough data for baseline
 
     # Threshold: an hour is "inactive" if it has <2% of total activity
     threshold = total * 0.02
@@ -208,7 +219,7 @@ def run_temporal_anomaly(events):
                 f"TEMPORAL: activity at {t.hour:02d}:00 deviates from personal baseline")
             e["risk_flag"] = True
 
-    return anomalies, hour_counts
+    return anomalies, hour_counts, day_hour_counts
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -325,11 +336,11 @@ def run_domain_risk_clustering(events):
 
 
 def run_correlation(events):
-    cooccurrence       = run_cooccurrence(events)
-    orphans            = run_orphan_detection(events)
-    temporal, baseline = run_temporal_anomaly(events)
-    attack_chains      = run_attack_chain_detection(events)
-    domain_clusters    = run_domain_risk_clustering(events)
+    cooccurrence                      = run_cooccurrence(events)
+    orphans                           = run_orphan_detection(events)
+    temporal, baseline, day_hour_base = run_temporal_anomaly(events)
+    attack_chains                     = run_attack_chain_detection(events)
+    domain_clusters                   = run_domain_risk_clustering(events)
 
     return {
         "cooccurrence": cooccurrence,
@@ -337,7 +348,8 @@ def run_correlation(events):
         "temporal":     temporal,
         "attack_chains": attack_chains,
         "domain_clusters": domain_clusters,
-        "baseline":     dict(baseline),
+        "baseline":          dict(baseline),
+        "day_hour_baseline": {f"{k[0]}_{k[1]}": v for k, v in day_hour_base.items()},
         "summary": {
             "cooccurrence_count": len(cooccurrence),
             "orphan_count":       len(orphans),

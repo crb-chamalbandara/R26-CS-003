@@ -95,6 +95,43 @@ async def _broadcast(data: dict) -> None:
             dead.add(ws)
     _ws_clients.difference_update(dead)
 
+# ── Analyzing page shown in the Playwright browser while C1 scans an extension ─
+_ANALYZING_HTML = """\
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WebSentinel — Analyzing Extension</title>
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box}}
+  body{{background:#0a0e1a;color:#e2e8f0;font-family:system-ui,sans-serif;
+       display:flex;align-items:center;justify-content:center;min-height:100vh}}
+  .card{{text-align:center;max-width:440px;padding:48px 40px;
+        background:#131929;border:1px solid #1e2d45;border-radius:16px}}
+  .spinner{{width:56px;height:56px;border:4px solid #1e2d45;
+           border-top-color:#3b82f6;border-radius:50%;
+           animation:spin .9s linear infinite;margin:0 auto 28px}}
+  @keyframes spin{{to{{transform:rotate(360deg)}}}}
+  h1{{font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:10px}}
+  .ext{{font-size:11px;font-family:monospace;color:#64748b;
+       background:#0a0e1a;padding:4px 10px;border-radius:6px;
+       display:inline-block;margin-bottom:20px}}
+  p{{font-size:13px;color:#94a3b8;line-height:1.6}}
+  .badge{{margin-top:28px;font-size:11px;color:#3b82f6;letter-spacing:.05em}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="spinner"></div>
+  <h1>Analyzing Extension</h1>
+  <div class="ext">{ext_id}</div>
+  <p>WebSentinel is scanning this extension for malicious behavior.<br>
+     Check the <strong>WebSentinel dashboard → C1</strong> panel for results.</p>
+  <div class="badge">WEBSENTINEL &middot; C1 EXTENSION ANALYZER</div>
+</div>
+</body>
+</html>"""
+
 # ── In-memory state ────────────────────────────────────────────────────────────
 alerts: list = []
 c1_history: list = []
@@ -144,6 +181,9 @@ class C3CollectReq(BaseModel):
 class ForensicReq(BaseModel):
     profile_path: Optional[str] = None
     save_outputs: bool = True
+
+class NavigateReq(BaseModel):
+    url: str
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -350,17 +390,14 @@ async def session_install_extension(req: InstallExtensionReq):
         raise HTTPException(status_code=500, detail=f"Extraction failed: {exc}")
 
     if pw_session.is_running:
-        try:
-            await pw_session.load_extension(ext_path)
-            await _broadcast({"type": "c1_extension_installed",
-                               "extension_id": ext_id,
-                               "extension_path": ext_path,
-                               "c1_result": c1_result})
-            return {"status": "installed", "extension_id": ext_id,
-                    "extension_path": ext_path, "c1_result": c1_result}
-        except Exception as exc:
-            raise HTTPException(status_code=500,
-                detail=f"Session reload with extension failed: {exc}")
+        pw_session.register_extension(ext_path)
+        await _broadcast({"type": "c1_extension_installed",
+                           "extension_id": ext_id,
+                           "extension_path": ext_path,
+                           "c1_result": c1_result})
+        return {"status": "installed", "extension_id": ext_id,
+                "extension_path": ext_path, "c1_result": c1_result,
+                "note": "Extension registered — will be active on next session start."}
     return {"status": "ready",
             "message": "Extension extracted. Start the browser session to load it.",
             "extension_id": ext_id, "extension_path": ext_path, "c1_result": c1_result}
@@ -424,19 +461,14 @@ async def approve_install(req: ApproveInstallReq):
     ext_path     = pending["ext_path"]
     webstore_url = pending.get("webstore_url", "")
     del _pending_installs[req.ext_id]
-    try:
-        await pw_session.load_extension(ext_path)
-        if webstore_url and pw_session.is_running:
-            try:
-                await asyncio.sleep(1.2)
-                await pw_session.navigate(webstore_url)
-            except Exception:
-                pass
-        await _broadcast({"type": "c1_install_approved", "ext_id": req.ext_id,
-                           "extension_path": ext_path, "webstore_url": webstore_url})
-        return {"status": "installed", "ext_id": req.ext_id}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to load extension: {exc}")
+    # Register the extension in the launch list without restarting the session.
+    # Chrome requires --load-extension at startup; hot-loading is not supported
+    # by this Chromium build. The extension will be active on the next session start.
+    pw_session.register_extension(ext_path)
+    await _broadcast({"type": "c1_install_approved", "ext_id": req.ext_id,
+                       "extension_path": ext_path, "webstore_url": webstore_url})
+    return {"status": "approved", "ext_id": req.ext_id,
+            "note": "Extension registered — will be active on next session start."}
 
 
 @app.post("/session/block_install")
@@ -781,8 +813,8 @@ async def session_stop():
 
 
 @app.post("/session/navigate")
-async def session_navigate(body: dict):
-    url = body.get("url", "").strip()
+async def session_navigate(req: NavigateReq):
+    url = req.url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="url required")
     if not pw_session.is_running and _session_starting:

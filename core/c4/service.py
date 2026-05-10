@@ -68,15 +68,37 @@ def get_summary(result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     mitre = result.get("mitre_result", {})
     severity = mitre.get("by_severity", {})
     algorithm_summary = mitre.get("summary", {})
+
+    # Aggregate risk score from all findings weighted by severity
+    high_w, med_w, low_w = 100, 55, 20
+    h = severity.get("High", 0)
+    m = severity.get("Medium", 0)
+    l = severity.get("Low", 0)
+    total_findings = h + m + l
+    if total_findings:
+        raw = (h * high_w + m * med_w + l * low_w) / max(total_findings, 1)
+        # Dampen: more findings raise the score but with diminishing returns
+        saturation = min(1.0, total_findings / 10)
+        risk_score = round(min(100.0, raw * (0.5 + 0.5 * saturation)), 1)
+    else:
+        risk_score = 0.0
+
+    verdict = "CRITICAL" if risk_score >= 80 else \
+              "HIGH"     if risk_score >= 60 else \
+              "MEDIUM"   if risk_score >= 35 else \
+              "LOW"      if risk_score >   0 else "CLEAN"
+
     return {
         "status": "ok",
         "profile_path": result.get("profile_path", ""),
         "extracted_at": result.get("extracted_at", ""),
         "total_events": result.get("total_events", 0),
         "flagged_events": result.get("flagged_events", 0),
-        "high": severity.get("High", 0),
-        "medium": severity.get("Medium", 0),
-        "low": severity.get("Low", 0),
+        "risk_score": risk_score,
+        "verdict": verdict,
+        "high": h,
+        "medium": m,
+        "low": l,
         "total_findings": algorithm_summary.get("total_findings", 0),
         "cooccurrence": algorithm_summary.get("cooccurrence_count", 0),
         "orphans": algorithm_summary.get("orphan_count", 0),
