@@ -1,0 +1,10 @@
+﻿python :   File "<string>", line 15
+At line:1 char:1
++ python -X utf8 -c "
++ ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (  File "<string>", line 15:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    print(f'  Protocols: {df[" proto\].value_counts().to_dict()}')
+                             ^
+SyntaxError: unterminated string literal (detected at line 15)

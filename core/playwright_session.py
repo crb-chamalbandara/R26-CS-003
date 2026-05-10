@@ -32,6 +32,10 @@ class PlaywrightSession:
     def is_running(self) -> bool:
         return self._running and self._ctx is not None
 
+    @property
+    def context(self):
+        return self._ctx
+
     # ── Lifecycle ──────────────────────────────────────────────────
     async def start(self) -> bool:
         if self.is_running:

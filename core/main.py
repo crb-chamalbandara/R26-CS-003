@@ -5,11 +5,16 @@ Launch from project root: python -m uvicorn core.main:app
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List, Set
 from datetime import datetime
 import json, os, asyncio
 
+from .c3.context_tagger import c3_tagger
+from .c3.interceptor import c3_interceptor
+from .c3.analyzer import c3_analyzer
+from .c3.alert_store import c3_alert_store
 from .c2.layer1_bitb       import check_bitb
 from .c2.layer2_url        import check_url
 from .c2.layer3_visual     import check_visual
@@ -28,6 +33,7 @@ app.add_middleware(
 
 # ── WebSocket broadcast set ────────────────────────────────────
 _ws_clients: Set[WebSocket] = set()
+_session_starting = False
 
 async def _broadcast(data: dict) -> None:
     global _ws_clients
@@ -59,6 +65,9 @@ class SettingsReq(BaseModel):
     whitelist: List[str] = []
     gsb_key: str = ""
     pw_home_url: str = ""
+
+class C3CollectReq(BaseModel):
+    label: int
 
 
 # ── Endpoints ─────────────────────────────────────────────────
@@ -144,6 +153,117 @@ async def get_settings():
     return settings
 
 
+# C3 - Browser Execution Aware C2 Beacon Detector
+@app.get("/c3/status")
+async def c3_status():
+    return c3_analyzer.status()
+
+
+@app.get("/c3/alerts")
+async def c3_alerts(limit: int = 50):
+    return c3_alert_store.list_alerts(limit)
+
+
+@app.get("/c3/hosts")
+async def c3_hosts():
+    return c3_analyzer.hosts()
+
+
+@app.get("/c3/hosts/{host:path}")
+async def c3_host_detail(host: str):
+    return c3_analyzer.host_detail(host)
+
+
+@app.get("/c3/requests")
+async def c3_requests(limit: int = 50):
+    return c3_analyzer.recent_requests(limit)
+
+
+@app.post("/c3/hosts/{host:path}/unblock")
+async def c3_unblock_host(host: str):
+    await c3_interceptor.unblock_host(host)
+    return c3_analyzer.status()
+
+
+@app.post("/c3/collect/start")
+async def c3_collect_start(req: C3CollectReq):
+    return c3_analyzer.start_collection(req.label)
+
+
+@app.post("/c3/collect/stop")
+async def c3_collect_stop():
+    return c3_analyzer.stop_collection()
+
+
+@app.post("/c3/collect/export")
+async def c3_collect_export():
+    return c3_analyzer.export_collection()
+
+
+@app.get("/c3/test/beacon-target")
+async def c3_test_beacon_target():
+    return {
+        "ok": True,
+        "component": "c3",
+        "target": "beacon",
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.post("/c3/test/beacon-target")
+async def c3_test_beacon_target_post(body: dict | None = None):
+    return {
+        "ok": True,
+        "component": "c3",
+        "target": "beacon",
+        "received": body or {},
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.get("/c3/test/beacon-page", response_class=HTMLResponse)
+async def c3_test_beacon_page(interval: int = 30000, method: str = "GET"):
+    interval = max(1000, min(int(interval), 300000))
+    method = "POST" if str(method).upper() == "POST" else "GET"
+    body = "JSON.stringify({ ts: Date.now(), component: 'c3' })" if method == "POST" else "undefined"
+    headers = "{ 'Content-Type': 'application/json' }" if method == "POST" else "{}"
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>C3 Test Beacon</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; background:#111827; color:#e5e7eb; padding:24px; }}
+    code {{ color:#fbbf24; }}
+  </style>
+</head>
+<body>
+  <h1>C3 Test Beacon</h1>
+  <p>This page sends a small {method} request every <code>{interval}ms</code>.</p>
+  <p>Put this tab in the background to test idle/background beacon detection.</p>
+  <pre id="log"></pre>
+  <script>
+    const log = document.getElementById('log');
+    async function tick() {{
+      try {{
+        const res = await fetch('/c3/test/beacon-target?ts=' + Date.now(), {{
+          method: '{method}',
+          headers: {headers},
+          body: {body},
+          cache: 'no-store'
+        }});
+        log.textContent = new Date().toLocaleTimeString() + ' beacon -> ' + res.status + '\\n' + log.textContent;
+      }} catch (err) {{
+        log.textContent = new Date().toLocaleTimeString() + ' error -> ' + err + '\\n' + log.textContent;
+      }}
+    }}
+    tick();
+    setInterval(tick, {interval});
+  </script>
+</body>
+</html>"""
+
+
 # ══════════════════════════════════════════════════════════════
 #  Playwright session endpoints
 # ══════════════════════════════════════════════════════════════
@@ -160,8 +280,12 @@ async def _pw_nav_handler(url: str) -> None:
 
 
 async def _bg_start_session() -> None:
+    global _session_starting
     try:
         await pw_session.start()
+        await c3_tagger.setup(pw_session.context)
+        await c3_interceptor.start(pw_session)
+        await c3_analyzer.start_loop(pw_session, _broadcast)
         home = settings.get("pw_home_url", "").strip()
         if home:
             try:
@@ -173,6 +297,8 @@ async def _bg_start_session() -> None:
     except Exception as exc:
         print(f"[Session] Start failed: {exc}")
         await _broadcast({"type": "session_error", "message": str(exc)})
+    finally:
+        _session_starting = False
 
 
 @app.get("/session/status")
@@ -183,8 +309,12 @@ async def session_status():
 
 @app.post("/session/start")
 async def session_start():
+    global _session_starting
     if pw_session.is_running:
         return {"status": "already_running"}
+    if _session_starting:
+        return {"status": "starting"}
+    _session_starting = True
     pw_session.clear_callbacks()
     pw_session.add_nav_callback(_pw_nav_handler)
     asyncio.create_task(_bg_start_session())
@@ -193,6 +323,10 @@ async def session_start():
 
 @app.post("/session/stop")
 async def session_stop():
+    global _session_starting
+    _session_starting = False
+    await c3_analyzer.stop_loop()
+    await c3_interceptor.stop()
     await pw_session.stop()
     await _broadcast({"type": "session_stopped"})
     return {"status": "stopped"}
@@ -204,6 +338,11 @@ async def session_navigate(body: dict):
     url = body.get("url", "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="url required")
+    if not pw_session.is_running and _session_starting:
+        for _ in range(20):
+            await asyncio.sleep(0.25)
+            if pw_session.is_running:
+                break
     if not pw_session.is_running:
         raise HTTPException(status_code=400, detail="Playwright session not running")
     navigated_url = await pw_session.navigate(url)
