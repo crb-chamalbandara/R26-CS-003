@@ -18,10 +18,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: ── Check uvicorn ─────────────────────────────────────────────
+:: ── Check Node.js ─────────────────────────────────────────────
+node --version >nul 2>&1
+if errorlevel 1 (
+    echo  [ERROR] Node.js not found. Install Node.js 18+ from https://nodejs.org
+    pause
+    exit /b 1
+)
+
+:: ── Install Python requirements if needed ─────────────────────
 python -m uvicorn --version >nul 2>&1
 if errorlevel 1 (
-    echo  [INFO] uvicorn not found. Installing requirements...
+    echo  [INFO] Installing Python requirements...
     pip install -r requirements.txt
     if errorlevel 1 (
         echo  [ERROR] pip install failed. Run manually: pip install -r requirements.txt
@@ -30,31 +38,38 @@ if errorlevel 1 (
     )
 )
 
-:: ── Check Playwright browsers ─────────────────────────────────
+:: ── Install Playwright Chromium if needed ─────────────────────
 python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); p.stop()" >nul 2>&1
 if errorlevel 1 (
     echo  [INFO] Installing Playwright Chromium browser...
     python -m playwright install chromium
 )
 
-:: ── Free port 8765 if already occupied ────────────────────────
-:: Only target LISTENING entries (not TIME_WAIT / ESTABLISHED)
-:: and skip PID 0 which is a kernel entry that cannot be killed.
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr /R ":8765 .*LISTENING"') do (
-    if not "%%a"=="0" (
-        taskkill /F /PID %%a >nul 2>&1
-    )
+:: ── Install Electron if node_modules missing ──────────────────
+if not exist "electron\node_modules\electron" (
+    echo  [INFO] Installing Electron...
+    cd electron
+    npm install
+    cd ..
 )
 
-echo  [OK] Starting server on http://127.0.0.1:8765
-echo  [OK] API docs  ->  http://127.0.0.1:8765/docs
-echo  [OK] Press Ctrl+C to stop
+:: ── Free port 8765 if already occupied ────────────────────────
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr /R ":8765 .*LISTENING"') do (
+    if not "%%a"=="0" taskkill /F /PID %%a >nul 2>&1
+)
+
+echo  [OK] Launching WebSentinel...
+echo  [OK] Backend  ->  http://127.0.0.1:8765
+echo  [OK] API docs ->  http://127.0.0.1:8765/docs
+echo  [OK] Close the WebSentinel window to stop
 echo.
 
-python -m uvicorn core.main:app --host 127.0.0.1 --port 8765
+cd electron
+npx electron .
 
 if errorlevel 1 (
     echo.
-    echo  [ERROR] Server exited with an error. See output above.
+    echo  [ERROR] Electron exited with an error. See output above.
+    cd ..
     pause
 )

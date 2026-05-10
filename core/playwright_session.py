@@ -137,8 +137,10 @@ class PlaywrightSession:
         from playwright.async_api import async_playwright
         self._pw = await async_playwright().start()
 
+        # --start-maximized + viewport=None crashes Windows Explorer (shell restart)
+        # on Windows 11 due to a DWM window-creation race. Use a fixed size instead.
         args = [
-            "--start-maximized",
+            "--window-size=1400,900",
             "--no-first-run",
             "--no-default-browser-check",
         ]
@@ -156,7 +158,7 @@ class PlaywrightSession:
         self._ctx = await self._pw.chromium.launch_persistent_context(
             self._session_dir,
             headless=False,
-            viewport=None,
+            viewport={"width": 1400, "height": 900},
             ignore_default_args=ignore_args,
             args=args,
             user_agent=(
@@ -180,7 +182,6 @@ class PlaywrightSession:
         for page in self._ctx.pages:
             self._attach_nav_listener(page)
 
-        await self._sync_viewport(self._page)
         self._running = True
         return True
 
@@ -203,17 +204,6 @@ class PlaywrightSession:
             shutil.rmtree(self._session_dir, ignore_errors=True)
             self._session_dir = None
 
-    async def _sync_viewport(self, page) -> None:
-        try:
-            dims = await page.evaluate(
-                "() => ({width: window.screen.availWidth, height: window.screen.availHeight})"
-            )
-            if dims and dims.get("width") and dims.get("height"):
-                await page.set_viewport_size(
-                    {"width": dims["width"], "height": dims["height"]}
-                )
-        except Exception:
-            pass
 
     # ── Extension management (C1) ──────────────────────────────────
     async def load_extension(self, ext_path: str) -> bool:
@@ -341,7 +331,6 @@ class PlaywrightSession:
     async def _on_new_page(self, page) -> None:
         self._page = page
         self._attach_nav_listener(page)
-        await self._sync_viewport(page)
 
     def _on_browser_close(self, _=None) -> None:
         self._running = False

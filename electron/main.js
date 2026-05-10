@@ -11,7 +11,7 @@ let backendProcess;
 const PYTHON = process.env.PYTHON_PATH || 'C:\\Python312\\python.exe';
 const BACKEND_DIR = path.join(__dirname, '..');   // project root — uvicorn runs from here
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
-const BACKEND_PORT = 8000;
+const BACKEND_PORT = 8765;
 
 // ── Start FastAPI backend ─────────────────────────────────────────────────────
 function startBackend() {
