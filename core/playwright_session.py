@@ -139,10 +139,14 @@ class PlaywrightSession:
 
         # --start-maximized + viewport=None crashes Windows Explorer (shell restart)
         # on Windows 11 due to a DWM window-creation race. Use a fixed size instead.
+        # --disable-gpu prevents the GPU compositor process from sending window
+        # messages that trigger a Windows shell (explorer.exe) restart.
         args = [
             "--window-size=1400,900",
             "--no-first-run",
             "--no-default-browser-check",
+            "--disable-gpu",
+            "--disable-gpu-compositing",
         ]
         if self._extensions:
             paths = ",".join(self._extensions)
