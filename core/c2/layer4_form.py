@@ -29,6 +29,7 @@ async def check_form(url: str, dom: str) -> dict:
     form_actions = re.findall(r'<form[^>]+action=["\']([^"\']*)["\']', dom_lo)
     has_password  = bool(re.search(r'<input[^>]+type=["\']password["\']', dom_lo))
 
+    off_domain_seen = False
     for action in form_actions:
         if not action or action.startswith("#") or action.startswith("javascript"):
             continue
@@ -39,9 +40,12 @@ async def check_form(url: str, dom: str) -> dict:
         if action_host and page_host and action_host != page_host:
             score += 0.50
             flags.append(f"form→{action_host}")
-            if has_password:
-                score += 0.35
-                flags.append("password field on off-domain form")
+            off_domain_seen = True
+
+    # Apply the password-field penalty once per page, not once per form.
+    if off_domain_seen and has_password:
+        score += 0.35
+        flags.append("password field on off-domain form")
 
     # Inline JS data exfiltration patterns
     if re.search(r'(fetch|XMLHttpRequest|axios)\s*\(.*https?://', dom_lo):

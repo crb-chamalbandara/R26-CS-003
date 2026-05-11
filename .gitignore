@@ -60,5 +60,12 @@ desktop.ini
 .env
 .env.*
 secrets.json
+<<<<<<< HEAD
 /core/c1/data/GoogleChromeExtension
 core/c1/data/MaliciousBrowserExtensions/
+=======
+core/settings.json
+
+# ── Claude Code internal state ────────────────────────────────
+.claude/
+>>>>>>> main
