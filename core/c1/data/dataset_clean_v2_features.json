@@ -1,0 +1,16 @@
+[
+  "has_webRequest",
+  "has_all_urls",
+  "has_cookies",
+  "has_clipboardRead",
+  "has_nativeMessaging",
+  "has_tabs",
+  "has_history",
+  "has_downloads",
+  "has_storage",
+  "has_background_script",
+  "has_content_scripts",
+  "host_permission_count",
+  "total_permission_count",
+  "content_script_entropy"
+]

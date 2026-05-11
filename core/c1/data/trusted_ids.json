@@ -1,0 +1,35 @@
+{
+  "_comment": "Known-safe extension IDs from verified publishers. Extensions on this list bypass ML scoring and return SAFE regardless of static features. Only add IDs that are confirmed legitimate by multiple independent sources.",
+  "trusted_extension_ids": [
+    "efaidnbmnnnibpcajpcglclefindmkaj",
+    "kbfnbcaeplbcioakkpcpgfkobkghlhen",
+    "cfhdojbkjhnklbpkdaibdccddilifddb",
+    "gighmmpiobklfepjocnamgkkbiglidom",
+    "cjpalhdlnbpafiamejdnhcphjbkeiagm",
+    "hdokiejnpimakedhajhdlcegeplioahd",
+    "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+    "mnjggcdmjocbbbhaepdhchncahnbgone",
+    "nkbihfbeogaeaoehlefnkodbefgpgknn",
+    "aapbdbdomjkkjkaonfhkkikfgjlloleb",
+    "ghbmnnjooekpmoecnnnilnnbdlolhkhi",
+    "pkedcjkdefgpdelpbcmbmeomcjbeemfm",
+    "hgeljhfekpckiiplhkigfehkdpldcebe",
+    "ojcflmmmcfpacggndoaaflkmcoblhnbh"
+  ],
+  "sources": [
+    "Adobe Acrobat: efaidnbmnnnibpcajpcglclefindmkaj",
+    "Grammarly: kbfnbcaeplbcioakkpcpgfkobkghlhen",
+    "Adblock Plus: cfhdojbkjhnklbpkdaibdccddilifddb",
+    "AdBlock: gighmmpiobklfepjocnamgkkbiglidom",
+    "uBlock Origin: cjpalhdlnbpafiamejdnhcphjbkeiagm",
+    "LastPass: hdokiejnpimakedhajhdlcegeplioahd",
+    "Dark Reader: eimadpbcbfnmbkopoojfekhnkhdbieeh",
+    "SponsorBlock: mnjggcdmjocbbbhaepdhchncahnbgone",
+    "MetaMask: nkbihfbeogaeaoehlefnkodbefgpgknn",
+    "Google Translate: aapbdbdomjkkjkaonfhkkikfgjlloleb",
+    "Google Docs Offline: ghbmnnjooekpmoecnnnilnnbdlolhkhi",
+    "Google Docs: pkedcjkdefgpdelpbcmbmeomcjbeemfm",
+    "Google Keep: hgeljhfekpckiiplhkigfehkdpldcebe",
+    "Google Meet: ojcflmmmcfpacggndoaaflkmcoblhnbh"
+  ]
+}

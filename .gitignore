@@ -25,11 +25,11 @@ yarn-debug.log*
 yarn-error.log*
 
 # ── Trained models (large binary files) ──────────────────────
-# models/*.pkl
-# models/*.joblib
-# models/*.h5
-# models/*.pt
-# models/*.bin
+models/*.pkl
+models/*.joblib
+models/*.h5
+models/*.pt
+models/*.bin
 
 # ── Runtime data / generated files ───────────────────────────
 data/urls_labeled.csv
@@ -60,4 +60,7 @@ desktop.ini
 .env
 .env.*
 secrets.json
-core/c3/bugs&fixes.pdf
+core/settings.json
+
+# ── Claude Code internal state ────────────────────────────────
+.claude/

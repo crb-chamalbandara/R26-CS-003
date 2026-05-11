@@ -1,0 +1,2373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebSentinel</title>
+<style>
+/* ── Design tokens ──────────────────────────────────────────── */
+:root{
+  --bg0:#080d18;--bg1:#0d1525;--bg2:#111d30;--bg3:#16243a;
+  --b1:#1c2e47;--b2:#253a56;--b3:#2d4668;
+  --t0:#e8f0fe;--t1:#b0c4de;--t2:#6e8aab;--t3:#3a5070;
+  --c2:#3b82f6;--c2b:rgba(59,130,246,.12);
+  --c1:#8b5cf6;--c1b:rgba(139,92,246,.12);
+  --c3:#f59e0b;--c3b:rgba(245,158,11,.12);
+  --c4:#10b981;--c4b:rgba(16,185,129,.12);
+  --danger:#ef4444;--warn:#f59e0b;--safe:#10b981;
+  --danger-bg:rgba(239,68,68,.1);--warn-bg:rgba(245,158,11,.1);--safe-bg:rgba(16,185,129,.1);
+  --radius:8px;--radius-lg:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg0);color:var(--t0);height:100vh;overflow:hidden;
+  display:flex;flex-direction:column}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+button{font-family:inherit;cursor:pointer}
+
+/* ── App Header ─────────────────────────────────────────────── */
+#hdr{
+  display:flex;align-items:center;gap:12px;
+  padding:0 14px;height:50px;flex-shrink:0;
+  background:var(--bg1);border-bottom:1px solid var(--b1);
+  -webkit-app-region:drag
+}
+#hdr-brand{display:flex;align-items:center;gap:9px;flex-shrink:0}
+#hdr-logo{
+  width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--c1),var(--c2));
+  display:flex;align-items:center;justify-content:center;font-size:16px
+}
+#hdr-title{font-size:14px;font-weight:800;letter-spacing:.01em}
+#hdr-divider{width:1px;height:22px;background:var(--b2);flex-shrink:0}
+#hdr-monitor{
+  -webkit-app-region:no-drag;
+  flex:1;display:flex;align-items:center;gap:9px;
+  background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);
+  border-radius:7px;padding:4px 11px;height:32px
+}
+#mon-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;
+  background:var(--safe);animation:blink 2s infinite}
+#mon-dot.idle{background:var(--t3);animation:none}
+#mon-label{font-size:10.5px;font-weight:700;color:var(--safe);flex-shrink:0}
+#mon-url{flex:1;font-size:10.5px;font-family:monospace;color:var(--t2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#nav-input{-webkit-app-region:no-drag;
+  background:var(--bg0);border:1px solid var(--b2);border-radius:5px;
+  color:var(--t0);font-size:11px;font-family:monospace;
+  padding:2px 8px;height:23px;width:200px;outline:none;transition:border-color .15s}
+#nav-input:focus{border-color:var(--c2)}
+#nav-input::placeholder{color:var(--t3)}
+#nav-go{-webkit-app-region:no-drag;
+  background:var(--bg2);border:1px solid var(--b2);border-radius:5px;
+  color:var(--t2);padding:2px 9px;height:23px;font-size:11px;
+  transition:all .15s;flex-shrink:0}
+#nav-go:hover{background:var(--b1);color:var(--t0)}
+#online-pill{-webkit-app-region:no-drag;
+  display:flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:500;flex-shrink:0}
+#online-pill.on{background:var(--safe-bg);color:var(--safe);border:1px solid rgba(16,185,129,.3)}
+#online-pill.off{background:var(--danger-bg);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
+.odot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.on .odot{animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Main layout ────────────────────────────────────────────── */
+#app{display:flex;flex:1;overflow:hidden}
+
+/* ── Sidebar ────────────────────────────────────────────────── */
+#sidebar{
+  width:66px;flex-shrink:0;
+  background:var(--bg1);border-right:1px solid var(--b1);
+  display:flex;flex-direction:column;padding:8px 0
+}
+.nav-group{flex:1;display:flex;flex-direction:column;gap:3px;padding:0 7px}
+.nav-bottom{padding:0 7px 8px}
+.nav-item{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  width:52px;height:50px;border-radius:var(--radius);border:none;
+  background:none;color:var(--t3);transition:all .15s;position:relative
+}
+.nav-item:hover{background:var(--bg2);color:var(--t1)}
+.nav-item[data-panel="c2"].active{color:var(--c2);background:var(--c2b)}
+.nav-item[data-panel="c1"].active{color:var(--c1);background:var(--c1b)}
+.nav-item[data-panel="c3"].active{color:var(--c3);background:var(--c3b)}
+.nav-item[data-panel="c4"].active{color:var(--c4);background:var(--c4b)}
+.nav-item[data-panel="settings"].active{color:var(--t1);background:var(--bg3)}
+.nav-icon{font-size:17px;line-height:1}
+.nav-label{font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;line-height:1}
+.nav-item.has-data::after{
+  content:'';position:absolute;top:7px;right:7px;
+  width:6px;height:6px;border-radius:50%;background:var(--c2)
+}
+
+/* ── Content ────────────────────────────────────────────────── */
+#content{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.panel{display:none;flex-direction:column;height:100%;overflow:hidden}
+.panel.active{display:flex}
+
+/* ── Panel header ───────────────────────────────────────────── */
+.panel-hdr{
+  display:flex;align-items:center;gap:11px;
+  padding:10px 15px;background:var(--bg1);border-bottom:1px solid var(--b1);flex-shrink:0
+}
+.comp-badge{
+  width:30px;height:30px;border-radius:7px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:800
+}
+.comp-badge.c2{background:var(--c2b);color:var(--c2);border:1px solid rgba(59,130,246,.3)}
+.comp-badge.c1{background:var(--c1b);color:var(--c1);border:1px solid rgba(139,92,246,.3)}
+.comp-badge.c3{background:var(--c3b);color:var(--c3);border:1px solid rgba(245,158,11,.3)}
+.comp-badge.c4{background:var(--c4b);color:var(--c4);border:1px solid rgba(16,185,129,.3)}
+.comp-badge.cfg{background:var(--bg3);color:var(--t2);border:1px solid var(--b2);font-size:16px}
+.panel-title{font-size:13.5px;font-weight:700}
+.panel-sub{font-size:10px;color:var(--t2);margin-top:1px}
+.status-active{font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:12px;
+  background:var(--safe-bg);color:var(--safe);border:1px solid rgba(16,185,129,.3);
+  flex-shrink:0;margin-left:auto}
+.status-wip{font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:12px;
+  background:var(--warn-bg);color:var(--warn);border:1px solid rgba(245,158,11,.3);
+  flex-shrink:0;margin-left:auto}
+
+/* ── Stats row ──────────────────────────────────────────────── */
+#stats{display:flex;gap:7px;padding:8px 12px;
+  background:var(--bg1);border-bottom:1px solid var(--b1);flex-shrink:0}
+.sbox{flex:1;background:var(--bg2);border:1px solid var(--b1);
+  border-radius:var(--radius);padding:7px 8px;text-align:center}
+.snum{font-size:19px;font-weight:800;line-height:1}
+.slbl{font-size:9px;color:var(--t3);margin-top:3px;text-transform:uppercase;letter-spacing:.06em}
+.sbox.d .snum{color:var(--danger)}
+.sbox.w .snum{color:var(--warn)}
+.sbox.s .snum{color:var(--safe)}
+
+/* ── C2 inner tabs ──────────────────────────────────────────── */
+#tabs{display:flex;background:var(--bg1);border-bottom:1px solid var(--b1);
+  padding:0 10px;flex-shrink:0}
+.tab{padding:8px 13px;background:none;border:none;
+  border-bottom:2px solid transparent;color:var(--t2);
+  font-size:11.5px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.tab:hover{color:var(--t0)}
+.tab.active{color:var(--c2);border-bottom-color:var(--c2)}
+#tab-content{flex:1;overflow:hidden;position:relative}
+.pane{display:none;height:100%;overflow-y:auto;padding:10px;flex-direction:column;gap:7px}
+.pane.active{display:flex}
+
+/* ── Live analysis ──────────────────────────────────────────── */
+#live-current{background:var(--bg2);border:1px solid var(--b1);
+  border-radius:var(--radius-lg);padding:14px 16px;flex-shrink:0}
+.live-url{font-size:11.5px;font-family:monospace;color:var(--t2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:10px}
+.live-top{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.live-score{font-size:38px;font-weight:900;line-height:1}
+.live-verdict{font-size:18px;font-weight:700}
+.live-verdict.safe{color:var(--safe)}.live-verdict.suspicious{color:var(--warn)}
+.live-verdict.phishing{color:var(--danger)}
+.live-layers{display:flex;flex-direction:column;gap:5px}
+.live-lrow{display:flex;align-items:center;gap:8px}
+.live-lname{width:128px;font-size:10.5px;color:var(--t2);flex-shrink:0}
+.live-bar-w{flex:1;height:5px;background:var(--b1);border-radius:3px;overflow:hidden}
+.live-bar{height:100%;border-radius:3px;transition:width .6s ease}
+.live-val{font-size:10px;font-weight:600;width:32px;text-align:right;flex-shrink:0}
+.live-det{font-size:9.5px;color:var(--t3);font-style:italic;margin-top:-2px}
+#live-empty{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;flex:1;gap:10px;color:var(--t3)}
+#live-empty .e-icon{font-size:38px;opacity:.3}
+#live-empty .e-msg{font-size:12.5px}
+
+/* ── Alert cards ────────────────────────────────────────────── */
+@keyframes slideIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:translateX(0)}}
+.acard{background:var(--bg2);border:1px solid var(--b1);border-left-width:3px;
+  border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;
+  transition:border-color .2s;animation:slideIn .25s ease;flex-shrink:0}
+.acard.safe{border-left-color:var(--safe)}
+.acard.suspicious{border-left-color:var(--warn)}
+.acard.phishing{border-left-color:var(--danger)}
+.acard:hover{border-color:var(--b2)}
+.ahdr{display:flex;align-items:center;gap:7px;padding:9px 12px}
+.vbadge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;
+  text-transform:uppercase;letter-spacing:.06em;flex-shrink:0}
+.vbadge.safe{background:var(--safe-bg);color:var(--safe);border:1px solid rgba(16,185,129,.3)}
+.vbadge.suspicious{background:var(--warn-bg);color:var(--warn);border:1px solid rgba(245,158,11,.3)}
+.vbadge.phishing{background:var(--danger-bg);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
+.aurl{flex:1;font-size:11px;color:var(--t1);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;font-family:monospace}
+.atime{font-size:10px;color:var(--t3);flex-shrink:0}
+.rbar-row{display:flex;align-items:center;gap:7px;padding:0 12px 8px}
+.rbar-lbl{font-size:9.5px;color:var(--t3)}
+.rbar-wrap{flex:1;height:4px;background:var(--b1);border-radius:2px;overflow:hidden}
+.rbar{height:100%;border-radius:2px;transition:width .5s ease}
+.rbar-val{font-size:10px;font-weight:600;width:30px;text-align:right}
+.layers{display:none;padding:0 12px 10px;gap:5px;flex-direction:column}
+.acard.open .layers{display:flex}
+.lrow{display:flex;align-items:center;gap:7px}
+.lname{width:24px;font-size:9px;font-weight:600;color:var(--t3);flex-shrink:0}
+.lbar-w{flex:1;height:4px;background:var(--b1);border-radius:2px;overflow:hidden}
+.lbar{height:100%;border-radius:2px;transition:width .5s ease}
+.lval{font-size:9px;color:var(--t2);width:30px;text-align:right;flex-shrink:0}
+.ldet{font-size:9px;color:var(--t3);font-style:italic;padding-left:31px;
+  margin-top:-3px;margin-bottom:3px}
+
+/* ── Timeline ───────────────────────────────────────────────── */
+.titem{display:flex;align-items:center;gap:9px;padding:8px 10px;
+  background:var(--bg2);border:1px solid var(--b1);border-radius:var(--radius);
+  cursor:pointer;transition:border-color .15s;flex-shrink:0}
+.titem:hover{border-color:var(--b2)}
+.tdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.turl{flex:1;font-size:11px;font-family:monospace;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.tscore{font-size:11px;font-weight:700;flex-shrink:0}
+.ttime{font-size:10px;color:var(--t3);flex-shrink:0}
+
+/* ── Empty states ───────────────────────────────────────────── */
+.empty{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:40px;gap:10px;color:var(--t3);flex:1}
+.empty .eicon{font-size:36px;opacity:.3}
+.empty .emsg{font-size:12.5px}
+
+/* ── C3 live monitor ────────────────────────────────────────── */
+.c3-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.c3-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;padding:8px 12px;
+  background:var(--bg1);border-bottom:1px solid var(--b1);flex-shrink:0}
+.c3-sbox{background:var(--bg2);border:1px solid var(--b1);
+  border-radius:var(--radius);padding:7px 8px;text-align:center;position:relative}
+.c3-sbox.danger{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.05)}
+.c3-snum{font-size:19px;font-weight:800;line-height:1;color:var(--c3)}
+.c3-snum.danger{color:var(--danger)}
+.c3-slbl{font-size:9px;color:var(--t3);margin-top:3px;text-transform:uppercase;letter-spacing:.06em}
+.c3-model-badge{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;
+  background:var(--c3b);color:var(--c3);border:1px solid rgba(245,158,11,.3);
+  margin-top:4px;display:inline-block;letter-spacing:.04em}
+.c3-tabs{display:flex;background:var(--bg1);border-bottom:1px solid var(--b1);padding:0 10px;flex-shrink:0}
+.c3-tab{padding:8px 13px;background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--t2);font-size:11.5px;transition:all .15s;white-space:nowrap}
+.c3-tab:hover{color:var(--t0)}
+.c3-tab.active{color:var(--c3);border-bottom-color:var(--c3)}
+.c3-content{flex:1;overflow:hidden;position:relative}
+.c3-pane{display:none;height:100%;overflow-y:auto;padding:10px;flex-direction:column;gap:7px}
+.c3-pane.active{display:flex}
+.c3-table{width:100%;border-collapse:collapse;background:var(--bg2);border:1px solid var(--b1);
+  border-radius:var(--radius);overflow:hidden;font-size:10.5px}
+.c3-table th,.c3-table td{padding:7px 8px;border-bottom:1px solid var(--b1);text-align:left}
+.c3-table th{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);background:rgba(255,255,255,.02)}
+.c3-table tr:last-child td{border-bottom:none}
+.c3-table tbody tr:hover{background:rgba(255,255,255,.025)}
+.c3-host{font-family:monospace;color:var(--t1);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c3-pill{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
+.c3-pill.safe{background:var(--safe-bg);color:var(--safe);border:1px solid rgba(16,185,129,.2)}
+.c3-pill.suspicious{background:var(--warn-bg);color:var(--warn);border:1px solid rgba(245,158,11,.2)}
+.c3-pill.beacon{background:var(--danger-bg);color:var(--danger);border:1px solid rgba(239,68,68,.3);animation:beaconPulse 2s infinite}
+@keyframes beaconPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.3)}50%{box-shadow:0 0 0 4px rgba(239,68,68,0)}}
+
+/* ── C3 Alert cards ─────────────────────────────────────────── */
+.c3-card{background:var(--bg2);border:1px solid var(--b1);border-left:3px solid var(--b2);
+  border-radius:var(--radius-lg);padding:10px 14px;flex-shrink:0;
+  transition:border-color .2s,box-shadow .2s}
+.c3-card.beacon{border-left-color:var(--danger);box-shadow:0 0 0 1px rgba(239,68,68,.1)}
+.c3-card.suspicious{border-left-color:var(--warn)}
+.c3-card.safe{border-left-color:var(--safe)}
+.c3-card-top{display:flex;align-items:center;gap:8px}
+.c3-card-title{font-family:monospace;font-size:11px;color:var(--t1);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c3-card-score{font-size:18px;font-weight:900;line-height:1;flex-shrink:0}
+.c3-blocked-badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;
+  background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.4);
+  letter-spacing:.06em;text-transform:uppercase;flex-shrink:0}
+.c3-mitre-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;
+  background:rgba(59,130,246,.12);color:#60a5fa;border:1px solid rgba(59,130,246,.2);
+  font-family:monospace;flex-shrink:0}
+/* Compact signal row under card header */
+.c3-card-signals-row{display:flex;align-items:center;gap:10px;margin-top:7px;flex-wrap:wrap}
+.c3-sig-chip{display:flex;align-items:center;gap:4px;font-size:9.5px}
+.c3-sig-chip-label{color:var(--t3);white-space:nowrap}
+.c3-sig-chip-val{font-weight:700;font-family:monospace;min-width:32px;text-align:right}
+.c3-card-toggle{background:none;border:1px solid var(--b2);border-radius:4px;
+  color:var(--t2);font-size:9px;padding:2px 7px;cursor:pointer;flex-shrink:0;margin-left:auto;
+  transition:all .15s}
+.c3-card-toggle:hover{background:var(--bg3);color:var(--t0)}
+/* Full detail panel (collapsed by default) */
+.c3-card-detail{display:none;margin-top:10px;border-top:1px solid var(--b1);padding-top:10px}
+.c3-card-detail.open{display:block}
+.c3-signals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
+.c3-sig{background:var(--bg1);border:1px solid var(--b1);border-radius:6px;padding:7px 9px}
+.c3-sig-label{font-size:8.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px}
+.c3-sig-val{font-size:13px;font-weight:800;color:var(--t1)}
+.c3-sig-bar{height:5px;background:var(--b1);border-radius:3px;overflow:hidden;margin-top:5px}
+.c3-sig-fill{height:100%;border-radius:3px;transition:width .6s ease}
+.c3-sig-detail{font-size:8.5px;color:var(--t3);margin-top:3px;line-height:1.3;font-style:italic}
+.c3-feature-section{margin-top:2px}
+.c3-feature-title{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.c3-feature-bars{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.c3-bar-row{display:grid;grid-template-columns:100px 1fr 46px;align-items:center;gap:6px;font-size:9.5px;color:var(--t2)}
+.c3-bar-name{color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:9px}
+.c3-bar-wrap{height:5px;background:var(--b1);border-radius:3px;overflow:hidden}
+.c3-bar-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.c3-bar-val{font-family:monospace;color:var(--t1);text-align:right;font-size:9px}
+.c3-detail-text{font-size:9.5px;color:var(--t2);background:var(--bg1);border:1px solid var(--b1);
+  border-radius:5px;padding:6px 9px;margin-top:8px;line-height:1.5;font-style:italic}
+
+/* ── User-friendly feature analysis ────────────────────────── */
+.c3-feat-grid{display:flex;flex-direction:column;gap:8px}
+.c3-feat-group{background:var(--bg1);border:1px solid var(--b1);border-radius:8px;overflow:hidden}
+.c3-feat-group-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--t3);padding:5px 10px;background:rgba(255,255,255,.02);border-bottom:1px solid var(--b1)}
+.c3-feat-group-rows{display:flex;flex-direction:column}
+.c3-feat-row{display:grid;grid-template-columns:1fr 90px 80px;align-items:center;
+  gap:8px;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.04);transition:background .1s}
+.c3-feat-row:last-child{border-bottom:none}
+.c3-feat-row:hover{background:rgba(255,255,255,.025)}
+.c3-feat-row.c3-feat-warn{background:rgba(239,68,68,.04)}
+.c3-feat-row.c3-feat-warn:hover{background:rgba(239,68,68,.07)}
+.c3-feat-name-col{display:flex;flex-direction:column;gap:2px;min-width:0}
+.c3-feat-name{font-size:10.5px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c3-feat-hint{font-size:9px;color:var(--t3);line-height:1.35}
+.c3-feat-bar-col{flex-shrink:0}
+.c3-feat-val{font-size:9.5px;font-family:monospace;font-weight:600;text-align:right;white-space:nowrap;flex-shrink:0}
+.c3-detail{display:none;margin-top:8px;border-top:1px solid var(--b1);padding-top:8px}
+.c3-detail.open{display:block}
+.c3-event-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.c3-event{display:grid;grid-template-columns:50px 1fr 58px 76px;gap:7px;font-size:9.5px;color:var(--t2)}
+/* Session divider in Alerts tab */
+.c3-session-divider{display:flex;align-items:center;gap:8px;padding:4px 0;flex-shrink:0}
+.c3-session-divider-line{flex:1;height:1px;background:var(--b2)}
+.c3-session-divider-label{font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;
+  letter-spacing:.08em;white-space:nowrap}
+.c3-prev-toggle{background:none;border:1px solid var(--b2);border-radius:4px;color:var(--t3);
+  font-size:9px;padding:2px 8px;cursor:pointer;transition:all .15s}
+.c3-prev-toggle:hover{background:var(--bg3);color:var(--t1)}
+
+/* ── Host table score bar ────────────────────────────────────── */
+.c3-score-cell{display:flex;align-items:center;gap:6px;min-width:90px}
+.c3-score-mini-bar{flex:1;height:5px;background:var(--b1);border-radius:3px;overflow:hidden;min-width:36px}
+.c3-score-mini-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.c3-score-pct{font-size:10px;font-weight:700;font-family:monospace;flex-shrink:0;width:30px;text-align:right}
+
+/* ── Beacon countdown overlay ────────────────────────────────── */
+@keyframes beaconRingPulse{
+  0%{box-shadow:0 0 0 0 rgba(239,68,68,.55),0 0 30px rgba(239,68,68,.2)}
+  70%{box-shadow:0 0 0 18px rgba(239,68,68,0),0 0 50px rgba(239,68,68,.15)}
+  100%{box-shadow:0 0 0 0 rgba(239,68,68,0),0 0 30px rgba(239,68,68,.2)}
+}
+@keyframes beaconIconPop{
+  0%{transform:scale(0.6);opacity:0}
+  70%{transform:scale(1.12)}
+  100%{transform:scale(1);opacity:1}
+}
+@keyframes beaconCountdown{
+  0%{transform:scale(1.3);opacity:0}
+  100%{transform:scale(1);opacity:1}
+}
+#c3-beacon-overlay{
+  position:fixed;inset:0;z-index:9999;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,0);transition:background .35s
+}
+#c3-beacon-overlay.active{pointer-events:all;background:rgba(0,0,0,.72)}
+#c3-beacon-box{
+  background:linear-gradient(160deg,#0f1824 0%,#160d0d 100%);
+  border:1px solid rgba(239,68,68,.5);border-radius:20px;
+  padding:32px 36px 26px;text-align:center;max-width:460px;width:92%;
+  box-shadow:0 0 0 1px rgba(239,68,68,.15),0 20px 60px rgba(0,0,0,.7),0 0 80px rgba(239,68,68,.12);
+  transform:scale(0.82) translateY(16px);opacity:0;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s ease
+}
+#c3-beacon-overlay.active #c3-beacon-box{transform:scale(1) translateY(0);opacity:1}
+#c3-beacon-ring{
+  width:72px;height:72px;border-radius:50%;
+  background:rgba(239,68,68,.15);border:2px solid rgba(239,68,68,.6);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 14px;animation:beaconRingPulse 1.8s ease-out infinite
+}
+#c3-beacon-ring-inner{
+  width:52px;height:52px;border-radius:50%;
+  background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.5);
+  display:flex;align-items:center;justify-content:center
+}
+#c3-beacon-icon{font-size:26px;animation:beaconIconPop .4s ease both}
+#c3-beacon-mitre{
+  font-size:9px;font-weight:700;font-family:monospace;letter-spacing:.1em;
+  color:rgba(239,68,68,.6);text-transform:uppercase;margin-bottom:6px
+}
+#c3-beacon-title{
+  font-size:20px;font-weight:900;letter-spacing:.04em;
+  color:var(--danger);margin-bottom:8px;text-shadow:0 0 20px rgba(239,68,68,.4)
+}
+#c3-beacon-host-wrap{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:rgba(255,255,255,.04);border:1px solid var(--b2);
+  border-radius:8px;padding:7px 14px;margin-bottom:16px
+}
+#c3-beacon-host-label{font-size:9px;color:var(--t3);text-transform:uppercase;
+  letter-spacing:.08em;font-weight:600;flex-shrink:0}
+#c3-beacon-host{font-family:monospace;font-size:11.5px;color:var(--t0);
+  word-break:break-all;font-weight:600}
+#c3-beacon-score-row{
+  display:flex;justify-content:center;align-items:center;
+  gap:0;margin-bottom:16px;
+  background:rgba(255,255,255,.03);border:1px solid var(--b1);
+  border-radius:10px;overflow:hidden
+}
+.c3-bscore-item{flex:1;text-align:center;padding:10px 6px}
+.c3-bscore-sep{width:1px;height:36px;background:var(--b1);flex-shrink:0}
+.c3-bscore-val{font-size:18px;font-weight:900;line-height:1}
+.c3-bscore-lbl{font-size:8.5px;color:var(--t3);text-transform:uppercase;margin-top:3px;letter-spacing:.05em}
+#c3-beacon-verdict-row{display:flex;justify-content:center;align-items:center;gap:8px;margin-bottom:10px}
+#c3-beacon-verdict-badge{
+  font-size:10px;font-weight:800;padding:3px 12px;border-radius:20px;letter-spacing:.1em;
+  background:var(--danger-bg);color:var(--danger);border:1px solid rgba(239,68,68,.5);
+  text-transform:uppercase
+}
+#c3-beacon-block-badge{
+  font-size:10px;font-weight:800;padding:3px 12px;border-radius:20px;letter-spacing:.06em;
+  background:rgba(239,68,68,.2);color:#fff;border:1px solid rgba(239,68,68,.5);
+  text-transform:uppercase;animation:beaconPulse 1.5s infinite
+}
+#c3-beacon-countdown{
+  font-size:52px;font-weight:900;color:var(--danger);line-height:1;
+  margin-bottom:4px;animation:beaconCountdown .35s ease both
+}
+#c3-beacon-msg{font-size:11px;color:var(--t2);margin-bottom:14px;line-height:1.4}
+#c3-beacon-bar{height:4px;background:var(--b1);border-radius:2px;overflow:hidden;margin-bottom:20px}
+#c3-beacon-bar-fill{height:100%;background:var(--danger);border-radius:2px;width:0%;
+  transition:width 1s linear;box-shadow:0 0 6px rgba(239,68,68,.5)}
+#c3-beacon-actions{display:flex;gap:10px;justify-content:center}
+#c3-beacon-dismiss{
+  background:rgba(255,255,255,.08);border:1px solid var(--b2);color:var(--t1);
+  padding:9px 24px;border-radius:var(--radius);font-size:12px;font-weight:600;
+  cursor:pointer;transition:all .15s
+}
+#c3-beacon-dismiss:hover{background:rgba(255,255,255,.14);color:var(--t0)}
+
+.c3-row-btn{background:none;border:none;color:var(--c3);font:inherit;text-align:left;padding:0;cursor:pointer}
+.c3-row-btn:hover{text-decoration:underline}
+.c3-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.c3-select{background:var(--bg0);border:1px solid var(--b2);border-radius:var(--radius);
+  color:var(--t0);font-size:11.5px;padding:7px 9px}
+.btn-c3{background:var(--c3);border:none;color:#111827;padding:8px 14px;border-radius:var(--radius);
+  font-size:12px;font-weight:700;transition:filter .15s}
+.btn-c3:hover{filter:brightness(1.08)}
+
+/* ── Detection Lab tab ──────────────────────────────────────── */
+.lab-top-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lab-card{background:var(--bg2);border:1px solid var(--b1);border-radius:var(--radius-lg);
+  padding:13px 15px;flex-shrink:0}
+.lab-card-blocked{display:flex;flex-direction:column;gap:8px}
+.lab-card-export{display:flex;flex-direction:column;gap:8px}
+.lab-card-hdr{display:flex;align-items:flex-start;gap:10px}
+.lab-card-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.lab-card-title{font-size:12px;font-weight:700;color:var(--t0)}
+.lab-card-sub{font-size:10px;color:var(--t3);margin-top:2px}
+.lab-badge-count{margin-left:auto;font-size:10px;font-weight:700;
+  background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.3);
+  border-radius:10px;padding:2px 8px;flex-shrink:0}
+.lab-blocked-list{display:flex;flex-direction:column;gap:5px;min-height:30px}
+.lab-blocked-empty{font-size:10.5px;color:var(--t3);font-style:italic;padding:6px 0}
+.lab-blocked-row{display:flex;align-items:center;gap:8px;background:rgba(239,68,68,.06);
+  border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:6px 9px}
+.lab-blocked-host{flex:1;font-family:monospace;font-size:10.5px;color:var(--t1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lab-btn-unblock{background:none;border:1px solid var(--b2);border-radius:4px;
+  color:var(--t2);font-size:9px;padding:2px 8px;cursor:pointer;transition:all .15s;flex-shrink:0}
+.lab-btn-unblock:hover{background:var(--safe-bg);color:var(--safe);border-color:rgba(16,185,129,.4)}
+.lab-export-body{display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 0 2px}
+.lab-export-stat{display:flex;flex-direction:column;align-items:center;gap:2px}
+.lab-export-num{font-size:28px;font-weight:900;color:var(--c3);line-height:1}
+.lab-export-lbl{font-size:10px;color:var(--t3)}
+.lab-btn-export{background:var(--c3);border:none;color:#111827;padding:8px 18px;
+  border-radius:var(--radius);font-size:11.5px;font-weight:700;cursor:pointer;
+  transition:filter .15s;width:100%}
+.lab-btn-export:hover{filter:brightness(1.08)}
+.lab-export-hint{font-size:9.5px;color:var(--t3);font-style:italic}
+.lab-btn-test{margin-left:auto;background:var(--bg3);border:1px solid var(--b2);color:var(--t0);
+  padding:7px 14px;border-radius:var(--radius);font-size:11px;font-weight:600;
+  cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap}
+.lab-btn-test:hover{background:var(--c3);color:#111827;border-color:var(--c3)}
+.lab-test-steps{display:flex;flex-direction:column;gap:5px;margin-top:10px;
+  border-top:1px solid var(--b1);padding-top:10px}
+.lab-step{display:flex;align-items:flex-start;gap:9px;font-size:10.5px;color:var(--t2)}
+.lab-step-n{width:18px;height:18px;border-radius:50%;background:var(--b2);
+  color:var(--t1);font-size:9px;font-weight:700;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;margin-top:1px}
+.lab-engine-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px;
+  border-top:1px solid var(--b1);padding-top:10px}
+.lab-engine-item{background:var(--bg1);border:1px solid var(--b1);border-radius:6px;padding:8px 10px}
+.lab-engine-label{font-size:9.5px;font-weight:700;color:var(--c3);margin-bottom:4px}
+.lab-engine-desc{font-size:9.5px;color:var(--t2);line-height:1.45}
+.lab-mitre{font-family:monospace;font-size:9px;color:#60a5fa;background:rgba(59,130,246,.1);
+  padding:1px 5px;border-radius:3px;white-space:nowrap}
+
+/* ── Placeholder panels ─────────────────────────────────────── */
+.ph-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:11px}
+.ph-card{background:var(--bg2);border:1px solid var(--b1);
+  border-radius:var(--radius-lg);padding:14px 15px}
+.ph-title{font-size:12.5px;font-weight:700;color:var(--t0);margin-bottom:6px}
+.ph-text{font-size:11.5px;color:var(--t2);line-height:1.65}
+.ph-tag{display:inline-block;font-size:9.5px;font-weight:600;padding:2px 8px;
+  border-radius:4px;margin-right:4px;margin-bottom:4px}
+.ph-tag.c1{background:var(--c1b);color:var(--c1)}
+.ph-tag.c3{background:var(--c3b);color:var(--c3)}
+.ph-tag.c4{background:var(--c4b);color:var(--c4)}
+.arch-pre{background:var(--bg0);border:1px solid var(--b1);border-radius:var(--radius);
+  padding:10px 12px;font-size:10.5px;font-family:'Cascadia Code','Fira Code',monospace;
+  color:var(--t2);white-space:pre;overflow-x:auto;margin-top:8px;line-height:1.5}
+.contrib-card{background:var(--bg3);border:1px solid var(--b2);
+  border-radius:var(--radius-lg);padding:13px 15px}
+.contrib-title{font-size:12px;font-weight:700;color:var(--t0);margin-bottom:8px;
+  display:flex;align-items:center;gap:6px}
+.contrib-steps{list-style:none;display:flex;flex-direction:column;gap:4px}
+.contrib-steps li{font-size:11px;color:var(--t2);display:flex;
+  align-items:flex-start;gap:6px;padding:3px 0;line-height:1.5}
+.contrib-steps li::before{content:'→';color:var(--t3);flex-shrink:0;
+  font-size:10px;margin-top:2px}
+.mitre-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.mitre-cell{background:var(--bg3);border:1px solid var(--b1);
+  border-radius:6px;padding:8px 10px}
+.mitre-id{font-size:9.5px;font-weight:700;color:var(--c4);margin-bottom:3px}
+.mitre-name{font-size:10.5px;color:var(--t2)}
+.btn-copy{background:var(--bg2);border:1px solid var(--b2);color:var(--t1);
+  padding:6px 13px;border-radius:var(--radius);font-size:11px;font-weight:600;
+  transition:all .15s;cursor:pointer;margin-top:9px}
+.btn-copy:hover{background:var(--b1);color:var(--t0);border-color:var(--b3)}
+
+/* ── Settings ───────────────────────────────────────────────── */
+.settings-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.ssec{background:var(--bg2);border:1px solid var(--b1);
+  border-radius:var(--radius-lg);overflow:hidden;flex-shrink:0}
+.ssec-hdr{padding:9px 13px;background:rgba(255,255,255,.02);
+  border-bottom:1px solid var(--b1);font-size:12px;font-weight:600}
+.srow{display:flex;align-items:center;gap:10px;padding:10px 13px;
+  border-bottom:1px solid var(--b1)}
+.srow:last-child{border:none}
+.sinfo{flex:1}
+.sname{font-size:12px;color:var(--t0)}
+.sdesc{font-size:10.5px;color:var(--t3);margin-top:2px}
+.tog{position:relative;width:36px;height:20px;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0;position:absolute}
+.tslider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;
+  background:var(--b1);border-radius:20px;transition:.2s}
+.tslider:before{position:absolute;content:'';height:14px;width:14px;
+  left:3px;bottom:3px;background:var(--t3);border-radius:50%;transition:.2s}
+.tog input:checked+.tslider{background:var(--c2)}
+.tog input:checked+.tslider:before{transform:translateX(16px);background:#fff}
+.sinput{width:100%;background:var(--bg0);border:1px solid var(--b1);
+  color:var(--t0);padding:6px 10px;border-radius:var(--radius);
+  font-size:12px;outline:none;transition:border-color .15s}
+.sinput:focus{border-color:var(--c2)}
+.btn-primary{background:var(--c2);border:none;color:#fff;
+  padding:8px 16px;border-radius:var(--radius);cursor:pointer;
+  font-size:12px;font-weight:600;transition:background .15s;margin-top:4px}
+.btn-primary:hover{background:#2563eb}
+.btn-sm{background:var(--bg3);border:1px solid var(--b2);color:var(--t1);
+  padding:5px 12px;border-radius:var(--radius);cursor:pointer;
+  font-size:11.5px;font-weight:600;transition:all .15s;flex-shrink:0}
+.btn-sm:hover{background:var(--b1);color:var(--t0)}
+
+/* ── Toast ──────────────────────────────────────────────────── */
+#pw-toast{position:fixed;bottom:20px;left:50%;z-index:999;pointer-events:none;
+  transform:translateX(-50%) translateY(12px);opacity:0;
+  background:var(--bg3);border:1px solid rgba(16,185,129,.45);
+  border-radius:var(--radius);padding:9px 16px;font-size:12px;color:var(--t0);
+  display:flex;align-items:center;gap:8px;transition:opacity .3s,transform .3s}
+#pw-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast-dot{color:var(--safe)}
+
+/* ── Spinner ────────────────────────────────────────────────── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:18px;height:18px;border:2px solid var(--b2);
+  border-top-color:var(--c2);border-radius:50%;animation:spin .7s linear infinite}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     APP HEADER
+═══════════════════════════════════════════════════════════ -->
+<header id="hdr">
+  <div id="hdr-brand">
+    <div id="hdr-logo">&#128737;</div>
+    <span id="hdr-title">WebSentinel</span>
+  </div>
+  <div id="hdr-divider"></div>
+  <div id="hdr-monitor">
+    <div id="mon-dot" class="idle"></div>
+    <span id="mon-label">Monitoring</span>
+    <span id="mon-url">Starting session&hellip;</span>
+    <input id="nav-input" type="text" placeholder="Navigate to URL&hellip;" spellcheck="false" autocomplete="off">
+    <button type="button" id="nav-go">Go &#8594;</button>
+  </div>
+  <div id="online-pill" class="off">
+    <div class="odot"></div>
+    <span id="online-txt">Connecting&hellip;</span>
+  </div>
+</header>
+
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════════════
+     SIDEBAR
+═══════════════════════════════════════════════════════════ -->
+<nav id="sidebar">
+  <div class="nav-group">
+    <button class="nav-item active" data-panel="c2" title="BitB Phishing Detector">
+      <span class="nav-icon">&#128737;&#65039;</span>
+      <span class="nav-label">C2</span>
+    </button>
+    <button class="nav-item" data-panel="c1" title="Extension Analyzer">
+      <span class="nav-icon">&#129513;</span>
+      <span class="nav-label">C1</span>
+    </button>
+    <button class="nav-item" data-panel="c3" title="C2 Beacon Detector">
+      <span class="nav-icon">&#128225;</span>
+      <span class="nav-label">C3</span>
+    </button>
+    <button class="nav-item" data-panel="c4" title="Forensic Engine">
+      <span class="nav-icon">&#128300;</span>
+      <span class="nav-label">C4</span>
+    </button>
+  </div>
+  <div class="nav-bottom">
+    <button class="nav-item" data-panel="settings" title="Settings">
+      <span class="nav-icon">&#9881;&#65039;</span>
+      <span class="nav-label">Set</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CONTENT AREA
+═══════════════════════════════════════════════════════════ -->
+<main id="content">
+
+<!-- ─── C2: BitB Phishing Detector (ACTIVE) ──────────────── -->
+<div class="panel active" id="panel-c2">
+
+  <div class="panel-hdr">
+    <div class="comp-badge c2">C2</div>
+    <div>
+      <div class="panel-title">BitB Phishing Detector</div>
+      <div class="panel-sub">Browser-in-the-Browser attack detection &mdash; 5-layer ML pipeline</div>
+    </div>
+    <span class="status-active">Active</span>
+  </div>
+
+  <div id="stats">
+    <div class="sbox"><div class="snum" id="s-total">0</div><div class="slbl">Analyzed</div></div>
+    <div class="sbox d"><div class="snum" id="s-phish">0</div><div class="slbl">Phishing</div></div>
+    <div class="sbox w"><div class="snum" id="s-sus">0</div><div class="slbl">Suspicious</div></div>
+    <div class="sbox s"><div class="snum" id="s-safe">0</div><div class="slbl">Safe</div></div>
+  </div>
+
+  <div id="tabs">
+    <button class="tab active" data-tab="live">&#9889; Live Analysis</button>
+    <button class="tab" data-tab="alerts">&#128680; Alerts</button>
+    <button class="tab" data-tab="timeline">&#128336; Timeline</button>
+    <button class="tab" data-tab="c2settings">&#9881; Settings</button>
+  </div>
+
+  <div id="tab-content">
+
+    <!-- LIVE ANALYSIS -->
+    <div class="pane active" id="pane-live">
+      <div id="live-current" style="display:none">
+        <div class="live-url" id="live-url"></div>
+        <div class="live-top">
+          <div class="live-score" id="live-score">0</div>
+          <div>
+            <div class="live-verdict" id="live-verdict">SAFE</div>
+            <div style="font-size:10px;color:var(--t3);margin-top:2px">Risk Score</div>
+          </div>
+        </div>
+        <div class="live-layers" id="live-layers"></div>
+      </div>
+      <div id="live-empty">
+        <div class="e-icon">&#128737;</div>
+        <div class="e-msg">Navigate to a URL to start analysis</div>
+      </div>
+    </div>
+
+    <!-- ALERTS -->
+    <div class="pane" id="pane-alerts">
+      <div class="empty" id="empty-alerts">
+        <div class="eicon">&#128680;</div>
+        <div class="emsg">No alerts yet &mdash; results will appear here</div>
+      </div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div class="pane" id="pane-timeline">
+      <div class="empty" id="empty-timeline">
+        <div class="eicon">&#128336;</div>
+        <div class="emsg">No browsing history yet</div>
+      </div>
+    </div>
+
+    <!-- C2 SETTINGS -->
+    <div class="pane" id="pane-c2settings">
+      <div class="ssec">
+        <div class="ssec-hdr">Detection Layers</div>
+        <div class="srow">
+          <div class="sinfo"><div class="sname">L1 &mdash; BitB Detection</div>
+            <div class="sdesc">Detect browser-in-the-browser iframe attacks via DOM analysis</div></div>
+          <label class="tog"><input type="checkbox" id="tog-l1" checked><span class="tslider"></span></label>
+        </div>
+        <div class="srow">
+          <div class="sinfo"><div class="sname">L2 &mdash; URL Classifier</div>
+            <div class="sdesc">XGBoost on 13 URL features (Mendeley dataset / heuristic fallback)</div></div>
+          <label class="tog"><input type="checkbox" id="tog-l2" checked><span class="tslider"></span></label>
+        </div>
+        <div class="srow">
+          <div class="sinfo"><div class="sname">L3 &mdash; Visual Similarity</div>
+            <div class="sdesc">pHash logo comparison against brand reference hashes</div></div>
+          <label class="tog"><input type="checkbox" id="tog-l3" checked><span class="tslider"></span></label>
+        </div>
+        <div class="srow">
+          <div class="sinfo"><div class="sname">L4 &mdash; Form Destination</div>
+            <div class="sdesc">Check POST target vs. page domain for credential theft</div></div>
+          <label class="tog"><input type="checkbox" id="tog-l4" checked><span class="tslider"></span></label>
+        </div>
+        <div class="srow">
+          <div class="sinfo"><div class="sname">L5 &mdash; Reputation Check</div>
+            <div class="sdesc">Google Safe Browsing API + PhishTank live lookup</div></div>
+          <label class="tog"><input type="checkbox" id="tog-l5" checked><span class="tslider"></span></label>
+        </div>
+      </div>
+      <div class="ssec">
+        <div class="ssec-hdr">Layer Weights</div>
+        <div class="srow">
+          <div class="sinfo"><div class="sname">Current weights</div>
+            <div class="sdesc">L1=0.15 &nbsp; L2=0.30 &nbsp; L3=0.20 &nbsp; L4=0.15 &nbsp; L5=0.20</div></div>
+        </div>
+      </div>
+      <div style="padding:10px 0 0">
+        <button type="button" class="btn-primary" onclick="saveC2Settings()">Save C2 Settings</button>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /panel-c2 -->
+
+<!-- ─── C1: Extension Analyzer (PLACEHOLDER) ─────────────── -->
+<div class="panel" id="panel-c1">
+  <div class="panel-hdr">
+    <div class="comp-badge c1">C1</div>
+    <div>
+      <div class="panel-title">Extension Analyzer</div>
+      <div class="panel-sub">Malicious browser extension detection via ML + sandbox execution</div>
+    </div>
+    <span class="status-wip">In Development</span>
+  </div>
+  <div class="ph-body">
+    <div class="ph-card">
+      <div class="ph-title">Research Question</div>
+      <div class="ph-text">
+        Can a combination of ML-based static analysis and sandboxed dynamic execution accurately
+        detect malicious browser extensions before they cause harm?
+      </div>
+      <div style="margin-top:10px">
+        <span class="ph-tag c1">Static ML</span>
+        <span class="ph-tag c1">Sandbox Execution</span>
+        <span class="ph-tag c1">JS AST Analysis</span>
+        <span class="ph-tag c1">Behaviour Logging</span>
+      </div>
+    </div>
+    <div class="ph-card">
+      <div class="ph-title">Architecture Pipeline</div>
+      <pre class="arch-pre">Extension Upload
+      |
+      v
++-------------+    manifest.json + JS source
+| Static      |----------------------------->  ML classifier
+| Analysis    |    permissions, API patterns   (score_static)
++-------------+
+      |
+      | (if score_static > threshold)
+      v
++-------------+    Playwright headless Chromium
+| Sandbox     |----------------------------->  Behaviour logger
+| Execution   |    network, DOM, cookie ops    (score_dynamic)
++-------------+
+      |
+      v
+  Fused verdict (weighted average)</pre>
+    </div>
+    <div class="ph-card">
+      <div class="ph-title">Tech Stack</div>
+      <div class="ph-text">
+        <b>Static:</b> scikit-learn / XGBoost on manifest.json + JS AST features (esprima/acorn)<br>
+        <b>Sandbox:</b> Playwright Chromium with <code style="color:var(--c1)">--load-extension</code><br>
+        <b>Network capture:</b> Playwright route interception / mitmproxy<br>
+        <b>DOM monitoring:</b> MutationObserver injected via CDP
+      </div>
+    </div>
+    <div class="contrib-card">
+      <div class="contrib-title">&#129309; Start Contributing &mdash; C1</div>
+      <ul class="contrib-steps">
+        <li>Fork the repo and create branch <code style="color:var(--c1)">feature/c1-*</code></li>
+        <li>Read <code style="color:var(--c1)">c1/ARCHITECTURE.md</code> for the full spec and integration interface</li>
+        <li>Implement <code style="color:var(--c1)">c1/static_model.py</code> &mdash; feature extraction from manifest + JS AST</li>
+        <li>Implement <code style="color:var(--c1)">c1/sandbox.py</code> &mdash; Playwright sandbox runner with behaviour hooks</li>
+        <li>Wire stubs in <code style="color:var(--c1)">c1/analyzer.py</code> &rarr; <code style="color:var(--c1)">analyze_extension(manifest, source)</code></li>
+        <li>Add <code style="color:var(--c1)">/extension/analyze</code> endpoint in <code style="color:var(--c1)">core/main.py</code></li>
+      </ul>
+      <button class="btn-copy" onclick="copyAiCtx('c1')">&#128203; Copy AI Starter Context</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── C3: C2 Beacon Detector ───────────────────────────── -->
+<div class="panel" id="panel-c3">
+  <div class="panel-hdr">
+    <div class="comp-badge c3">C3</div>
+    <div>
+      <div class="panel-title">C2 Beacon Detector</div>
+      <div class="panel-sub">Browser-execution-aware beacon detection &mdash; CDP intercept &rarr; context tag &rarr; Isolation Forest + RF Classifier + heuristic fusion</div>
+    </div>
+    <span class="status-active" id="c3-status-badge">Active</span>
+  </div>
+  <div class="c3-body">
+    <div class="c3-stats">
+      <div class="c3-sbox"><div class="c3-snum" id="c3-reqs">0</div><div class="c3-slbl">Requests</div></div>
+      <div class="c3-sbox"><div class="c3-snum" id="c3-hosts">0</div><div class="c3-slbl">Hosts Seen</div></div>
+      <div class="c3-sbox danger"><div class="c3-snum danger" id="c3-alerts">0</div><div class="c3-slbl">Alerts</div></div>
+      <div class="c3-sbox danger"><div class="c3-snum danger" id="c3-blocked">0</div><div class="c3-slbl">Blocked</div></div>
+      <div class="c3-sbox"><div class="c3-snum" style="font-size:11px;padding-top:4px" id="c3-model-info">—</div><div class="c3-slbl">Engine</div></div>
+    </div>
+    <div class="c3-tabs">
+      <button class="c3-tab active" data-c3tab="monitor">&#9685; Live Monitor</button>
+      <button class="c3-tab" data-c3tab="c3alerts">&#128680; Alerts</button>
+      <button class="c3-tab" data-c3tab="hosts">&#128202; Host Analysis</button>
+      <button class="c3-tab" data-c3tab="lab">&#9879; Detection Lab</button>
+    </div>
+    <div class="c3-content">
+
+      <!-- LIVE MONITOR TAB -->
+      <div class="c3-pane active" id="c3-pane-monitor">
+        <table class="c3-table">
+          <thead><tr>
+            <th>Host</th><th>Method</th><th>Bytes</th>
+            <th>Context</th><th>User Activity</th>
+            <th>IAT CV</th><th>Score</th><th>Time</th>
+          </tr></thead>
+          <tbody id="c3-request-rows"></tbody>
+        </table>
+        <div class="empty" id="c3-empty-requests">
+          <div class="eicon">&#128225;</div>
+          <div class="emsg">No requests captured yet &mdash; browsing activity will appear here</div>
+        </div>
+      </div>
+
+      <!-- ALERTS TAB -->
+      <div class="c3-pane" id="c3-pane-c3alerts">
+        <div class="empty" id="c3-empty-alerts">
+          <div class="eicon">&#128680;</div>
+          <div class="emsg">No beacon alerts yet &mdash; C3 is monitoring all outbound requests</div>
+        </div>
+      </div>
+
+      <!-- HOST ANALYSIS TAB -->
+      <div class="c3-pane" id="c3-pane-hosts">
+        <table class="c3-table" id="c3-host-table">
+          <thead><tr>
+            <th>Host</th><th>Requests</th><th>Risk Score</th>
+            <th>Verdict</th><th>Anomaly</th><th>RF</th><th>Heuristic</th><th>Detail</th>
+          </tr></thead>
+          <tbody id="c3-host-rows"></tbody>
+        </table>
+        <div class="empty" id="c3-empty-hosts">
+          <div class="eicon">&#128202;</div>
+          <div class="emsg">Hosts appear after browsing traffic is captured</div>
+        </div>
+      </div>
+
+      <!-- DETECTION LAB TAB -->
+      <div class="c3-pane" id="c3-pane-lab">
+
+        <!-- Row 1: Blocked Hosts + Log Export side by side -->
+        <div class="lab-top-row">
+
+          <!-- Blocked Hosts card -->
+          <div class="lab-card lab-card-blocked">
+            <div class="lab-card-hdr">
+              <span class="lab-card-icon">&#128683;</span>
+              <div>
+                <div class="lab-card-title">Blocked Hosts</div>
+                <div class="lab-card-sub">Hosts auto-blocked after BEACON detection</div>
+              </div>
+              <span class="lab-badge-count" id="lab-blocked-count">0</span>
+            </div>
+            <div id="lab-blocked-list" class="lab-blocked-list">
+              <div class="lab-blocked-empty">No hosts blocked &mdash; system is monitoring</div>
+            </div>
+          </div>
+
+          <!-- Log Export card -->
+          <div class="lab-card lab-card-export">
+            <div class="lab-card-hdr">
+              <span class="lab-card-icon">&#128190;</span>
+              <div>
+                <div class="lab-card-title">Detection Log</div>
+                <div class="lab-card-sub">Export all alerts as a JSON log file</div>
+              </div>
+            </div>
+            <div class="lab-export-body">
+              <div class="lab-export-stat" id="lab-log-count">
+                <span class="lab-export-num">0</span>
+                <span class="lab-export-lbl">alerts recorded this session</span>
+              </div>
+              <button type="button" class="lab-btn-export" onclick="downloadC3Log()">
+                &#8659; Download Log (last 24h)
+              </button>
+              <div class="lab-export-hint">Downloads as <code>c3_detection_log.json</code></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Row 2: Beacon Test -->
+        <div class="lab-card">
+          <div class="lab-card-hdr">
+            <span class="lab-card-icon">&#128225;</span>
+            <div>
+              <div class="lab-card-title">Beacon Simulation Test</div>
+              <div class="lab-card-sub">Load a test page that fires a POST beacon every 5 seconds into the monitored Playwright browser</div>
+            </div>
+            <button type="button" class="lab-btn-test" onclick="openC3BeaconTest()">
+              &#9654; Run Test
+            </button>
+          </div>
+          <div class="lab-test-steps">
+            <div class="lab-step"><span class="lab-step-n">1</span>Click <b>Run Test</b> &mdash; opens the beacon page in the monitored browser</div>
+            <div class="lab-step"><span class="lab-step-n">2</span>Switch to <b>Live Monitor</b> to watch the requests arrive in real time</div>
+            <div class="lab-step"><span class="lab-step-n">3</span>Wait ~60&ndash;90 s &mdash; the detector needs at least 10 requests before it can issue a BEACON verdict</div>
+            <div class="lab-step"><span class="lab-step-n">4</span>Check the <b>Alerts</b> tab &mdash; a BEACON alert and auto-block will fire if detection succeeds</div>
+          </div>
+        </div>
+
+        <!-- Row 3: Detection Engine Reference -->
+        <div class="lab-card">
+          <div class="lab-card-hdr">
+            <span class="lab-card-icon">&#129302;</span>
+            <div>
+              <div class="lab-card-title">Detection Engine Reference</div>
+              <div class="lab-card-sub">Model pipeline &amp; MITRE ATT&amp;CK coverage</div>
+            </div>
+          </div>
+          <div class="lab-engine-grid">
+            <div class="lab-engine-item">
+              <div class="lab-engine-label">Isolation Forest (IF)</div>
+              <div class="lab-engine-desc">200 trees &middot; 4 IAT timing features &middot; unsupervised anomaly detection on network timing patterns</div>
+            </div>
+            <div class="lab-engine-item">
+              <div class="lab-engine-label">RF Classifier</div>
+              <div class="lab-engine-desc">10 HTTP behavior features &middot; AUC 0.99 &middot; supervised classification trained on real web-bot dataset</div>
+            </div>
+            <div class="lab-engine-item">
+              <div class="lab-engine-label">Heuristic Rules</div>
+              <div class="lab-engine-desc">5 rule checks: regular timing, foreground idle, background tab, extension origin, same-endpoint repeat</div>
+            </div>
+            <div class="lab-engine-item">
+              <div class="lab-engine-label">MITRE ATT&amp;CK</div>
+              <div class="lab-engine-desc">
+                <span class="lab-mitre">T1071.001</span> Web Protocol &nbsp;
+                <span class="lab-mitre">T1571</span> Non-Std Port &nbsp;
+                <span class="lab-mitre">T1041</span> C2 Exfil
+              </div>
+            </div>
+            <div class="lab-engine-item">
+              <div class="lab-engine-label">Risk Fusion</div>
+              <div class="lab-engine-desc">IF&times;0.40 + RF&times;0.20 + Rep&times;0.25 + Heuristic&times;0.15 &mdash; adaptive weights, BEACON threshold &ge; 0.60</div>
+            </div>
+            <div class="lab-engine-item">
+              <div class="lab-engine-label">Auto-Block</div>
+              <div class="lab-engine-desc">Hosts scoring &ge; 0.80 are automatically blocked via Playwright route interception. Unblock from Blocked Hosts above.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ─── C4: Forensic Engine (PLACEHOLDER) ────────────────── -->
+<div class="panel" id="panel-c4">
+  <div class="panel-hdr">
+    <div class="comp-badge c4">C4</div>
+    <div>
+      <div class="panel-title">Forensic Correlation Engine</div>
+      <div class="panel-sub">Browser artifact cross-correlation with MITRE ATT&amp;CK mapping</div>
+    </div>
+    <span class="status-wip">In Development</span>
+  </div>
+  <div class="ph-body">
+    <div class="ph-card">
+      <div class="ph-title">Research Question</div>
+      <div class="ph-text">
+        Can automated cross-artifact correlation of browser forensic data (history, cookies,
+        downloads, localStorage) reliably reconstruct attack timelines and map them to
+        MITRE ATT&amp;CK techniques?
+      </div>
+      <div style="margin-top:10px">
+        <span class="ph-tag c4">SQLite Extraction</span>
+        <span class="ph-tag c4">Sliding-Window Correlation</span>
+        <span class="ph-tag c4">MITRE ATT&CK</span>
+        <span class="ph-tag c4">Timeline Reconstruction</span>
+      </div>
+    </div>
+    <div class="ph-card">
+      <div class="ph-title">Architecture Pipeline</div>
+      <pre class="arch-pre">Browser Profile (~/.websentinel/profile/)
+      |
+      +-- History.db (SQLite)
+      +-- Cookies (SQLite)
+      +-- Login Data (SQLite)
+      +-- Local Storage / IndexedDB
+              |
+              v
+        Artifact Extractor
+        (normalise -> unified event timeline)
+              |
+              v
+        Sliding-Window Correlator
+        (detect multi-artifact attack patterns)
+              |
+              v
+        MITRE ATT&CK Mapper
+              |
+              v
+        Forensic JSON Report</pre>
+    </div>
+    <div class="ph-card">
+      <div class="ph-title">MITRE ATT&amp;CK Mapping</div>
+      <div class="mitre-grid">
+        <div class="mitre-cell">
+          <div class="mitre-id">T1539</div>
+          <div class="mitre-name">Steal Web Session Cookie</div>
+        </div>
+        <div class="mitre-cell">
+          <div class="mitre-id">T1555.003</div>
+          <div class="mitre-name">Credentials from Web Browsers</div>
+        </div>
+        <div class="mitre-cell">
+          <div class="mitre-id">T1074</div>
+          <div class="mitre-name">Data Staged</div>
+        </div>
+        <div class="mitre-cell">
+          <div class="mitre-id">T1176</div>
+          <div class="mitre-name">Browser Extensions</div>
+        </div>
+      </div>
+    </div>
+    <div class="contrib-card">
+      <div class="contrib-title">&#129309; Start Contributing &mdash; C4</div>
+      <ul class="contrib-steps">
+        <li>Fork the repo and create branch <code style="color:var(--c4)">feature/c4-*</code></li>
+        <li>Read <code style="color:var(--c4)">c4/ARCHITECTURE.md</code> for the full spec and MITRE mapping table</li>
+        <li>Implement <code style="color:var(--c4)">c4/extractor.py</code> &mdash; SQLite readers for History, Cookies, Login Data</li>
+        <li>Implement <code style="color:var(--c4)">c4/integrity.py</code> &mdash; WAL/SHM tamper checks + SHA-256 hashing</li>
+        <li>Implement <code style="color:var(--c4)">c4/chain.py</code> &mdash; 2-minute sliding window cross-artifact correlator</li>
+        <li>Add <code style="color:var(--c4)">/forensic/extract</code> and <code style="color:var(--c4)">/forensic/report</code> in <code style="color:var(--c4)">core/main.py</code></li>
+      </ul>
+      <button class="btn-copy" onclick="copyAiCtx('c4')">&#128203; Copy AI Starter Context</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── GLOBAL SETTINGS ───────────────────────────────────── -->
+<div class="panel" id="panel-settings">
+  <div class="panel-hdr">
+    <div class="comp-badge cfg">&#9881;</div>
+    <div>
+      <div class="panel-title">Global Settings</div>
+      <div class="panel-sub">Playwright session, API keys, and domain whitelist</div>
+    </div>
+  </div>
+  <div class="settings-body">
+
+    <div class="ssec">
+      <div class="ssec-hdr">Playwright Session</div>
+      <div class="srow" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <div class="sname">Home / Start URL</div>
+        <div class="sdesc">Browser navigates here automatically when a session starts. Leave blank to open a new tab.</div>
+        <input type="text" id="pw-home-url" class="sinput" placeholder="https://www.google.com">
+      </div>
+      <div class="srow">
+        <div class="sinfo">
+          <div class="sname">Session Status</div>
+          <div class="sdesc" id="session-status-txt">Checking&hellip;</div>
+        </div>
+        <button type="button" id="btn-restart-session" class="btn-sm">Restart</button>
+      </div>
+    </div>
+
+    <div class="ssec">
+      <div class="ssec-hdr">API Keys</div>
+      <div class="srow" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <div class="sname">Google Safe Browsing API Key</div>
+        <div class="sdesc">Required for L5 reputation checks. Get one at console.cloud.google.com.</div>
+        <input type="password" id="gsb-key" class="sinput" placeholder="AIza&hellip;">
+      </div>
+    </div>
+
+    <div class="ssec">
+      <div class="ssec-hdr">Domain Whitelist</div>
+      <div class="srow" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <div class="sdesc">Never flag these domains (one per line)</div>
+        <textarea id="whitelist" rows="5" class="sinput" style="resize:vertical"
+          placeholder="google.com&#10;github.com&#10;localhost"></textarea>
+      </div>
+    </div>
+
+    <button type="button" class="btn-primary" onclick="saveSettings()">Save Global Settings</button>
+
+  </div>
+</div>
+
+</main>
+</div>
+
+<!-- C3 Beacon Alert Overlay (fixed, renders above everything) -->
+<div id="c3-beacon-overlay">
+  <div id="c3-beacon-box">
+    <!-- Animated threat ring -->
+    <div id="c3-beacon-ring">
+      <div id="c3-beacon-ring-inner">
+        <div id="c3-beacon-icon">&#9888;</div>
+      </div>
+    </div>
+    <!-- MITRE tag -->
+    <div id="c3-beacon-mitre">T1071.001 &bull; C2 Beacon</div>
+    <div id="c3-beacon-title">C2 BEACON DETECTED</div>
+    <div id="c3-beacon-host-wrap">
+      <span id="c3-beacon-host-label">Host</span>
+      <span id="c3-beacon-host">—</span>
+    </div>
+    <!-- Score row: 4 signals -->
+    <div id="c3-beacon-score-row">
+      <div class="c3-bscore-item">
+        <div class="c3-bscore-val" id="c3-bscore-total" style="color:var(--danger)">—</div>
+        <div class="c3-bscore-lbl">Risk Score</div>
+      </div>
+      <div class="c3-bscore-sep"></div>
+      <div class="c3-bscore-item">
+        <div class="c3-bscore-val" id="c3-bscore-anomaly" style="color:var(--warn)">—</div>
+        <div class="c3-bscore-lbl">Anomaly (IF)</div>
+      </div>
+      <div class="c3-bscore-item">
+        <div class="c3-bscore-val" id="c3-bscore-rf" style="color:var(--warn)">—</div>
+        <div class="c3-bscore-lbl">RF Classifier</div>
+      </div>
+      <div class="c3-bscore-item">
+        <div class="c3-bscore-val" id="c3-bscore-heuristic" style="color:var(--c3)">—</div>
+        <div class="c3-bscore-lbl">Heuristic</div>
+      </div>
+    </div>
+    <!-- Verdict badge -->
+    <div id="c3-beacon-verdict-row">
+      <span id="c3-beacon-verdict-badge">BEACON</span>
+      <span id="c3-beacon-block-badge" style="display:none">AUTO-BLOCK</span>
+    </div>
+    <!-- Countdown -->
+    <div id="c3-beacon-countdown" style="display:none">5</div>
+    <div id="c3-beacon-msg">Monitoring continues</div>
+    <div id="c3-beacon-bar"><div id="c3-beacon-bar-fill"></div></div>
+    <div id="c3-beacon-actions">
+      <button type="button" id="c3-beacon-dismiss" onclick="dismissBeaconOverlay()">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="pw-toast">
+  <span class="toast-dot">&#9679;</span>
+  <span id="pw-toast-msg">Session started &mdash; monitoring active</span>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  Constants & state
+// ══════════════════════════════════════════════════════════════
+const API = 'http://127.0.0.1:8001';
+let alerts = [], timeline = [];
+let c3Alerts = [], c3Hosts = [], c3Requests = [], c3Status = {};
+let ct = 0, cp = 0, cs = 0, ck = 0;
+let backendUp = false;
+// Session boundary: alerts before this timestamp are "previous session"
+const SESSION_START_TS = Date.now();
+let _showPrevAlerts = false;
+
+// ══════════════════════════════════════════════════════════════
+//  Backend health + auto-start Playwright
+// ══════════════════════════════════════════════════════════════
+let _autoStarted = false;
+
+async function checkBackend() {
+  try {
+    const r = await fetch(API + '/health', { signal: AbortSignal.timeout(2000) });
+    if (r.ok) {
+      setOnline(true);
+      if (!_autoStarted) { _autoStarted = true; startPwSession(); loadSettings(); refreshC3(); }
+      return true;
+    }
+  } catch {}
+  setOnline(false); return false;
+}
+
+function setOnline(on) {
+  backendUp = on;
+  const pill = document.getElementById('online-pill');
+  pill.classList.remove('on', 'off'); pill.classList.add(on ? 'on' : 'off');
+  document.getElementById('online-txt').textContent = on ? 'Online' : 'Offline';
+}
+
+checkBackend();
+setInterval(checkBackend, 6000);
+
+// ══════════════════════════════════════════════════════════════
+//  Playwright session
+// ══════════════════════════════════════════════════════════════
+let pwWs = null, pwWsRetry = null;
+
+async function startPwSession() {
+  try {
+    const r = await fetch(API + '/session/start', { method: 'POST' });
+    const d = await r.json();
+    if (d.status === 'starting' || d.status === 'started' || d.status === 'already_running') {
+      connectPwWs();
+    }
+  } catch {
+    try {
+      const sd = await (await fetch(API + '/session/status')).json();
+      if (sd.running) connectPwWs();
+    } catch {}
+  }
+}
+
+function connectPwWs() {
+  if (pwWs && pwWs.readyState === WebSocket.OPEN) return;
+  closePwWs();
+  pwWs = new WebSocket('ws://127.0.0.1:8001/ws/events');
+
+  pwWs.onmessage = (evt) => {
+    let msg; try { msg = JSON.parse(evt.data); } catch { return; }
+    if (msg.type === 'analysis' && msg.data) {
+      ingestResult(msg.data);
+    } else if (msg.type === 'c3_status' && msg.data) {
+      ingestC3Status(msg.data);
+    } else if (msg.type === 'c3_alert' && msg.data) {
+      ingestC3Alert(msg.data);
+    } else if (msg.type === 'url_change') {
+      updateMonUrl(msg.url || '');
+    } else if (msg.type === 'session_started') {
+      updateMonUrl(msg.url || 'Ready');
+      setMonActive(true);
+      showToast('Session started \u2014 monitoring active');
+    } else if (msg.type === 'session_stopped') {
+      setMonActive(false); updateMonUrl('Session stopped');
+    } else if (msg.type === 'session_error') {
+      setMonActive(false); showToast('Session error \u2014 check backend logs');
+    } else if (msg.type === 'init') {
+      if (msg.session_running && msg.url) { updateMonUrl(msg.url); setMonActive(true); }
+    }
+  };
+  pwWs.onerror = () => {};
+  pwWs.onclose = () => { pwWsRetry = setTimeout(connectPwWs, 3000); };
+}
+
+function closePwWs() {
+  clearTimeout(pwWsRetry);
+  if (pwWs) { try { pwWs.close(); } catch {} pwWs = null; }
+}
+
+function updateMonUrl(url) {
+  document.getElementById('mon-url').textContent = url || 'Idle';
+}
+
+function setMonActive(on) {
+  document.getElementById('mon-dot').classList.toggle('idle', !on);
+}
+
+// ── Navigation input ──────────────────────────────────────────
+async function navigatePw(url) {
+  if (!url) return;
+  if (!url.match(/^https?:\/\//)) {
+    url = url.includes('.') ? 'https://' + url
+      : 'https://www.google.com/search?q=' + encodeURIComponent(url);
+  }
+  updateMonUrl(url);
+  try {
+    await fetch(API + '/session/navigate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+  } catch {}
+}
+
+document.getElementById('nav-input').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const v = document.getElementById('nav-input').value.trim();
+  if (!v) return;
+  document.getElementById('nav-input').value = '';
+  navigatePw(v);
+});
+document.getElementById('nav-go').addEventListener('click', () => {
+  const v = document.getElementById('nav-input').value.trim();
+  if (!v) return;
+  document.getElementById('nav-input').value = '';
+  navigatePw(v);
+});
+
+// ══════════════════════════════════════════════════════════════
+//  Ingest & display
+// ══════════════════════════════════════════════════════════════
+function ingestResult(r) {
+  ct++; if (r.verdict === 'PHISHING') cp++; else if (r.verdict === 'SUSPICIOUS') cs++; else ck++;
+  document.getElementById('s-total').textContent = ct;
+  document.getElementById('s-phish').textContent = cp;
+  document.getElementById('s-sus').textContent   = cs;
+  document.getElementById('s-safe').textContent  = ck;
+  document.querySelector('[data-panel="c2"]').classList.add('has-data');
+
+  alerts.unshift(r); if (alerts.length > 200) alerts.pop();
+  timeline.unshift(r);
+
+  renderLive(r);
+  renderAlerts();
+  renderTimeline();
+}
+
+async function refreshC3() {
+  if (!backendUp) return;
+  try {
+    c3Status = await (await fetch(API + '/c3/status')).json();
+    c3Hosts = await (await fetch(API + '/c3/hosts')).json();
+    c3Alerts = await (await fetch(API + '/c3/alerts')).json();
+    c3Requests = await (await fetch(API + '/c3/requests?limit=80')).json();
+    renderC3();
+  } catch {}
+}
+
+function ingestC3Status(s) {
+  if (!s) return;
+  // Merge WebSocket status payload into local state — no API calls needed here.
+  // The WS payload already contains requests_captured, hosts_monitored, alerts_count,
+  // blocked_count, collection_active, model_type, etc.
+  c3Status = { ...c3Status, ...s };
+  renderC3Stats();
+  renderC3Collection();
+}
+
+function ingestC3Alert(a) {
+  c3Alerts.unshift(a);
+  if (c3Alerts.length > 100) c3Alerts.pop();
+  document.querySelector('[data-panel="c3"]').classList.add('has-data');
+  renderC3Alerts();
+  renderC3Stats();
+  if (String(a.verdict || '').toUpperCase() === 'BEACON') {
+    playBeaconBeeps();
+    showBeaconOverlay(a);
+    // Refresh hosts + status after a short delay so the backend has time to
+    // finish block_host(); this updates the BLK badge and blocked_count counter.
+    setTimeout(refreshC3, 600);
+  }
+}
+
+function renderC3() {
+  renderC3Stats();
+  renderC3Requests();
+  renderC3Alerts();
+  renderC3Hosts();
+  renderC3Collection();
+}
+
+function renderC3Stats() {
+  setText('c3-reqs', c3Status.requests_captured || 0);
+  setText('c3-hosts', c3Status.hosts_monitored || 0);
+  setText('c3-alerts', c3Status.alerts_count || c3Alerts.length || 0);
+  setText('c3-blocked', c3Status.blocked_count || 0);
+  const badge = document.getElementById('c3-status-badge');
+  if (badge) {
+    const label = c3ModelLabel();
+    badge.textContent = label ? `Active (${label})` : 'Active';
+  }
+  const modelEl = document.getElementById('c3-model-info');
+  if (modelEl) {
+    const raw = String(c3Status.model_type || '').toLowerCase();
+    if (raw.includes('isolation') && c3Status.browser_model_loaded) {
+      modelEl.innerHTML = '<span style="color:var(--c3);font-weight:700">IF</span> <span style="color:var(--t3);font-size:9px">+</span> <span style="color:var(--c3);font-weight:700">RF</span> <span style="color:var(--t3);font-size:9px">+ Heuristic</span>';
+    } else if (raw.includes('isolation')) {
+      modelEl.innerHTML = '<span style="color:var(--c3);font-weight:700">IF</span> <span style="color:var(--t3);font-size:9px">+ Heuristic</span>';
+    } else if (raw.includes('heuristic')) {
+      modelEl.innerHTML = '<span style="color:var(--warn);font-weight:700">Heuristic</span>';
+    } else {
+      modelEl.innerHTML = '<span style="color:var(--t3)">—</span>';
+    }
+    modelEl.style.fontSize = '';
+  }
+}
+
+function renderC3Requests() {
+  const body = document.getElementById('c3-request-rows');
+  if (!body) return;
+  document.getElementById('c3-empty-requests').style.display = c3Requests.length ? 'none' : 'flex';
+  body.innerHTML = c3Requests.map(r => {
+    const h = c3HostResult(r.host);
+    const score = Number(h.score || 0);
+    const pct = Math.round(score * 100);
+    const cls = c3RiskClass(score);
+    const feats = h.features || {};
+    const iatCV = feats.iat_cv !== undefined ? Number(feats.iat_cv).toFixed(3) : '—';
+    const iatCVColor = feats.iat_cv !== undefined
+      ? (Number(feats.iat_cv) < 0.05 ? 'var(--danger)' : Number(feats.iat_cv) < 0.3 ? 'var(--warn)' : 'var(--safe)')
+      : 'var(--t3)';
+    const ctxLabel = r.is_background_tab ? '<span style="color:var(--t3)">Background</span>' : '<span style="color:var(--safe)">Active tab</span>';
+    const userLabel = r.user_was_active ? '<span style="color:var(--safe)">Active</span>' : '<span style="color:var(--t3)">Idle</span>';
+    return `<tr>
+      <td class="c3-host" title="${esc(r.url || r.host || '')}">${esc(r.host || '')}</td>
+      <td style="font-family:monospace;font-size:10px">${esc(r.method || '')}</td>
+      <td style="font-size:10px;color:var(--t2)">${fmtBytes(r.size_bytes)}</td>
+      <td style="font-size:10px">${ctxLabel}</td>
+      <td style="font-size:10px">${userLabel}</td>
+      <td style="font-family:monospace;font-size:10px;color:${iatCVColor}">${iatCV}</td>
+      <td><span class="c3-pill ${cls}">${pct}%</span></td>
+      <td style="font-size:10px;color:var(--t3)">${fmtTime(r.timestamp_iso)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderC3Alerts() {
+  const pane = document.getElementById('c3-pane-c3alerts');
+  if (!pane) return;
+  // Remove previous renders
+  pane.querySelectorAll('.c3-card, .c3-session-divider, .c3-prev-section').forEach(e => e.remove());
+
+  const current = c3Alerts.filter(a => _alertTs(a) >= SESSION_START_TS);
+  const previous = c3Alerts.filter(a => _alertTs(a) < SESSION_START_TS);
+
+  const emptyEl = document.getElementById('c3-empty-alerts');
+  emptyEl.style.display = (current.length === 0 && previous.length === 0) ? 'flex' : 'none';
+
+  if (current.length > 0) {
+    const divider = document.createElement('div');
+    divider.className = 'c3-session-divider';
+    divider.innerHTML = `<div class="c3-session-divider-line"></div>
+      <span class="c3-session-divider-label">This Session</span>
+      <div class="c3-session-divider-line"></div>`;
+    pane.appendChild(divider);
+    current.forEach(a => pane.appendChild(makeC3AlertCard(a)));
+  }
+
+  if (previous.length > 0) {
+    const prevDivider = document.createElement('div');
+    prevDivider.className = 'c3-session-divider';
+    prevDivider.innerHTML = `<div class="c3-session-divider-line"></div>
+      <span class="c3-session-divider-label">Previous Sessions (${previous.length})</span>
+      <button class="c3-prev-toggle" onclick="togglePrevAlerts(this)">${_showPrevAlerts ? 'Hide' : 'Show'}</button>
+      <div class="c3-session-divider-line"></div>`;
+    pane.appendChild(prevDivider);
+    if (_showPrevAlerts) {
+      previous.forEach(a => pane.appendChild(makeC3AlertCard(a)));
+    }
+  }
+}
+
+function togglePrevAlerts(btn) {
+  _showPrevAlerts = !_showPrevAlerts;
+  btn.textContent = _showPrevAlerts ? 'Hide' : 'Show';
+  renderC3Alerts();
+}
+
+function _alertTs(a) {
+  if (!a) return 0;
+  const ts = a.timestamp || a.ts || '';
+  if (!ts) return 0;
+  const d = new Date(ts);
+  return Number.isFinite(d.getTime()) ? d.getTime() : 0;
+}
+
+function makeC3AlertCard(a) {
+  const score = Number(a.score || 0);
+  const scorePct = Math.round(score * 100);
+  const vc = String(a.verdict || 'BEACON').toLowerCase();
+  const feats = a.features || {};
+  const signals = a.signal_breakdown || a.signals || {};
+  const signalDetail = a.signal_detail || {};
+  const isBlocked = score >= 0.8;
+  const scoreColor = vc === 'beacon' ? 'var(--danger)' : vc === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
+
+  // Compact signal chips: show value with appropriate color per signal type
+  const anomalyRaw = signals.anomaly != null ? Number(signals.anomaly) : null;
+  const rfRaw = signals.browser_anomaly != null ? Number(signals.browser_anomaly) : null;
+  const heuristicRaw = signals.heuristic != null ? Number(signals.heuristic) : null;
+  const reputationRaw = signals.reputation != null ? Number(signals.reputation) : null;
+  const chipHtml = [
+    { label: 'Anomaly', val: anomalyRaw, color: c3SignalColor('anomaly', anomalyRaw) },
+    { label: 'RF', val: rfRaw, color: c3SignalColor('browser_anomaly', rfRaw) },
+    { label: 'Heuristic', val: heuristicRaw, color: c3SignalColor('heuristic', heuristicRaw) },
+    { label: 'Reputation', val: reputationRaw, color: c3SignalColor('reputation', reputationRaw) },
+  ].map(s => `<span class="c3-sig-chip">
+    <span class="c3-sig-chip-label">${s.label}</span>
+    <span class="c3-sig-chip-val" style="color:${s.color}">${s.val != null ? Math.round(s.val * 100) + '%' : 'n/a'}</span>
+  </span>`).join('<span style="color:var(--b3);font-size:10px">|</span>');
+
+  const detailId = 'c3card-' + Math.random().toString(36).slice(2);
+  const card = document.createElement('div');
+  card.className = `c3-card ${vc}`;
+  card.innerHTML = `
+    <div class="c3-card-top">
+      <span class="c3-pill ${vc}">${esc(a.verdict || 'BEACON')}</span>
+      <span class="c3-card-title" title="${esc(a.host || '')}">${esc(a.host || '')}</span>
+      ${isBlocked ? '<span class="c3-blocked-badge">BLOCKED</span>' : ''}
+      <span class="c3-mitre-tag" title="MITRE ATT&amp;CK T1071.001">T1071.001</span>
+      <span class="c3-card-score" style="color:${scoreColor}">${scorePct}%</span>
+      <span class="atime">${fmtTime(a.timestamp)}</span>
+    </div>
+    <div class="c3-card-signals-row">
+      ${chipHtml}
+      <button class="c3-card-toggle" onclick="toggleC3CardDetail('${detailId}', this)">Details &#9660;</button>
+    </div>
+    <div class="c3-card-detail" id="${detailId}">
+      ${c3SignalBarsDetailed(signals, signalDetail)}
+      ${c3FeatureBarsSection(feats)}
+      ${a.detail ? `<div class="c3-detail-text">${esc(a.detail)}</div>` : ''}
+    </div>`;
+  return card;
+}
+
+function toggleC3CardDetail(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isOpen = el.classList.toggle('open');
+  btn.innerHTML = isOpen ? 'Close &#9650;' : 'Details &#9660;';
+}
+
+function renderC3Hosts() {
+  const body = document.getElementById('c3-host-rows');
+  if (!body) return;
+  document.getElementById('c3-empty-hosts').style.display = c3Hosts.length ? 'none' : 'flex';
+  body.innerHTML = c3Hosts.map(h => {
+    const score = Number(h.score || 0);
+    const scorePct = Math.round(score * 100);
+    const verdict = String(h.verdict || 'SAFE');
+    const vc = verdict.toLowerCase();
+    const scoreColor = c3RiskColor(score);
+    const signals = h.signal_breakdown || {};
+    const anomalyPct = signals.anomaly != null ? Math.round(Number(signals.anomaly) * 100) : null;
+    const rfPct = signals.browser_anomaly != null ? Math.round(Number(signals.browser_anomaly) * 100) : null;
+    const heuristicPct = signals.heuristic != null ? Math.round(Number(signals.heuristic) * 100) : null;
+    const blocked = h.blocked ? '<span class="c3-blocked-badge" style="font-size:8px;padding:1px 5px">BLK</span>' : '';
+    return `<tr>
+      <td class="c3-host" title="${esc(h.host || '')}">
+        <button type="button" class="c3-row-btn" data-host="${esc(h.host || '')}">${esc(h.host || '')}</button>
+        ${blocked}
+      </td>
+      <td style="font-size:10px">${h.request_count || 0}</td>
+      <td>
+        <div class="c3-score-cell">
+          <div class="c3-score-mini-bar"><div class="c3-score-mini-fill" style="width:${scorePct}%;background:${scoreColor}"></div></div>
+          <span class="c3-score-pct" style="color:${scoreColor}">${scorePct}%</span>
+        </div>
+      </td>
+      <td><span class="c3-pill ${vc}">${esc(verdict)}</span></td>
+      <td style="font-size:10px;color:${anomalyPct != null ? c3RiskColor(anomalyPct/100) : 'var(--t3)'}">${anomalyPct != null ? anomalyPct + '%' : '—'}</td>
+      <td style="font-size:10px;color:${rfPct != null ? c3SignalColor('browser_anomaly', rfPct/100) : 'var(--t3)'}">${rfPct != null ? rfPct + '%' : '—'}</td>
+      <td style="font-size:10px;color:${heuristicPct != null ? c3RiskColor(heuristicPct/100) : 'var(--t3)'}">${heuristicPct != null ? heuristicPct + '%' : '—'}</td>
+      <td style="font-size:9.5px;color:var(--t3);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(h.detail || '')}">${esc(h.detail || '')}</td>
+    </tr>`;
+  }).join('');
+  body.querySelectorAll('.c3-row-btn').forEach(btn => {
+    btn.addEventListener('click', () => toggleC3HostDetail(btn.dataset.host || '', btn.closest('tr')));
+  });
+}
+
+function renderC3Collection() {
+  renderLabBlockedHosts();
+  renderLabLogCount();
+}
+
+function renderLabBlockedHosts() {
+  const list = document.getElementById('lab-blocked-list');
+  const badge = document.getElementById('lab-blocked-count');
+  if (!list) return;
+  const blocked = c3Status.blocked_hosts || [];
+  if (badge) badge.textContent = blocked.length;
+  if (blocked.length === 0) {
+    list.innerHTML = '<div class="lab-blocked-empty">No hosts blocked &mdash; system is monitoring</div>';
+    return;
+  }
+  list.innerHTML = blocked.map(h => `
+    <div class="lab-blocked-row">
+      <span class="lab-blocked-host" title="${esc(h)}">${esc(h)}</span>
+      <button class="lab-btn-unblock" onclick="unblockHost('${esc(h)}')">Unblock</button>
+    </div>`).join('');
+}
+
+function renderLabLogCount() {
+  const el = document.getElementById('lab-log-count');
+  if (!el) return;
+  const total = c3Alerts.length;
+  el.innerHTML = `<span class="lab-export-num">${total}</span><span class="lab-export-lbl">alerts recorded this session</span>`;
+}
+
+async function unblockHost(host) {
+  try {
+    c3Status = await (await fetch(API + '/c3/hosts/' + encodeURIComponent(host) + '/unblock', { method: 'POST' })).json();
+    renderC3Collection();
+    showToast('Unblocked: ' + host);
+  } catch {}
+}
+
+function downloadC3Log() {
+  const cutoff = Date.now() - 86400000;
+  const recent = c3Alerts.filter(a => {
+    const ts = a.timestamp || a.ts || '';
+    if (!ts) return true;
+    const d = new Date(ts);
+    return Number.isFinite(d.getTime()) ? d.getTime() >= cutoff : true;
+  });
+  const blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), alerts: recent }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'c3_detection_log.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('Detection log downloaded (' + recent.length + ' alerts)');
+}
+
+function openC3BeaconTest() {
+  const beaconUrl = API + '/c3/test/beacon-page?interval=5000&method=POST';
+  navigatePw(beaconUrl);
+  showToast('Beacon test page loaded in the monitored browser session.');
+}
+
+async function toggleC3HostDetail(host, row) {
+  if (!host || !row) return;
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains('c3-detail-row')) {
+    next.remove();
+    return;
+  }
+  document.querySelectorAll('.c3-detail-row').forEach(el => el.remove());
+  try {
+    const detail = await (await fetch(API + '/c3/hosts/' + encodeURIComponent(host))).json();
+    const tr = document.createElement('tr');
+    tr.className = 'c3-detail-row';
+    tr.innerHTML = `<td colspan="8">
+      <div class="c3-detail open" style="padding:10px 12px">
+        ${c3SignalBars(detail.signal_breakdown || detail.signals || {}, detail.signal_detail || {})}
+        ${c3FeatureBarsSection(detail.features || {})}
+        ${(detail.events || []).length ? `<div class="c3-feature-title" style="margin-top:10px">Recent Requests (last ${Math.min(8,(detail.events||[]).length)})</div>
+        <div class="c3-event-list">${(detail.events || []).slice(-8).reverse().map(ev => `
+          <div class="c3-event">
+            <span style="font-family:monospace;font-size:9px">${esc(ev.method || '')}</span>
+            <span class="c3-host" title="${esc(ev.url || '')}">${esc(ev.url || '')}</span>
+            <span style="color:var(--t2)">${fmtBytes(ev.size_bytes)}</span>
+            <span style="color:var(--t3)">${fmtTime(ev.timestamp_iso)}</span>
+          </div>
+        `).join('')}</div>` : ''}
+      </div>
+    </td>`;
+    row.insertAdjacentElement('afterend', tr);
+  } catch {}
+}
+
+function c3HostResult(host) {
+  return c3Hosts.find(h => String(h.host || '') === String(host || '')) || {};
+}
+
+function c3RiskClass(score) {
+  const value = Number(score || 0);
+  return value >= 0.6 ? 'beacon' : value >= 0.3 ? 'suspicious' : 'safe';
+}
+
+function c3RiskColor(score) {
+  const cls = c3RiskClass(score);
+  return cls === 'beacon' ? 'var(--danger)' : cls === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
+}
+
+function c3ModelLabel() {
+  const raw = String(c3Status.model_type || '').toLowerCase();
+  if (raw.includes('isolation') && c3Status.browser_model_loaded) return 'IF+RF';
+  if (raw.includes('isolation')) return 'IF';
+  if (raw.includes('heuristic')) return 'heuristic';
+  if (raw) return raw;
+  if (c3Status.model_loaded) return 'model';
+  return '';
+}
+
+function c3SignalBars(signals, detail) {
+  return c3SignalBarsDetailed(signals || {}, detail || {});
+}
+
+// Per-signal color thresholds that reflect what each signal *alone* means.
+// Anomaly: IF raw score; only alarming above 0.7 (strong timing regularity).
+// Heuristic: rule-based; flags above 0.5 are meaningful.
+// Reputation: external TI; anything above 0.3 warrants concern.
+function c3SignalColor(key, value) {
+  if (value == null) return 'var(--t3)';
+  const v = Number(value);
+  if (key === 'anomaly') {
+    return v >= 0.70 ? 'var(--danger)' : v >= 0.45 ? 'var(--warn)' : 'var(--safe)';
+  }
+  if (key === 'browser_anomaly') {
+    // RF classifier: probability of bot class (threshold=0.49); >= 0.70 = high confidence bot
+    return v >= 0.70 ? 'var(--danger)' : v >= 0.49 ? 'var(--warn)' : 'var(--safe)';
+  }
+  if (key === 'heuristic') {
+    return v >= 0.50 ? 'var(--danger)' : v >= 0.25 ? 'var(--warn)' : 'var(--safe)';
+  }
+  if (key === 'reputation') {
+    return v >= 0.60 ? 'var(--danger)' : v >= 0.30 ? 'var(--warn)' : 'var(--safe)';
+  }
+  return c3RiskColor(v);
+}
+
+function c3SignalBarsDetailed(signals, detail) {
+  const items = [
+    { key: 'anomaly',         label: 'Anomaly (IF)',   subtitle: 'Isolation Forest' },
+    { key: 'browser_anomaly', label: 'RF Classifier',  subtitle: 'HTTP Behavior' },
+    { key: 'reputation',      label: 'Reputation',     subtitle: 'Threat Intel' },
+    { key: 'heuristic',       label: 'Heuristic',      subtitle: 'Rule Engine' },
+  ];
+  const rows = items.map(item => {
+    const raw = signals && Object.prototype.hasOwnProperty.call(signals, item.key)
+      ? signals[item.key]
+      : null;
+    const known = raw !== null && raw !== undefined && Number.isFinite(Number(raw));
+    const value = known ? Number(raw) : null;
+    const pct = known ? Math.round(value * 100) : 0;
+    const color = known ? c3SignalColor(item.key, value) : 'var(--b1)';
+    const label = known ? `${pct}%` : 'n/a';
+    const detailText = detail && detail[item.key] ? esc(String(detail[item.key]).replace(/^[^:]+:\s*/, '')) : '';
+    return `<div class="c3-sig">
+      <div class="c3-sig-label">${item.label}</div>
+      <div class="c3-sig-val" style="color:${known ? color : 'var(--t3)'}">${label}</div>
+      <div class="c3-sig-bar"><div class="c3-sig-fill" style="width:${pct}%;background:${color}"></div></div>
+      ${detailText ? `<div class="c3-sig-detail">${detailText}</div>` : ''}
+    </div>`;
+  });
+  if (!rows.length) return '';
+  return `<div class="c3-signals">${rows.join('')}</div>`;
+}
+
+function c3FeatureBarsSection(features) {
+  const bars = c3FeatureBars(features);
+  if (!bars) return '';
+  return `<div class="c3-feature-section">
+    <div class="c3-feature-title">Behavioural Signals</div>
+    ${bars}
+  </div>`;
+}
+
+function c3FeatureBars(features) {
+  // Feature metadata: human name, group label, value formatter, and plain-English interpretation.
+  const META = {
+    iat_mean_ms: {
+      name: 'Request interval',
+      group: 'Timing',
+      fmt: v => v < 1000 ? Math.round(v) + ' ms' : (v / 1000).toFixed(1) + ' s',
+      hint: v => v > 0 && v < 10000
+        ? 'Requests arrive every ' + (v < 1000 ? Math.round(v) + ' ms' : (v / 1000).toFixed(1) + ' s') + ' — very short intervals suggest automated polling'
+        : v === 0 ? 'No timing data yet' : 'Intervals are ' + (v / 1000).toFixed(0) + ' s apart — typical of normal background requests'
+    },
+    iat_cv: {
+      name: 'Timing regularity',
+      group: 'Timing',
+      fmt: v => (v * 100).toFixed(0) + '% variability',
+      hint: v => v < 0.05 ? '⚠ Near-perfect regularity — requests arrive like clockwork, a strong beacon indicator'
+        : v < 0.3 ? 'Moderately regular timing — worth monitoring'
+        : 'Variable timing — consistent with normal human browsing'
+    },
+    iat_bowley_skewness: {
+      name: 'Timing skew',
+      group: 'Timing',
+      fmt: v => v.toFixed(3),
+      hint: v => Math.abs(v) < 0.1 ? 'Symmetric timing distribution — typical of metronomic beacons'
+        : v > 0.4 ? 'Right-skewed: most intervals are short with occasional long gaps — human-like'
+        : 'Slightly skewed timing — borderline pattern'
+    },
+    iat_mad_ms: {
+      name: 'Timing consistency',
+      group: 'Timing',
+      fmt: v => v < 1000 ? Math.round(v) + ' ms' : (v / 1000).toFixed(1) + ' s',
+      hint: v => v < 100 ? '⚠ Requests deviate by only ' + Math.round(v) + ' ms from their average — highly consistent, beacon-like'
+        : v < 1000 ? 'Moderate jitter — could be either automated or human'
+        : 'High jitter — suggests human-driven, on-demand requests'
+    },
+    requests_per_hour: {
+      name: 'Request rate',
+      group: 'Volume',
+      fmt: v => Math.round(v) + '/hr',
+      hint: v => v > 500 ? '⚠ Very high rate: ' + Math.round(v) + ' requests/hr — well above normal browsing'
+        : v > 120 ? 'Elevated rate — frequent polling may indicate automation'
+        : 'Normal request rate for a visited site'
+    },
+    payload_size_mean: {
+      name: 'Average payload',
+      group: 'Volume',
+      fmt: v => fmtBytes(v),
+      hint: v => v > 0 && v < 1000 ? '⚠ Very small payloads (' + fmtBytes(v) + ') — typical of beacon pings carrying minimal data'
+        : v === 0 ? 'No payload data (GET requests or no body)'
+        : 'Payload size is ' + fmtBytes(v) + ' — within normal range'
+    },
+    payload_size_std: {
+      name: 'Payload variation',
+      group: 'Volume',
+      fmt: v => '±' + fmtBytes(v),
+      hint: v => v < 250 ? '⚠ Very consistent payload sizes — beacons typically send fixed-size packets'
+        : v < 1500 ? 'Moderate size variation'
+        : 'High payload variation — typical of normal content requests'
+    },
+    http_post_ratio: {
+      name: 'POST ratio',
+      group: 'Protocol',
+      fmt: v => Math.round(v * 100) + '% POST',
+      hint: v => v > 0.7 ? '⚠ Mostly POST requests — beacons often use POST to submit data covertly'
+        : v > 0.3 ? 'Mixed GET/POST traffic'
+        : 'Mostly GET requests — typical of resource loading'
+    },
+    avg_idle_time_ms: {
+      name: 'User idle time',
+      group: 'Browser Context',
+      fmt: v => v < 60000 ? Math.round(v / 1000) + ' s idle' : Math.round(v / 60000) + ' min idle',
+      hint: v => v > 1800000 ? '⚠ Requests fired after ' + Math.round(v / 60000) + ' min of user inactivity — strong beacon indicator'
+        : v > 300000 ? 'Requests fire during extended idle periods — worth monitoring'
+        : 'Requests fire while user is active or recently active — normal'
+    },
+    user_active_ratio: {
+      name: 'User was active',
+      group: 'Browser Context',
+      fmt: v => Math.round(v * 100) + '% of requests',
+      hint: v => v < 0.05 ? '⚠ User was inactive for nearly all requests — strong sign of background automation'
+        : v < 0.4 ? 'Low user activity during requests — suspicious pattern'
+        : 'User was active during most requests — consistent with normal browsing'
+    },
+    background_tab_ratio: {
+      name: 'Background tab',
+      group: 'Browser Context',
+      fmt: v => Math.round(v * 100) + '% in background',
+      hint: v => v > 0.8 ? '⚠ Nearly all requests fired from a background tab — classic C2 beacon behaviour'
+        : v > 0.5 ? 'Majority of requests from hidden tab — elevated suspicion'
+        : 'Most requests fired from active tab — normal'
+    },
+    extension_origin_ratio: {
+      name: 'Extension origin',
+      group: 'Browser Context',
+      fmt: v => Math.round(v * 100) + '% from extension',
+      hint: v => v > 0.5 ? '⚠ Requests initiated by a browser extension — may indicate malicious extension C2'
+        : v > 0 ? 'Some requests from extension context — monitor which extension'
+        : 'No extension-originated requests'
+    },
+    url_path_entropy: {
+      name: 'URL diversity',
+      group: 'Protocol',
+      fmt: v => v.toFixed(2) + ' bits',
+      hint: v => v <= 0.5 ? '⚠ Always hitting the same URL path — single-endpoint polling is a beacon hallmark'
+        : v <= 1.5 ? 'Limited URL diversity — narrow set of endpoints'
+        : v <= 3.0 ? 'Normal URL variety — consistent with regular browsing'
+        : v <= 4.5 ? 'High URL diversity — natural browsing pattern'
+        : '⚠ Very high URL randomness — may indicate random-path C2 obfuscation'
+    },
+    request_burst_count: {
+      name: 'Traffic bursts',
+      group: 'Volume',
+      fmt: v => v + (v === 1 ? ' burst' : ' bursts'),
+      hint: v => v >= 3 ? '⚠ ' + v + ' request bursts detected — repeated rapid-fire groups suggest automated triggering'
+        : v > 0 ? v + ' burst detected — occasional bursts are normal'
+        : 'No burst patterns — traffic is evenly paced'
+    },
+  };
+
+  const keys = Object.keys(META).filter(k => Object.prototype.hasOwnProperty.call(features || {}, k));
+  if (!keys.length) return '';
+
+  // Group features by category
+  const groups = {};
+  keys.forEach(k => {
+    const g = META[k].group;
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(k);
+  });
+
+  const groupOrder = ['Timing', 'Volume', 'Protocol', 'Browser Context'];
+  let html = '';
+  groupOrder.forEach(g => {
+    if (!groups[g]) return;
+    html += `<div class="c3-feat-group">
+      <div class="c3-feat-group-label">${g}</div>
+      <div class="c3-feat-group-rows">${groups[g].map(k => {
+        const meta = META[k];
+        const value = Number((features || {})[k] || 0);
+        const risk = c3FeatureRisk(k, value);
+        const color = c3RiskColor(risk / 100);
+        const hint = meta.hint(value);
+        const formatted = meta.fmt(value);
+        const isWarning = risk >= 65;
+        return `<div class="c3-feat-row ${isWarning ? 'c3-feat-warn' : ''}">
+          <div class="c3-feat-name-col">
+            <span class="c3-feat-name">${meta.name}</span>
+            <span class="c3-feat-hint">${hint}</span>
+          </div>
+          <div class="c3-feat-bar-col">
+            <div class="c3-bar-wrap"><div class="c3-bar-fill" style="width:${risk}%;background:${color}"></div></div>
+          </div>
+          <span class="c3-feat-val" style="color:${isWarning ? color : 'var(--t2)'}">${formatted}</span>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  });
+  return `<div class="c3-feat-grid">${html}</div>`;
+}
+
+function c3FeatureLabel(name) {
+  return ({
+    iat_mean_ms: 'IAT mean',
+    iat_cv: 'IAT CV',
+    iat_bowley_skewness: 'IAT skew',
+    iat_mad_ms: 'IAT MAD',
+    requests_per_hour: 'Req/hour',
+    payload_size_mean: 'Size mean',
+    payload_size_std: 'Size std',
+    http_post_ratio: 'POST ratio',
+    avg_idle_time_ms: 'Idle avg',
+    user_active_ratio: 'User active',
+    background_tab_ratio: 'BG tab',
+    extension_origin_ratio: 'Extension',
+    url_path_entropy: 'Path entropy',
+    request_burst_count: 'Bursts'
+  })[name] || name;
+}
+
+function c3FeatureRisk(name, value) {
+  if (name === 'iat_cv') return value <= 0.05 ? 100 : value <= 0.3 ? 70 : value <= 1.5 ? 25 : 10;
+  if (name === 'user_active_ratio') return Math.round((1 - clamp01(value)) * 100);
+  if (name === 'background_tab_ratio' || name === 'extension_origin_ratio' || name === 'http_post_ratio') return Math.round(clamp01(value) * 100);
+  if (name === 'url_path_entropy') {
+    // U-shaped: low entropy (same endpoint) and very high entropy (encoded exfil) are both risky;
+    // normal varied browsing (1.5–3.0) has the lowest risk.
+    if (value <= 0.5) return 85;
+    if (value <= 1.5) return 45;
+    if (value <= 3.0) return 15;
+    if (value <= 4.5) return 30;
+    return 70;
+  }
+  if (name === 'request_burst_count') return Math.min(100, Math.round(value * 35));
+  // 2h idle = 100%, 30min idle ≈ 25%, 5min idle ≈ 4% — avoids alarming on passive reading
+  if (name === 'avg_idle_time_ms') return Math.min(100, Math.round(value / 72000));
+  if (name === 'payload_size_mean') return value > 0 && value < 1000 ? 70 : value < 5000 ? 35 : 15;
+  if (name === 'payload_size_std') return value < 250 ? 65 : value < 1500 ? 30 : 15;
+  return 20;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Live Analysis pane
+// ══════════════════════════════════════════════════════════════
+function renderLive(r) {
+  document.getElementById('live-empty').style.display = 'none';
+  document.getElementById('live-current').style.display = 'block';
+  const vc  = r.verdict.toLowerCase();
+  const col = vc === 'phishing' ? 'var(--danger)' : vc === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
+  const pct = Math.round(r.risk_score);
+  document.getElementById('live-url').textContent = r.url;
+  const se = document.getElementById('live-score');
+  se.textContent = pct; se.style.color = col;
+  const ve = document.getElementById('live-verdict');
+  ve.textContent = r.verdict; ve.className = 'live-verdict ' + vc;
+  document.getElementById('live-layers').innerHTML = (r.layers || []).map(l => {
+    const p  = Math.round(l.score * 100);
+    const lc = p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)';
+    return `<div class="live-lrow">
+      <span class="live-lname">${l.name || l.id}</span>
+      <div class="live-bar-w"><div class="live-bar" style="width:${p}%;background:${lc}"></div></div>
+      <span class="live-val" style="color:${lc}">${p}%</span>
+    </div>
+    <div class="live-det">${l.detail || ''}</div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Render Alerts
+// ══════════════════════════════════════════════════════════════
+function renderAlerts() {
+  const pane = document.getElementById('pane-alerts');
+  document.getElementById('empty-alerts').style.display = alerts.length ? 'none' : 'flex';
+  pane.querySelectorAll('.acard').forEach(e => e.remove());
+  alerts.forEach(a => pane.appendChild(makeAlertCard(a)));
+}
+
+function makeAlertCard(a) {
+  const vc  = a.verdict.toLowerCase();
+  const col = vc === 'phishing' ? 'var(--danger)' : vc === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
+  const pct = Math.round(a.risk_score);
+  const card = document.createElement('div');
+  card.className = 'acard ' + vc;
+  card.innerHTML = `
+    <div class="ahdr">
+      <span class="vbadge ${vc}">${a.verdict}</span>
+      <span class="aurl" title="${a.url}">${a.url}</span>
+      <span class="atime">${fmtTime(a.timestamp)}</span>
+    </div>
+    <div class="rbar-row">
+      <span class="rbar-lbl">Risk</span>
+      <div class="rbar-wrap"><div class="rbar" style="width:${pct}%;background:${col}"></div></div>
+      <span class="rbar-val" style="color:${col}">${pct}%</span>
+    </div>
+    <div class="layers">${(a.layers || []).map(layerHTML).join('')}</div>`;
+  card.querySelector('.ahdr').addEventListener('click', () => card.classList.toggle('open'));
+  return card;
+}
+
+function layerHTML(l) {
+  const p   = Math.round(l.score * 100);
+  const col = p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)';
+  return `<div class="lrow">
+    <span class="lname">${l.id}</span>
+    <div class="lbar-w"><div class="lbar" style="width:${p}%;background:${col}"></div></div>
+    <span class="lval" style="color:${col}">${p}%</span>
+  </div>
+  <div class="ldet">${l.detail || ''}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Render Timeline
+// ══════════════════════════════════════════════════════════════
+function renderTimeline() {
+  const pane = document.getElementById('pane-timeline');
+  document.getElementById('empty-timeline').style.display = timeline.length ? 'none' : 'flex';
+  pane.querySelectorAll('.titem').forEach(e => e.remove());
+  timeline.forEach(a => {
+    const col = a.verdict === 'PHISHING' ? 'var(--danger)' : a.verdict === 'SUSPICIOUS' ? 'var(--warn)' : 'var(--safe)';
+    const el = document.createElement('div'); el.className = 'titem';
+    el.innerHTML = `
+      <div class="tdot" style="background:${col}"></div>
+      <span class="turl" title="${a.url}">${a.url}</span>
+      <span class="tscore" style="color:${col}">${Math.round(a.risk_score)}%</span>
+      <span class="ttime">${fmtTime(a.timestamp)}</span>`;
+    el.addEventListener('click', () => navigatePw(a.url));
+    pane.appendChild(el);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Sidebar + C2 tab switching
+// ══════════════════════════════════════════════════════════════
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const panel = document.getElementById('panel-' + btn.dataset.panel);
+    if (panel) panel.classList.add('active');
+    if (btn.dataset.panel === 'c3') refreshC3();
+  });
+});
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const pane = document.getElementById('pane-' + t.dataset.tab);
+    if (pane) pane.classList.add('active');
+  });
+});
+
+document.querySelectorAll('.c3-tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.c3-tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.c3-pane').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const pane = document.getElementById('c3-pane-' + t.dataset.c3tab);
+    if (pane) pane.classList.add('active');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+//  Settings — load on startup
+// ══════════════════════════════════════════════════════════════
+async function loadSettings() {
+  if (!backendUp) return;
+  try {
+    const s = await (await fetch(API + '/settings')).json();
+    if (s.gsb_key)     document.getElementById('gsb-key').value      = s.gsb_key;
+    if (s.pw_home_url) document.getElementById('pw-home-url').value  = s.pw_home_url;
+    if (s.whitelist)   document.getElementById('whitelist').value    = s.whitelist.join('\n');
+    if (s.layers) {
+      ['l1','l2','l3','l4','l5'].forEach(k => {
+        const el = document.getElementById('tog-' + k);
+        if (el) el.checked = !!s.layers[k];
+      });
+    }
+  } catch {}
+}
+
+// ── Global settings (Playwright + API keys + whitelist) ───────
+async function saveSettings() {
+  const payload = {
+    layers:      { l1: togVal('l1'), l2: togVal('l2'), l3: togVal('l3'), l4: togVal('l4'), l5: togVal('l5') },
+    gsb_key:     document.getElementById('gsb-key').value.trim(),
+    whitelist:   document.getElementById('whitelist').value.split('\n').map(s => s.trim()).filter(Boolean),
+    pw_home_url: document.getElementById('pw-home-url').value.trim(),
+  };
+  if (backendUp) {
+    try { await fetch(API + '/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+    catch {}
+  }
+  const btn = document.querySelector('#panel-settings .btn-primary');
+  const orig = btn.textContent;
+  btn.textContent = '\u2713 Saved!'; setTimeout(() => btn.textContent = orig, 1800);
+}
+
+// ── C2 component settings (detection layer toggles) ───────────
+async function saveC2Settings() {
+  const payload = {
+    layers:      { l1: togVal('l1'), l2: togVal('l2'), l3: togVal('l3'), l4: togVal('l4'), l5: togVal('l5') },
+    gsb_key:     document.getElementById('gsb-key').value.trim(),
+    whitelist:   document.getElementById('whitelist').value.split('\n').map(s => s.trim()).filter(Boolean),
+    pw_home_url: document.getElementById('pw-home-url').value.trim(),
+  };
+  if (backendUp) {
+    try { await fetch(API + '/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+    catch {}
+  }
+  const btn = document.querySelector('#pane-c2settings .btn-primary');
+  const orig = btn.textContent;
+  btn.textContent = '\u2713 Saved!'; setTimeout(() => btn.textContent = orig, 1800);
+}
+
+function togVal(id) { return document.getElementById('tog-' + id).checked; }
+
+// ── Session status display (in global settings panel) ─────────
+async function refreshSessionStatus() {
+  const el = document.getElementById('session-status-txt');
+  if (!el) return;
+  try {
+    const s = await (await fetch(API + '/session/status')).json();
+    el.textContent = s.running ? ('Active \u2014 ' + (s.url || 'browsing')) : 'Stopped';
+    el.style.color = s.running ? 'var(--safe)' : 'var(--t3)';
+  } catch {
+    el.textContent = 'Backend offline';
+    el.style.color = 'var(--danger)';
+  }
+}
+
+document.getElementById('btn-restart-session')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-restart-session');
+  btn.textContent = 'Restarting\u2026'; btn.disabled = true;
+  try { await fetch(API + '/session/stop', { method: 'POST' }); } catch {}
+  await new Promise(r => setTimeout(r, 800));
+  await startPwSession();
+  btn.textContent = 'Restart'; btn.disabled = false;
+  refreshSessionStatus();
+});
+
+setInterval(refreshSessionStatus, 8000);
+setInterval(refreshC3, 10000);
+
+// ══════════════════════════════════════════════════════════════
+//  AI Starter Context
+// ══════════════════════════════════════════════════════════════
+const AI_CTX = {
+  c1: `I'm building Component 1 of WebSentinel -- a Malicious Browser Extension Analyzer.
+Project root: WebSentinel/. Shared infrastructure in core/ (FastAPI + Playwright).
+My component code lives in c1/. Entry-point stubs in c1/analyzer.py:
+  analyze_extension(manifest, source_code) -> {score: float, detail: str}
+  sandbox_extension(extension_path)        -> {score: float, detail: str}
+I need help with: [YOUR TASK]`,
+
+  c3: `I'm building Component 3 of WebSentinel -- a Browser Execution Aware C2 Beacon Detector.
+Project root: WebSentinel/. Shared infra in core/ (FastAPI + Playwright session at core/playwright_session.py).
+My component code goes in c3/. Goal: capture outbound browser network requests via CDP,
+tag each with tab/extension/user-activity context, score beaconing heuristically first,
+collect labelled CSV data, then train XGBoost as the final ML stage.
+I need help with: [YOUR TASK]`,
+
+  c4: `I'm building Component 4 of WebSentinel -- a Browser Artifact Forensic Correlation Engine.
+Project root: WebSentinel/. Shared infra in core/. My component code goes in c4/.
+Browser profile: ~/.websentinel/profile/ (Playwright persistent context).
+I need to extract SQLite artifacts (History, Cookies, Login Data), detect anomalies,
+run sliding-window cross-artifact correlation, map findings to MITRE ATT&CK.
+Endpoints POST /forensic/extract and GET /forensic/report live in core/main.py.
+I need help with: [YOUR TASK]`
+};
+
+function copyAiCtx(comp) {
+  const ctx = AI_CTX[comp] || '';
+  navigator.clipboard.writeText(ctx).then(() => showToast('AI starter context copied to clipboard'));
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Toast & utilities
+// ══════════════════════════════════════════════════════════════
+function showToast(msg, duration = 4000) {
+  document.getElementById('pw-toast-msg').textContent = msg;
+  const t = document.getElementById('pw-toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function fmtNum(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value ?? '');
+  if (Math.abs(n) >= 100) return Math.round(n).toString();
+  return n.toFixed(3).replace(/\.?0+$/, '');
+}
+
+function fmtBytes(bytes) {
+  const n = Number(bytes || 0);
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+function clamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), diff = Math.floor((Date.now() - d) / 1000);
+  if (!Number.isFinite(diff)) return '';
+  if (diff < 5)    return 'just now';
+  if (diff < 60)   return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Beacon alert: sound (5 beeps) + countdown overlay
+// ══════════════════════════════════════════════════════════════
+let _beaconOverlayTimer = null;
+
+function playBeaconBeeps() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const beepCount = 5;
+    const beepDuration = 0.12;   // seconds per beep
+    const beepGap = 0.18;        // seconds between beep starts
+    const freq = 880;            // Hz — A5
+
+    for (let i = 0; i < beepCount; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      const start = ctx.currentTime + i * beepGap;
+      const end = start + beepDuration;
+      gain.gain.setValueAtTime(0.18, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, end);
+      osc.start(start);
+      osc.stop(end + 0.01);
+    }
+    // Close the context after all beeps finish
+    setTimeout(() => { try { ctx.close(); } catch {} }, (beepCount * beepGap + 0.5) * 1000);
+  } catch (e) {
+    // AudioContext not available (headless) — silent fail
+  }
+}
+
+let _beaconOverlayActive = false;
+
+function showBeaconOverlay(alert) {
+  // Do not re-trigger while overlay is already visible — wait for dismiss.
+  if (_beaconOverlayActive) return;
+  _beaconOverlayActive = true;
+
+  if (_beaconOverlayTimer) {
+    clearInterval(_beaconOverlayTimer);
+    _beaconOverlayTimer = null;
+  }
+
+  const score = Number(alert.score || 0);
+  const scorePct = Math.round(score * 100);
+  const signals = alert.signal_breakdown || {};
+  const anomalyPct  = signals.anomaly != null         ? Math.round(Number(signals.anomaly) * 100)         : null;
+  const rfPct        = signals.browser_anomaly != null ? Math.round(Number(signals.browser_anomaly) * 100) : null;
+  const heuristicPct = signals.heuristic != null       ? Math.round(Number(signals.heuristic) * 100)       : null;
+  const willBlock = score >= 0.8;
+
+  // Populate signal values
+  document.getElementById('c3-beacon-host').textContent = alert.host || 'unknown host';
+  document.getElementById('c3-bscore-total').textContent     = scorePct + '%';
+  document.getElementById('c3-bscore-anomaly').textContent   = anomalyPct  != null ? anomalyPct  + '%' : 'n/a';
+  document.getElementById('c3-bscore-rf').textContent        = rfPct       != null ? rfPct       + '%' : 'n/a';
+  document.getElementById('c3-bscore-heuristic').textContent = heuristicPct != null ? heuristicPct + '%' : 'n/a';
+
+  // Colour-code the RF value
+  const rfEl = document.getElementById('c3-bscore-rf');
+  if (rfEl && rfPct != null) rfEl.style.color = c3SignalColor('browser_anomaly', rfPct / 100);
+
+  // Verdict badges
+  const blockBadge = document.getElementById('c3-beacon-block-badge');
+  if (blockBadge) blockBadge.style.display = willBlock ? '' : 'none';
+
+  const msgEl   = document.getElementById('c3-beacon-msg');
+  const cntEl   = document.getElementById('c3-beacon-countdown');
+  const barFill = document.getElementById('c3-beacon-bar-fill');
+
+  if (willBlock) {
+    if (msgEl)   msgEl.textContent = 'All traffic from this host will be blocked in 5 seconds.';
+    if (cntEl)   { cntEl.style.display = ''; cntEl.textContent = '5'; }
+    if (barFill) { barFill.style.transition = 'none'; barFill.style.width = '100%'; }
+  } else {
+    if (msgEl)   msgEl.textContent = 'Score is below the auto-block threshold (80%). Monitoring continues.';
+    if (cntEl)   cntEl.style.display = 'none';
+    if (barFill) barFill.style.width = '0%';
+  }
+
+  document.getElementById('c3-beacon-overlay').classList.add('active');
+
+  if (!willBlock) return;
+
+  let remaining = 5;
+  _beaconOverlayTimer = setInterval(() => {
+    remaining--;
+    const cntNode  = document.getElementById('c3-beacon-countdown');
+    const msgNode  = document.getElementById('c3-beacon-msg');
+    const fillEl   = document.getElementById('c3-beacon-bar-fill');
+    if (cntNode) cntNode.textContent = remaining;
+    if (msgNode) msgNode.textContent = remaining > 0
+      ? 'All traffic from this host will be blocked in ' + remaining + ' second' + (remaining !== 1 ? 's' : '') + '.'
+      : 'Blocking host…';
+    if (fillEl) {
+      fillEl.style.transition = 'width 1s linear';
+      fillEl.style.width = (remaining / 5 * 100) + '%';
+    }
+    if (remaining <= 0) {
+      clearInterval(_beaconOverlayTimer);
+      _beaconOverlayTimer = null;
+      setTimeout(() => {
+        if (msgNode) msgNode.textContent = 'Host blocked. All outbound requests are now aborted.';
+        if (cntNode) cntNode.style.display = 'none';
+        setTimeout(dismissBeaconOverlay, 3500);
+      }, 500);
+    }
+  }, 1000);
+}
+
+function dismissBeaconOverlay() {
+  _beaconOverlayActive = false;
+  if (_beaconOverlayTimer) {
+    clearInterval(_beaconOverlayTimer);
+    _beaconOverlayTimer = null;
+  }
+  const overlay = document.getElementById('c3-beacon-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+</script>
+
+</body>
+</html>

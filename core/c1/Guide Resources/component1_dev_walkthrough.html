@@ -1,0 +1,1813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Component 1 — Full Development Walkthrough</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0F0F11;
+  --surface: #18181C;
+  --surface2: #222228;
+  --surface3: #2A2A32;
+  --border: #2E2E38;
+  --border2: #3A3A46;
+  --text: #F0EEF8;
+  --muted: #8A8A9A;
+  --accent: #7C6EF8;
+  --accent2: #9F94FA;
+  --accent-l: rgba(124,110,248,0.12);
+  --green: #3DD68C;
+  --green-l: rgba(61,214,140,0.1);
+  --red: #F05252;
+  --red-l: rgba(240,82,82,0.1);
+  --amber: #F59E0B;
+  --amber-l: rgba(245,158,11,0.1);
+  --blue: #60A5FA;
+  --blue-l: rgba(96,165,250,0.1);
+  --purple: #C084FC;
+  --purple-l: rgba(192,132,252,0.1);
+  --teal: #2DD4BF;
+  --teal-l: rgba(45,212,191,0.1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.7}
+code,pre,kbd{font-family:'DM Mono',monospace}
+
+/* ── LAYOUT ── */
+.sidebar{position:fixed;top:0;left:0;width:220px;height:100vh;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;z-index:100;padding:20px 0}
+.main{margin-left:220px;padding:0 40px 80px}
+@media(max-width:768px){.sidebar{display:none}.main{margin-left:0;padding:0 16px 60px}}
+
+/* ── SIDEBAR ── */
+.sb-logo{padding:0 18px 18px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.sb-tag{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.sb-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4}
+.sb-nav-group{padding:0 10px;margin-bottom:4px}
+.sb-group-label{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 8px 4px}
+.sb-link{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;cursor:pointer;transition:all .15s;user-select:none}
+.sb-link:hover{background:var(--surface2);color:var(--text)}
+.sb-link.active{background:var(--accent-l);color:var(--accent2)}
+.sb-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot-white{background:var(--text)}.dot-green{background:var(--green)}.dot-blue{background:var(--blue)}.dot-amber{background:var(--amber)}.dot-purple{background:var(--purple)}.dot-teal{background:var(--teal)}.dot-red{background:var(--red)}
+.sb-progress{padding:14px 18px 0;border-top:1px solid var(--border);margin-top:12px}
+.sb-prog-label{font-size:10px;color:var(--muted);margin-bottom:6px}
+.sb-pb{height:3px;background:var(--surface3);border-radius:2px;overflow:hidden}
+.sb-pb-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--teal));border-radius:2px;transition:width .5s;width:0%}
+
+/* ── HERO ── */
+.hero{padding:60px 0 40px;border-bottom:1px solid var(--border);margin-bottom:48px}
+.hero-eyebrow{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+.hero h1{font-size:36px;font-weight:700;line-height:1.2;margin-bottom:16px;background:linear-gradient(135deg,var(--text) 40%,var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:15px;color:var(--muted);max-width:560px;line-height:1.75;margin-bottom:24px}
+.hero-chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid}
+.chip-accent{border-color:var(--accent);color:var(--accent2);background:var(--accent-l)}
+.chip-green{border-color:var(--green);color:var(--green);background:var(--green-l)}
+.chip-blue{border-color:var(--blue);color:var(--blue);background:var(--blue-l)}
+.chip-amber{border-color:var(--amber);color:var(--amber);background:var(--amber-l)}
+
+/* ── SECTIONS ── */
+.section{margin-bottom:56px}
+.section-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px}
+.sb-accent{background:var(--accent-l);color:var(--accent2);border:1px solid rgba(124,110,248,.2)}
+.sb-green{background:var(--green-l);color:var(--green);border:1px solid rgba(61,214,140,.2)}
+.sb-blue{background:var(--blue-l);color:var(--blue);border:1px solid rgba(96,165,250,.2)}
+.sb-amber{background:var(--amber-l);color:var(--amber);border:1px solid rgba(245,158,11,.2)}
+.sb-purple{background:var(--purple-l);color:var(--purple);border:1px solid rgba(192,132,252,.2)}
+.sb-teal{background:var(--teal-l);color:var(--teal);border:1px solid rgba(45,212,191,.2)}
+.section h2{font-size:22px;font-weight:700;margin-bottom:8px}
+.section p.lead{font-size:14px;color:var(--muted);max-width:600px;margin-bottom:24px}
+
+/* ── CARDS ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;transition:border-color .15s}
+.card:hover{border-color:var(--border2)}
+.card-head{padding:16px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+.card-head:hover{background:var(--surface2)}
+.card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.ci-a{background:var(--accent-l)}.ci-g{background:var(--green-l)}.ci-b{background:var(--blue-l)}.ci-am{background:var(--amber-l)}.ci-p{background:var(--purple-l)}.ci-t{background:var(--teal-l)}.ci-r{background:var(--red-l)}
+.card-info{flex:1}
+.card-ttl{font-size:14px;font-weight:600;color:var(--text)}
+.card-sub{font-size:12px;color:var(--muted);margin-top:1px}
+.card-chev{font-size:11px;color:var(--muted);transition:transform .2s;flex-shrink:0}
+.card-chev.op{transform:rotate(180deg)}
+.card-body{display:none;padding:18px;border-top:1px solid var(--border)}
+.card-body.op{display:block}
+.card-body p{font-size:13px;color:var(--muted);line-height:1.75;margin-bottom:10px}
+.card-body p:last-child{margin-bottom:0}
+
+/* ── CODE BLOCKS ── */
+.code-wrap{background:#0A0A0C;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:12px 0;position:relative}
+.code-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.code-filename{font-size:12px;font-weight:500;color:var(--muted)}
+.code-lang{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:var(--surface2);color:var(--muted)}
+.copy-btn{font-size:11px;font-weight:500;padding:4px 12px;border-radius:6px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
+.copy-btn:hover{background:var(--surface3);color:var(--text)}
+.copy-btn.ok{background:var(--green-l);color:var(--green);border-color:rgba(61,214,140,.2)}
+pre.code{padding:18px;font-size:12.5px;line-height:1.8;overflow-x:auto;color:#E0DCF4;white-space:pre}
+.cm{color:#4B5563}.ck{color:#A78BFA}.cs{color:#6EE7B7}.cn{color:#FCA5A5}.cf{color:#93C5FD}.co{color:#F9A8D4}
+
+/* ── CALLOUTS ── */
+.callout{border-radius:10px;padding:14px 16px;margin:12px 0;font-size:13px;line-height:1.7;border-left:3px solid}
+.ca-accent{background:var(--accent-l);border-color:var(--accent);color:var(--accent2)}
+.ca-green{background:var(--green-l);border-color:var(--green);color:#A7F3D0}
+.ca-amber{background:var(--amber-l);border-color:var(--amber);color:#FDE68A}
+.ca-red{background:var(--red-l);border-color:var(--red);color:#FCA5A5}
+.ca-blue{background:var(--blue-l);border-color:var(--blue);color:#BFDBFE}
+.ca-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.7;margin-bottom:5px}
+
+/* ── FOLDER TREE ── */
+.tree{background:#0A0A0C;border:1px solid var(--border);border-radius:10px;padding:18px 20px;font-family:'DM Mono',monospace;font-size:12.5px;line-height:2;margin:12px 0}
+.t-folder{color:var(--accent2);font-weight:500}
+.t-file{color:var(--text)}
+.t-comment{color:var(--muted);font-style:italic}
+.t-new{color:var(--green)}
+.t-py{color:#F9A8D4}.t-js{color:#FDE68A}.t-html{color:#93C5FD}.t-json{color:#A5F3FC}.t-yml{color:#C4B5FD}.t-md{color:var(--muted)}
+
+/* ── STEPS ── */
+.step-list{display:flex;flex-direction:column;gap:0;margin:12px 0}
+.step-row{display:flex;gap:14px;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--muted);line-height:1.65}
+.step-row:last-child{border-bottom:none;padding-bottom:0}
+.step-row:first-child{padding-top:0}
+.sn{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:1px}
+.sn-a{background:var(--accent-l);color:var(--accent2)}
+.sn-g{background:var(--green-l);color:var(--green)}
+.sn-am{background:var(--amber-l);color:var(--amber)}
+strong{color:var(--text);font-weight:600}
+
+/* ── MODULE HEADER ── */
+.module-header{display:flex;align-items:center;gap:14px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:20px}
+.module-num{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0}
+.mn-1{background:var(--accent-l);color:var(--accent2);border:1px solid rgba(124,110,248,.2)}
+.mn-2{background:var(--blue-l);color:var(--blue);border:1px solid rgba(96,165,250,.2)}
+.mn-3{background:var(--green-l);color:var(--green);border:1px solid rgba(61,214,140,.2)}
+.module-header-info h3{font-size:16px;font-weight:700;margin-bottom:3px}
+.module-header-info p{font-size:12px;color:var(--muted)}
+
+/* ── TWO COLS ── */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.mini{background:var(--surface2);border-radius:9px;padding:12px 14px;border:1px solid var(--border)}
+.mini h4{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px}
+.mini p{font-size:12px;color:var(--text);line-height:1.6;margin:0}
+
+/* ── FLOW DIAGRAM ── */
+.flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:12px 0}
+.fbox{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:500;white-space:nowrap;flex-shrink:0}
+.fb-a{background:var(--accent-l);color:var(--accent2);border:1px solid rgba(124,110,248,.2)}
+.fb-g{background:var(--green-l);color:var(--green);border:1px solid rgba(61,214,140,.2)}
+.fb-b{background:var(--blue-l);color:var(--blue);border:1px solid rgba(96,165,250,.2)}
+.fb-am{background:var(--amber-l);color:var(--amber);border:1px solid rgba(245,158,11,.2)}
+.fb-r{background:var(--red-l);color:var(--red);border:1px solid rgba(240,82,82,.2)}
+.farr{padding:0 8px;color:var(--muted);font-size:14px;flex-shrink:0}
+
+/* ── TABLE ── */
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0}
+.tbl th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border2);font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.5;color:var(--muted)}
+.tbl td strong{color:var(--text)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:var(--surface2)}
+
+/* ── CHECKLIST ── */
+.checklist{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.chk{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;cursor:pointer;user-select:none;font-size:13px;color:var(--muted);line-height:1.6;border:1px solid var(--border);transition:border-color .15s}
+.chk:hover{border-color:var(--border2)}
+.chk-box{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:all .15s;background:transparent}
+.chk-box.checked{background:var(--green);border-color:var(--green)}
+.chk-tick{color:#fff;font-size:10px;display:none;font-weight:700}
+.chk-box.checked .chk-tick{display:block}
+.chk.done{border-color:rgba(61,214,140,.2)}
+.chk.done .chk-box{background:var(--green);border-color:var(--green)}
+.chk.done .chk-tick{display:block}
+.chk.done span{color:var(--text)}
+
+/* ── PILL ── */
+.pill{display:inline-flex;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.p-g{background:var(--green-l);color:var(--green)}
+.p-a{background:var(--accent-l);color:var(--accent2)}
+.p-am{background:var(--amber-l);color:var(--amber)}
+.p-r{background:var(--red-l);color:var(--red)}
+
+/* ── DIVIDER ── */
+.divider{border:none;border-top:1px solid var(--border);margin:20px 0}
+.slabel{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;margin-top:20px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-tag">T06 · R26-CS-003</div>
+    <div class="sb-title">Component 1 Dev Guide</div>
+  </div>
+
+  <div class="sb-nav-group">
+    <div class="sb-group-label">Getting started</div>
+    <div class="sb-link active" onclick="scrollTo('intro')"><span class="sb-dot dot-white"></span>Introduction</div>
+    <div class="sb-link" onclick="scrollTo('stack')"><span class="sb-dot dot-white"></span>Tech stack</div>
+    <div class="sb-link" onclick="scrollTo('structure')"><span class="sb-dot dot-white"></span>Workspace structure</div>
+    <div class="sb-link" onclick="scrollTo('setup')"><span class="sb-dot dot-white"></span>Project setup</div>
+  </div>
+
+  <div class="sb-nav-group">
+    <div class="sb-group-label">Module 1 — Static</div>
+    <div class="sb-link" onclick="scrollTo('m1-overview')"><span class="sb-dot dot-accent" style="background:var(--accent)"></span>Overview</div>
+    <div class="sb-link" onclick="scrollTo('m1-hash')"><span class="sb-dot dot-accent" style="background:var(--accent)"></span>Hash detection</div>
+    <div class="sb-link" onclick="scrollTo('m1-manifest')"><span class="sb-dot dot-accent" style="background:var(--accent)"></span>Manifest parser</div>
+    <div class="sb-link" onclick="scrollTo('m1-ml')"><span class="sb-dot dot-accent" style="background:var(--accent)"></span>ML classifier</div>
+    <div class="sb-link" onclick="scrollTo('m1-api')"><span class="sb-dot dot-accent" style="background:var(--accent)"></span>API endpoint</div>
+  </div>
+
+  <div class="sb-nav-group">
+    <div class="sb-group-label">Module 2 — Dynamic</div>
+    <div class="sb-link" onclick="scrollTo('m2-overview')"><span class="sb-dot" style="background:var(--blue)"></span>Overview</div>
+    <div class="sb-link" onclick="scrollTo('m2-docker')"><span class="sb-dot" style="background:var(--blue)"></span>Docker setup</div>
+    <div class="sb-link" onclick="scrollTo('m2-puppeteer')"><span class="sb-dot" style="background:var(--blue)"></span>Puppeteer sandbox</div>
+    <div class="sb-link" onclick="scrollTo('m2-monitor')"><span class="sb-dot" style="background:var(--blue)"></span>Behaviour monitor</div>
+  </div>
+
+  <div class="sb-nav-group">
+    <div class="sb-group-label">Module 3 — Verdict</div>
+    <div class="sb-link" onclick="scrollTo('m3-overview')"><span class="sb-dot" style="background:var(--green)"></span>Overview</div>
+    <div class="sb-link" onclick="scrollTo('m3-engine')"><span class="sb-dot" style="background:var(--green)"></span>Verdict engine</div>
+    <div class="sb-link" onclick="scrollTo('m3-db')"><span class="sb-dot" style="background:var(--green)"></span>Database</div>
+    <div class="sb-link" onclick="scrollTo('m3-report')"><span class="sb-dot" style="background:var(--green)"></span>Report generator</div>
+  </div>
+
+  <div class="sb-nav-group">
+    <div class="sb-group-label">Frontend</div>
+    <div class="sb-link" onclick="scrollTo('fe-overview')"><span class="sb-dot" style="background:var(--amber)"></span>Dashboard UI</div>
+    <div class="sb-link" onclick="scrollTo('fe-html')"><span class="sb-dot" style="background:var(--amber)"></span>Full HTML file</div>
+    <div class="sb-link" onclick="scrollTo('fe-connect')"><span class="sb-dot" style="background:var(--amber)"></span>Connect to backend</div>
+  </div>
+
+  <div class="sb-nav-group">
+    <div class="sb-group-label">Run & Test</div>
+    <div class="sb-link" onclick="scrollTo('run')"><span class="sb-dot dot-teal" style="background:var(--teal)"></span>How to run</div>
+    <div class="sb-link" onclick="scrollTo('test')"><span class="sb-dot dot-teal" style="background:var(--teal)"></span>Testing</div>
+  </div>
+
+  <div class="sb-progress">
+    <div class="sb-prog-label" id="prog-label">Open any section to track progress</div>
+    <div class="sb-pb"><div class="sb-pb-fill" id="prog-fill"></div></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+<!-- ============================================================ HERO -->
+<div class="hero" id="intro">
+  <div class="hero-eyebrow">Component 1 · Malicious Extension Analyzer · IT22276414</div>
+  <h1>Full Development<br>Walkthrough</h1>
+  <p>Everything you need to build Component 1 from scratch — backend Python API, Puppeteer sandbox, verdict engine, and frontend dashboard. Keep this file open in VS Code while you build.</p>
+  <div class="hero-chips">
+    <span class="chip chip-accent">Module 1 — Static Analysis</span>
+    <span class="chip chip-blue" style="border-color:var(--blue);color:var(--blue);background:var(--blue-l)">Module 2 — Dynamic Sandbox</span>
+    <span class="chip chip-green">Module 3 — Verdict Engine</span>
+    <span class="chip chip-amber">Frontend Dashboard</span>
+  </div>
+</div>
+
+<!-- ============================================================ TECH STACK -->
+<div class="section" id="stack">
+  <div class="section-badge sb-accent">Tech stack</div>
+  <h2>What you are building with</h2>
+  <p class="lead">These are the exact technologies used across all three modules. You have already installed Python — the rest will be set up step by step.</p>
+
+  <table class="tbl">
+    <thead><tr><th>Technology</th><th>Module</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Python 3.x + Flask</strong></td><td><span class="pill p-a">All modules</span></td><td>Main backend language. Flask is a lightweight web framework that turns your Python functions into API endpoints the frontend can call.</td></tr>
+      <tr><td><strong>XGBoost (already trained)</strong></td><td><span class="pill p-a">Module 1</span></td><td>Your trained ML model loaded from the .pkl file. Used to score extension permissions.</td></tr>
+      <tr><td><strong>hashlib (built-in Python)</strong></td><td><span class="pill p-a">Module 1</span></td><td>Computes SHA-256 hashes of extension files. Already in Python — no install needed.</td></tr>
+      <tr><td><strong>Node.js + Puppeteer</strong></td><td><span class="pill p-a">Module 2</span></td><td>Puppeteer controls a real headless Chrome browser programmatically. This is how the sandbox runs the extension and monitors its behaviour.</td></tr>
+      <tr><td><strong>Docker</strong></td><td><span class="pill p-a">Module 2</span></td><td>Runs the Puppeteer sandbox in total isolation. Each extension analysis gets its own disposable container — no risk of malware spreading.</td></tr>
+      <tr><td><strong>SQLite</strong></td><td><span class="pill p-a">Module 3</span></td><td>Lightweight local database. Stores analysis results, verdicts, and reports. No server setup needed.</td></tr>
+      <tr><td><strong>HTML + CSS + JavaScript</strong></td><td><span class="pill p-am">Frontend</span></td><td>The dashboard UI. Pure HTML/CSS/JS — no React or framework needed. Connects to the Flask API.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================================================ STRUCTURE -->
+<div class="section" id="structure">
+  <div class="section-badge sb-accent">Workspace</div>
+  <h2>Full project folder structure</h2>
+  <p class="lead">Create this exact folder layout in your component1_ml folder. Every file you will create in this guide goes in the right place here.</p>
+
+  <div class="tree">
+<span class="t-folder">component1_ml/</span>
+├── <span class="t-folder">backend/</span>                         <span class="t-comment"># All Python server code</span>
+│   ├── <span class="t-py t-new">app.py</span>                       <span class="t-comment"># Main Flask API server — CREATE THIS</span>
+│   ├── <span class="t-py t-new">static_analysis.py</span>           <span class="t-comment"># Module 1: hash + ML scoring</span>
+│   ├── <span class="t-py t-new">dynamic_analysis.py</span>          <span class="t-comment"># Module 2: calls Docker sandbox</span>
+│   ├── <span class="t-py t-new">verdict_engine.py</span>            <span class="t-comment"># Module 3: combines scores</span>
+│   ├── <span class="t-py t-new">database.py</span>                  <span class="t-comment"># SQLite database handler</span>
+│   ├── <span class="t-py t-new">report_generator.py</span>          <span class="t-comment"># Generates human-readable report</span>
+│   ├── <span class="t-json">malicious_hashes.json</span>        <span class="t-comment"># Your hash database (from datasets)</span>
+│   └── <span class="t-json">malicious_ids.json</span>           <span class="t-comment"># Extension ID blocklist</span>
+│
+├── <span class="t-folder">ml_model/</span>                        <span class="t-comment"># Your trained ML model files</span>
+│   ├── <span class="t-new">extension_detector_model.pkl</span> <span class="t-comment"># The trained XGBoost model (already done)</span>
+│   └── <span class="t-new">feature_columns.json</span>         <span class="t-comment"># List of feature column names</span>
+│
+├── <span class="t-folder">sandbox/</span>                         <span class="t-comment"># Node.js Puppeteer sandbox</span>
+│   ├── <span class="t-js t-new">sandbox_runner.js</span>            <span class="t-comment"># Main Puppeteer script</span>
+│   ├── <span class="t-js t-new">behaviour_monitor.js</span>         <span class="t-comment"># Monitors Chrome API calls</span>
+│   ├── <span class="t-json t-new">package.json</span>                 <span class="t-comment"># Node.js dependencies</span>
+│   └── <span class="t-yml t-new">Dockerfile</span>                   <span class="t-comment"># Docker container definition</span>
+│
+├── <span class="t-folder">frontend/</span>                        <span class="t-comment"># Dashboard UI</span>
+│   ├── <span class="t-html t-new">index.html</span>                   <span class="t-comment"># Main dashboard page</span>
+│   ├── <span class="t-html t-new">analyse.html</span>                 <span class="t-comment"># Upload and analyse extension</span>
+│   └── <span class="t-html t-new">report.html</span>                  <span class="t-comment"># View detailed report</span>
+│
+├── <span class="t-folder">data/</span>
+│   ├── <span class="t-new">component1.db</span>                <span class="t-comment"># SQLite database (auto-created)</span>
+│   └── <span class="t-folder">uploads/</span>                     <span class="t-comment"># Uploaded .crx files (auto-created)</span>
+│
+├── <span class="t-new">dataset.csv</span>                      <span class="t-comment"># Your training dataset (already here)</span>
+├── <span class="t-py">prepare_data.py</span>                  <span class="t-comment"># Already built</span>
+├── <span class="t-py">train_model.py</span>                   <span class="t-comment"># Already built</span>
+└── <span class="t-py t-new">requirements.txt</span>               <span class="t-comment"># Python dependencies list</span>
+  </div>
+
+  <div class="callout ca-accent">
+    <div class="ca-label">Create the folders now</div>
+    Inside your component1_ml folder, create three new folders: <strong>backend</strong>, <strong>sandbox</strong>, and <strong>frontend</strong>. Also create a <strong>ml_model</strong> folder and move your extension_detector_model.pkl and dataset_clean.csv into it.
+  </div>
+</div>
+
+<!-- ============================================================ SETUP -->
+<div class="section" id="setup">
+  <div class="section-badge sb-accent">Setup</div>
+  <h2>Install backend dependencies</h2>
+  <p class="lead">Before writing any module code, install Flask and the other backend libraries. Open a terminal in your component1_ml folder in VS Code.</p>
+
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">Terminal — run these commands</span><span class="code-lang">CMD</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+    <pre class="code"><span class="cm"># Install Flask and backend dependencies</span>
+pip install flask flask-cors joblib pandas numpy scikit-learn xgboost
+
+<span class="cm"># Install Node.js from nodejs.org (if not done yet)
+# Then install Puppeteer inside the sandbox folder:</span>
+cd sandbox
+npm init -y
+npm install puppeteer</pre>
+  </div>
+
+  <div class="slabel">Create requirements.txt in your project root</div>
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">requirements.txt</span><span class="code-lang">TXT</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+    <pre class="code">flask==3.0.0
+flask-cors==4.0.0
+joblib==1.3.2
+pandas==2.1.0
+numpy==1.26.0
+scikit-learn==1.3.2
+xgboost==2.0.0
+requests==2.31.0</pre>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ============================================================ MODULE 1 -->
+<div class="section" id="m1-overview">
+  <div class="module-header">
+    <div class="module-num mn-1">1</div>
+    <div class="module-header-info">
+      <h3>Static Analysis Module</h3>
+      <p>Hash detection + ML permission scoring + zero-day pattern analysis · No sandbox needed</p>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="fbox fb-a">CRX file uploaded</div><div class="farr">→</div>
+    <div class="fbox fb-a">SHA-256 hash check</div><div class="farr">→</div>
+    <div class="fbox fb-a">Manifest parser</div><div class="farr">→</div>
+    <div class="fbox fb-a">XGBoost ML score</div><div class="farr">→</div>
+    <div class="fbox fb-am">static_score 0–100</div>
+  </div>
+
+  <div class="callout ca-accent">
+    <div class="ca-label">What this module outputs</div>
+    A <strong>static_score</strong> from 0–100. If below 40 → SAFE (no sandbox needed). If 40–69 → SUSPICIOUS (run sandbox). If 70+ → HIGH RISK (run sandbox + alert immediately).
+  </div>
+</div>
+
+<div class="section" id="m1-hash">
+  <div class="section-badge sb-accent">Module 1 · Part A</div>
+  <h2>Hash detection — build the hash database</h2>
+  <p class="lead">First, convert your cloned dataset repos into a JSON hash database file. Then the lookup function checks any new extension against it.</p>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('h1')">
+      <div class="card-icon ci-a">🔐</div>
+      <div class="card-info"><div class="card-ttl">Build malicious_hashes.json from your datasets</div><div class="card-sub">Run this once to create the hash database from chrome-mal-ids and palant repos</div></div>
+      <div class="card-chev op" id="chev-h1">▼</div>
+    </div>
+    <div class="card-body op" id="body-h1">
+      <p>Create a new file called <strong>build_hash_db.py</strong> in your backend folder. Run it once to generate the hash database JSON file.</p>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">backend/build_hash_db.py</span><span class="code-lang">Python</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="ck">import</span> json
+<span class="ck">import</span> os
+
+<span class="cm"># Collect all malicious Extension IDs from your cloned repos</span>
+malicious_ids = set()
+
+<span class="cm"># From chrome-mal-ids repo
+# Change this path to where you cloned the repo</span>
+mal_ids_path = <span class="cs">"C:/path/to/chrome-mal-ids"</span>
+<span class="ck">for</span> filename <span class="ck">in</span> os.listdir(mal_ids_path):
+    <span class="ck">if</span> filename.endswith(<span class="cs">".txt"</span>):
+        <span class="ck">with</span> open(os.path.join(mal_ids_path, filename)) <span class="ck">as</span> f:
+            <span class="ck">for</span> line <span class="ck">in</span> f:
+                ext_id = line.strip()
+                <span class="ck">if</span> ext_id <span class="ck">and</span> len(ext_id) == <span class="cn">32</span>:
+                    malicious_ids.add(ext_id)
+
+<span class="cm"># From palant malicious-extensions-list repo
+# Check the actual file format — could be JSON, CSV, or txt</span>
+palant_path = <span class="cs">"C:/path/to/malicious-extensions-list"</span>
+<span class="ck">for</span> filename <span class="ck">in</span> os.listdir(palant_path):
+    <span class="ck">if</span> filename.endswith(<span class="cs">".json"</span>):
+        <span class="ck">with</span> open(os.path.join(palant_path, filename)) <span class="ck">as</span> f:
+            data = json.load(f)
+            <span class="ck">if</span> isinstance(data, list):
+                <span class="ck">for</span> item <span class="ck">in</span> data:
+                    <span class="ck">if</span> isinstance(item, dict) <span class="ck">and</span> <span class="cs">"id"</span> <span class="ck">in</span> item:
+                        malicious_ids.add(item[<span class="cs">"id"</span>])
+                    <span class="ck">elif</span> isinstance(item, str) <span class="ck">and</span> len(item) == <span class="cn">32</span>:
+                        malicious_ids.add(item)
+
+<span class="cm"># Save to JSON file</span>
+output = {<span class="cs">"malicious_extension_ids"</span>: list(malicious_ids)}
+<span class="ck">with</span> open(<span class="cs">"malicious_ids.json"</span>, <span class="cs">"w"</span>) <span class="ck">as</span> f:
+    json.dump(output, f, indent=<span class="cn">2</span>)
+
+print(<span class="cs">f"✓ Saved {len(malicious_ids)} malicious extension IDs to malicious_ids.json"</span>)</pre>
+      </div>
+      <div class="callout ca-amber">
+        <div class="ca-label">Before running</div>
+        Update the two path variables to point to where you actually cloned the repos on your machine. Then run the script once — it creates malicious_ids.json in your backend folder.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="m1-manifest">
+  <div class="section-badge sb-accent">Module 1 · Part B</div>
+  <h2>Manifest parser — extract permission features</h2>
+  <p class="lead">This function opens a .crx file, extracts the manifest.json inside it, and converts it into the feature vector your ML model expects.</p>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('mp1')">
+      <div class="card-icon ci-a">📄</div>
+      <div class="card-info"><div class="card-ttl">static_analysis.py — the complete static analysis module</div><div class="card-sub">Hash detection + manifest parsing + ML scoring in one file</div></div>
+      <div class="card-chev op" id="chev-mp1">▼</div>
+    </div>
+    <div class="card-body op" id="body-mp1">
+      <p>Create <strong>backend/static_analysis.py</strong> and paste this entire file. This is the complete Module 1 implementation.</p>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">backend/static_analysis.py</span><span class="code-lang">Python</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="ck">import</span> hashlib
+<span class="ck">import</span> zipfile
+<span class="ck">import</span> json
+<span class="ck">import</span> os
+<span class="ck">import</span> joblib
+<span class="ck">import</span> pandas <span class="ck">as</span> pd
+<span class="ck">import</span> numpy <span class="ck">as</span> np
+
+<span class="cm"># ── Load resources on startup ──────────────────────────────────</span>
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, <span class="cs">"../ml_model/extension_detector_model.pkl"</span>)
+HASH_DB_PATH = os.path.join(BASE_DIR, <span class="cs">"malicious_ids.json"</span>)
+
+<span class="cm"># Load the trained XGBoost model</span>
+model = joblib.load(MODEL_PATH)
+print(<span class="cs">"✓ ML model loaded"</span>)
+
+<span class="cm"># Load malicious extension IDs</span>
+<span class="ck">with</span> open(HASH_DB_PATH) <span class="ck">as</span> f:
+    hash_data = json.load(f)
+MALICIOUS_IDS = set(hash_data.get(<span class="cs">"malicious_extension_ids"</span>, []))
+print(<span class="cs">f"✓ Hash database loaded: {len(MALICIOUS_IDS)} known malicious IDs"</span>)
+
+<span class="cm"># The 13 most important permission features</span>
+PERMISSION_FEATURES = [
+    <span class="cs">"has_webRequest"</span>, <span class="cs">"has_all_urls"</span>, <span class="cs">"has_cookies"</span>,
+    <span class="cs">"has_clipboardRead"</span>, <span class="cs">"has_nativeMessaging"</span>, <span class="cs">"has_tabs"</span>,
+    <span class="cs">"has_history"</span>, <span class="cs">"has_downloads"</span>, <span class="cs">"has_storage"</span>,
+    <span class="cs">"has_background_script"</span>, <span class="cs">"has_content_scripts"</span>,
+    <span class="cs">"host_permission_count"</span>, <span class="cs">"total_permission_count"</span>
+]
+
+<span class="cm"># ── FUNCTION 1: Compute SHA-256 hash of CRX file ──────────────</span>
+<span class="ck">def</span> <span class="cf">compute_file_hash</span>(file_path):
+    sha256 = hashlib.sha256()
+    <span class="ck">with</span> open(file_path, <span class="cs">"rb"</span>) <span class="ck">as</span> f:
+        <span class="ck">for</span> chunk <span class="ck">in</span> iter(<span class="ck">lambda</span>: f.read(<span class="cn">4096</span>), <span class="cs">b""</span>):
+            sha256.update(chunk)
+    <span class="ck">return</span> sha256.hexdigest()
+
+<span class="cm"># ── FUNCTION 2: Extract Extension ID from CRX filename ────────</span>
+<span class="ck">def</span> <span class="cf">extract_extension_id</span>(filename):
+    <span class="cm"># Extension IDs are 32 lowercase letters</span>
+    name = os.path.splitext(os.path.basename(filename))[<span class="cn">0</span>]
+    <span class="ck">if</span> len(name) == <span class="cn">32</span> <span class="ck">and</span> name.isalpha() <span class="ck">and</span> name.islower():
+        <span class="ck">return</span> name
+    <span class="ck">return</span> <span class="cs">"unknown"</span>
+
+<span class="cm"># ── FUNCTION 3: Parse manifest.json from CRX file ─────────────</span>
+<span class="ck">def</span> <span class="cf">parse_manifest</span>(crx_path):
+    <span class="ck">try</span>:
+        <span class="ck">with</span> zipfile.ZipFile(crx_path, <span class="cs">"r"</span>) <span class="ck">as</span> zf:
+            <span class="cm"># CRX v3 files have extra header bytes — try direct zip first</span>
+            <span class="ck">if</span> <span class="cs">"manifest.json"</span> <span class="ck">in</span> zf.namelist():
+                <span class="ck">with</span> zf.open(<span class="cs">"manifest.json"</span>) <span class="ck">as</span> mf:
+                    <span class="ck">return</span> json.loads(mf.read().decode(<span class="cs">"utf-8"</span>, errors=<span class="cs">"ignore"</span>))
+    <span class="ck">except</span> zipfile.BadZipFile:
+        <span class="cm"># CRX3 format has a header to strip — try offset approach</span>
+        <span class="ck">with</span> open(crx_path, <span class="cs">"rb"</span>) <span class="ck">as</span> f:
+            data = f.read()
+        <span class="cm"># Find start of ZIP data (PK signature)</span>
+        zip_start = data.find(<span class="cs">b"PK\x03\x04"</span>)
+        <span class="ck">if</span> zip_start > <span class="cn">0</span>:
+            <span class="ck">import</span> io
+            zip_data = io.BytesIO(data[zip_start:])
+            <span class="ck">with</span> zipfile.ZipFile(zip_data) <span class="ck">as</span> zf:
+                <span class="ck">if</span> <span class="cs">"manifest.json"</span> <span class="ck">in</span> zf.namelist():
+                    <span class="ck">with</span> zf.open(<span class="cs">"manifest.json"</span>) <span class="ck">as</span> mf:
+                        <span class="ck">return</span> json.loads(mf.read().decode(<span class="cs">"utf-8"</span>, errors=<span class="cs">"ignore"</span>))
+    <span class="ck">return</span> {}
+
+<span class="cm"># ── FUNCTION 4: Convert manifest to feature vector ────────────</span>
+<span class="ck">def</span> <span class="cf">manifest_to_features</span>(manifest):
+    perms = manifest.get(<span class="cs">"permissions"</span>, [])
+    host_perms = manifest.get(<span class="cs">"host_permissions"</span>, [])
+    bg = manifest.get(<span class="cs">"background"</span>, {})
+
+    <span class="cm"># Convert all permissions to lowercase strings</span>
+    perm_set = set(str(p).lower() <span class="ck">for</span> p <span class="ck">in</span> perms)
+
+    features = {
+        <span class="cs">"has_webRequest"</span>:       <span class="cn">1</span> <span class="ck">if</span> <span class="cs">"webrequest"</span> <span class="ck">in</span> perm_set <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_all_urls"</span>:         <span class="cn">1</span> <span class="ck">if</span> any(<span class="cs">"&lt;all_urls&gt;"</span> <span class="ck">in</span> p <span class="ck">or</span> <span class="cs">"*://*/*"</span> <span class="ck">in</span> p <span class="ck">for</span> p <span class="ck">in</span> perms + host_perms) <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_cookies"</span>:          <span class="cn">1</span> <span class="ck">if</span> <span class="cs">"cookies"</span> <span class="ck">in</span> perm_set <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_clipboardRead"</span>:    <span class="cn">1</span> <span class="ck">if</span> <span class="cs">"clipboardread"</span> <span class="ck">in</span> perm_set <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_nativeMessaging"</span>:  <span class="cn">1</span> <span class="ck">if</span> <span class="cs">"nativemessaging"</span> <span class="ck">in</span> perm_set <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_tabs"</span>:             <span class="cn">1</span> <span class="ck">if</span> <span class="cs">"tabs"</span> <span class="ck">in</span> perm_set <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_history"</span>:          <span class="cn">1</span> <span class="ck">if</span> <span class="cs">"history"</span> <span class="ck">in</span> perm_set <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_downloads"</span>:        <span class="cn">1</span> <span class="ck">if</span> <span class="cs">"downloads"</span> <span class="ck">in</span> perm_set <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_storage"</span>:          <span class="cn">1</span> <span class="ck">if</span> <span class="cs">"storage"</span> <span class="ck">in</span> perm_set <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_background_script"</span>:<span class="cn">1</span> <span class="ck">if</span> bg <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"has_content_scripts"</span>:  <span class="cn">1</span> <span class="ck">if</span> manifest.get(<span class="cs">"content_scripts"</span>) <span class="ck">else</span> <span class="cn">0</span>,
+        <span class="cs">"host_permission_count"</span>: len(host_perms),
+        <span class="cs">"total_permission_count"</span>: len(perms)
+    }
+    <span class="ck">return</span> features
+
+<span class="cm"># ── FUNCTION 5: Main static analysis entry point ──────────────</span>
+<span class="ck">def</span> <span class="cf">run_static_analysis</span>(crx_path):
+    <span class="cs">"""
+    Runs complete static analysis on a CRX file.
+    Returns a dict with all analysis results.
+    """</span>
+    result = {
+        <span class="cs">"file_path"</span>: crx_path,
+        <span class="cs">"file_hash"</span>: <span class="cs">""</span>,
+        <span class="cs">"extension_id"</span>: <span class="cs">""</span>,
+        <span class="cs">"hash_match"</span>: <span class="ck">False</span>,
+        <span class="cs">"manifest"</span>: {},
+        <span class="cs">"features"</span>: {},
+        <span class="cs">"ml_score"</span>: <span class="cn">0</span>,
+        <span class="cs">"ml_probability"</span>: <span class="cn">0.0</span>,
+        <span class="cs">"risk_flags"</span>: [],
+        <span class="cs">"static_score"</span>: <span class="cn">0</span>,
+        <span class="cs">"verdict"</span>: <span class="cs">"SAFE"</span>
+    }
+
+    <span class="cm"># STEP 1: Hash check</span>
+    file_hash = compute_file_hash(crx_path)
+    ext_id = extract_extension_id(crx_path)
+    result[<span class="cs">"file_hash"</span>] = file_hash
+    result[<span class="cs">"extension_id"</span>] = ext_id
+
+    <span class="ck">if</span> ext_id <span class="ck">in</span> MALICIOUS_IDS:
+        result[<span class="cs">"hash_match"</span>] = <span class="ck">True</span>
+        result[<span class="cs">"risk_flags"</span>].append(<span class="cs">"HASH_MATCH: Extension ID found in malicious database"</span>)
+        result[<span class="cs">"static_score"</span>] = <span class="cn">100</span>
+        result[<span class="cs">"verdict"</span>] = <span class="cs">"MALICIOUS"</span>
+        <span class="ck">return</span> result  <span class="cm"># No need to continue</span>
+
+    <span class="cm"># STEP 2: Parse manifest</span>
+    manifest = parse_manifest(crx_path)
+    result[<span class="cs">"manifest"</span>] = manifest
+
+    <span class="ck">if</span> <span class="ck">not</span> manifest:
+        result[<span class="cs">"risk_flags"</span>].append(<span class="cs">"PARSE_ERROR: Could not read manifest.json"</span>)
+        result[<span class="cs">"static_score"</span>] = <span class="cn">50</span>
+        result[<span class="cs">"verdict"</span>] = <span class="cs">"SUSPICIOUS"</span>
+        <span class="ck">return</span> result
+
+    <span class="cm"># STEP 3: Extract features and add risk flags</span>
+    features = manifest_to_features(manifest)
+    result[<span class="cs">"features"</span>] = features
+
+    <span class="ck">if</span> features[<span class="cs">"has_webRequest"</span>] <span class="ck">and</span> features[<span class="cs">"has_all_urls"</span>]:
+        result[<span class="cs">"risk_flags"</span>].append(<span class="cs">"PERM_COMBO: webRequest + all_urls — can intercept all network requests"</span>)
+    <span class="ck">if</span> features[<span class="cs">"has_clipboardRead"</span>]:
+        result[<span class="cs">"risk_flags"</span>].append(<span class="cs">"PERM_CLIP: clipboardRead permission — can steal clipboard content"</span>)
+    <span class="ck">if</span> features[<span class="cs">"has_nativeMessaging"</span>]:
+        result[<span class="cs">"risk_flags"</span>].append(<span class="cs">"PERM_NATIVE: nativeMessaging — can communicate outside browser"</span>)
+    <span class="ck">if</span> features[<span class="cs">"has_cookies"</span>] <span class="ck">and</span> features[<span class="cs">"has_all_urls"</span>]:
+        result[<span class="cs">"risk_flags"</span>].append(<span class="cs">"PERM_COOKIE: Cookies + all_urls — can steal session cookies from all sites"</span>)
+    <span class="ck">if</span> features[<span class="cs">"total_permission_count"</span>] > <span class="cn">10</span>:
+        result[<span class="cs">"risk_flags"</span>].append(<span class="cs">f"PERM_COUNT: {features['total_permission_count']} permissions declared — unusually high"</span>)
+
+    <span class="cm"># STEP 4: ML classification</span>
+    <span class="ck">try</span>:
+        df = pd.read_csv(<span class="cs">"../dataset_clean.csv"</span>, nrows=<span class="cn">1</span>)
+        label_col = df.columns[-<span class="cn">1</span>]
+        all_feature_cols = [c <span class="ck">for</span> c <span class="ck">in</span> df.columns <span class="ck">if</span> c != label_col]
+
+        <span class="cm"># Build a row matching the full feature set</span>
+        row = {}
+        <span class="ck">for</span> col <span class="ck">in</span> all_feature_cols:
+            row[col] = features.get(col, <span class="cn">0</span>)
+        input_df = pd.DataFrame([row])
+        proba = model.predict_proba(input_df)[<span class="cn">0</span>][<span class="cn">1</span>]
+        ml_score = int(proba * <span class="cn">100</span>)
+    <span class="ck">except</span> Exception <span class="ck">as</span> e:
+        <span class="cm"># Fallback: use just the 13 permission features</span>
+        input_df = pd.DataFrame([features])
+        proba = <span class="cn">0.3</span>
+        ml_score = <span class="cn">30</span>
+
+    result[<span class="cs">"ml_score"</span>] = ml_score
+    result[<span class="cs">"ml_probability"</span>] = round(float(proba), <span class="cn">4</span>)
+
+    <span class="cm"># STEP 5: Combine into final static_score</span>
+    flag_score = len(result[<span class="cs">"risk_flags"</span>]) * <span class="cn">10</span>
+    static_score = min(<span class="cn">100</span>, int(ml_score * <span class="cn">0.7</span> + flag_score * <span class="cn">0.3</span>))
+    result[<span class="cs">"static_score"</span>] = static_score
+
+    <span class="ck">if</span> static_score >= <span class="cn">70</span>:
+        result[<span class="cs">"verdict"</span>] = <span class="cs">"MALICIOUS"</span>
+    <span class="ck">elif</span> static_score >= <span class="cn">40</span>:
+        result[<span class="cs">"verdict"</span>] = <span class="cs">"SUSPICIOUS"</span>
+    <span class="ck">else</span>:
+        result[<span class="cs">"verdict"</span>] = <span class="cs">"SAFE"</span>
+
+    <span class="ck">return</span> result</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ============================================================ MODULE 2 -->
+<div class="section" id="m2-overview">
+  <div class="module-header">
+    <div class="module-num mn-2">2</div>
+    <div class="module-header-info">
+      <h3>Dynamic Analysis Module</h3>
+      <p>Puppeteer headless Chrome sandbox inside Docker · Only triggered when static_score ≥ 40</p>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="fbox fb-am">static_score ≥ 40</div><div class="farr">→</div>
+    <div class="fbox fb-b">Docker container starts</div><div class="farr">→</div>
+    <div class="fbox fb-b">Puppeteer loads extension</div><div class="farr">→</div>
+    <div class="fbox fb-b">Monitor behaviour 120s</div><div class="farr">→</div>
+    <div class="fbox fb-am">dynamic_flags list</div>
+  </div>
+</div>
+
+<div class="section" id="m2-docker">
+  <div class="section-badge sb-blue">Module 2 · Docker</div>
+  <h2>Docker sandbox setup</h2>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('dk1')">
+      <div class="card-icon ci-b">🐳</div>
+      <div class="card-info"><div class="card-ttl">Install Docker Desktop</div><div class="card-sub">One-time setup — creates the isolated container environment</div></div>
+      <div class="card-chev op" id="chev-dk1">▼</div>
+    </div>
+    <div class="card-body op" id="body-dk1">
+      <div class="step-list">
+        <div class="step-row"><div class="sn sn-a">1</div><div>Go to <strong>docker.com/products/docker-desktop</strong> and download Docker Desktop for Windows. Install with default settings and restart your computer.</div></div>
+        <div class="step-row"><div class="sn sn-a">2</div><div>After restart, open Docker Desktop. Wait for it to show "Engine running" in the bottom left. This takes about 60 seconds.</div></div>
+        <div class="step-row"><div class="sn sn-a">3</div><div>Open Command Prompt and type <code>docker --version</code> to confirm it is working.</div></div>
+      </div>
+      <div class="slabel">Create the Dockerfile in your sandbox folder</div>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">sandbox/Dockerfile</span><span class="code-lang">Docker</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="cm"># Use Node.js with Chromium pre-installed</span>
+FROM node:18-slim
+
+<span class="cm"># Install Chromium and dependencies</span>
+RUN apt-get update && apt-get install -y \
+    chromium \
+    fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libxss1 \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+<span class="cm"># Set working directory</span>
+WORKDIR /sandbox
+
+<span class="cm"># Copy package files and install Node dependencies</span>
+COPY package.json ./
+RUN npm install
+
+<span class="cm"># Copy sandbox scripts</span>
+COPY sandbox_runner.js ./
+COPY behaviour_monitor.js ./
+
+<span class="cm"># Tell Puppeteer to use installed Chromium, not download its own</span>
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+<span class="cm"># Entry point — receives crx path as argument</span>
+CMD ["node", "sandbox_runner.js"]</pre>
+      </div>
+      <div class="callout ca-blue">
+        <div class="ca-label">Build the Docker image — run this once</div>
+        Open a terminal in your sandbox folder and run:<br>
+        <code style="font-family:monospace;font-size:12px">docker build -t component1-sandbox .</code><br>
+        This builds the image. It takes 3–5 minutes the first time. After that it reuses the cached image.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="m2-puppeteer">
+  <div class="section-badge sb-blue">Module 2 · Puppeteer</div>
+  <h2>Puppeteer sandbox runner</h2>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('pp1')">
+      <div class="card-icon ci-b">🎭</div>
+      <div class="card-info"><div class="card-ttl">sandbox/sandbox_runner.js — runs the extension and captures behaviour</div><div class="card-sub">Complete Puppeteer script that monitors an extension for 120 seconds</div></div>
+      <div class="card-chev op" id="chev-pp1">▼</div>
+    </div>
+    <div class="card-body op" id="body-pp1">
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">sandbox/sandbox_runner.js</span><span class="code-lang">JavaScript</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="ck">const</span> puppeteer = require(<span class="cs">'puppeteer'</span>);
+<span class="ck">const</span> path = require(<span class="cs">'path'</span>);
+<span class="ck">const</span> fs = require(<span class="cs">'fs'</span>);
+
+<span class="ck">const</span> CRX_PATH = process.env.CRX_PATH || process.argv[<span class="cn">2</span>];
+<span class="ck">const</span> MONITOR_DURATION = <span class="cn">120000</span>; <span class="cm">// 120 seconds</span>
+<span class="ck">const</span> BAIT_URLS = [
+    <span class="cs">'https://www.google.com'</span>,
+    <span class="cs">'https://www.github.com'</span>,
+    <span class="cs">'https://httpbin.org/get'</span>
+];
+
+<span class="ck">let</span> behaviourLog = {
+    outbound_requests: [],
+    background_requests: [],
+    chrome_api_calls: [],
+    flags: [],
+    start_time: Date.now()
+};
+
+<span class="cf">async function</span> runSandbox() {
+    console.error(<span class="cs">'[SANDBOX] Starting analysis...'</span>);
+
+    <span class="ck">const</span> browser = <span class="ck">await</span> puppeteer.launch({
+        headless: <span class="cs">'new'</span>,
+        args: [
+            <span class="cs">'--no-sandbox'</span>,
+            <span class="cs">'--disable-setuid-sandbox'</span>,
+            <span class="cs">'--disable-dev-shm-usage'</span>,
+            CRX_PATH ? <span class="cs">`--load-extension=${CRX_PATH}`</span> : <span class="cs">''</span>,
+            <span class="cs">'--disable-extensions-except='</span> + (CRX_PATH || <span class="cs">''</span>)
+        ].filter(Boolean),
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+    });
+
+    <span class="ck">const</span> page = <span class="ck">await</span> browser.newPage();
+
+    <span class="cm">// Monitor all outbound network requests</span>
+    <span class="ck">await</span> page.setRequestInterception(<span class="ck">true</span>);
+    page.on(<span class="cs">'request'</span>, request => {
+        <span class="ck">const</span> url = request.url();
+        <span class="ck">const</span> method = request.method();
+        <span class="ck">const</span> timestamp = Date.now() - behaviourLog.start_time;
+
+        behaviourLog.outbound_requests.push({
+            url, method, timestamp,
+            resourceType: request.resourceType()
+        });
+
+        <span class="cm">// Flag suspicious outbound calls</span>
+        <span class="ck">if</span> (method === <span class="cs">'POST'</span> && !isTrustedDomain(url)) {
+            behaviourLog.flags.push({
+                type: <span class="cs">'OUTBOUND_POST'</span>,
+                detail: <span class="cs">`POST to unknown host: ${new URL(url).hostname}`</span>,
+                timestamp
+            });
+        }
+        request.continue();
+    });
+
+    <span class="cm">// Navigate to bait URLs to trigger extension behaviour</span>
+    <span class="ck">for</span> (<span class="ck">const</span> url <span class="ck">of</span> BAIT_URLS) {
+        <span class="ck">try</span> {
+            <span class="ck">await</span> page.goto(url, { waitUntil: <span class="cs">'networkidle2'</span>, timeout: <span class="cn">15000</span> });
+            <span class="ck">await</span> page.waitForTimeout(<span class="cn">3000</span>);
+        } <span class="ck">catch</span>(e) {
+            console.error(<span class="cs">`[SANDBOX] Navigation error: ${e.message}`</span>);
+        }
+    }
+
+    <span class="cm">// Wait remaining time to catch timer-based beaconing</span>
+    <span class="ck">const</span> elapsed = Date.now() - behaviourLog.start_time;
+    <span class="ck">const</span> remaining = MONITOR_DURATION - elapsed;
+    <span class="ck">if</span> (remaining > <span class="cn">0</span>) {
+        <span class="ck">await</span> page.waitForTimeout(remaining);
+    }
+
+    <span class="cm">// Analyse beacon patterns in captured requests</span>
+    analyseBeaconPatterns();
+
+    <span class="ck">await</span> browser.close();
+
+    <span class="cm">// Output results as JSON to stdout (Python reads this)</span>
+    process.stdout.write(JSON.stringify(behaviourLog));
+}
+
+<span class="cf">function</span> isTrustedDomain(url) {
+    <span class="ck">const</span> trusted = [<span class="cs">'google.com'</span>,<span class="cs">'googleapis.com'</span>,<span class="cs">'gstatic.com'</span>,
+                     <span class="cs">'github.com'</span>,<span class="cs">'github.io'</span>,<span class="cs">'httpbin.org'</span>];
+    <span class="ck">try</span> {
+        <span class="ck">const</span> hostname = <span class="ck">new</span> URL(url).hostname;
+        <span class="ck">return</span> trusted.some(t => hostname.endsWith(t));
+    } <span class="ck">catch</span> { <span class="ck">return</span> <span class="ck">false</span>; }
+}
+
+<span class="cf">function</span> analyseBeaconPatterns() {
+    <span class="cm">// Group requests by destination host</span>
+    <span class="ck">const</span> hostMap = {};
+    <span class="ck">for</span> (<span class="ck">const</span> req <span class="ck">of</span> behaviourLog.outbound_requests) {
+        <span class="ck">try</span> {
+            <span class="ck">const</span> host = <span class="ck">new</span> URL(req.url).hostname;
+            <span class="ck">if</span> (!hostMap[host]) hostMap[host] = [];
+            hostMap[host].push(req.timestamp);
+        } <span class="ck">catch</span> {}
+    }
+
+    <span class="cm">// Check for periodic beaconing (low coefficient of variation)</span>
+    <span class="ck">for</span> (<span class="ck">const</span> [host, times] <span class="ck">of</span> Object.entries(hostMap)) {
+        <span class="ck">if</span> (times.length >= <span class="cn">3</span> && !isTrustedDomain(<span class="cs">`https://${host}`</span>)) {
+            <span class="ck">const</span> deltas = times.slice(<span class="cn">1</span>).map((t, i) => t - times[i]);
+            <span class="ck">const</span> mean = deltas.reduce((a,b) => a+b) / deltas.length;
+            <span class="ck">const</span> variance = deltas.reduce((s,d) => s + (d-mean)**<span class="cn">2</span>, <span class="cn">0</span>) / deltas.length;
+            <span class="ck">const</span> cv = Math.sqrt(variance) / mean;
+
+            <span class="ck">if</span> (cv < <span class="cn">0.15</span>) {
+                behaviourLog.flags.push({
+                    type: <span class="cs">'BEACON_PATTERN'</span>,
+                    detail: <span class="cs">`Periodic requests to ${host} — CV=${cv.toFixed(3)} (beaconing)`</span>,
+                    host, call_count: times.length
+                });
+            }
+        }
+    }
+}
+
+runSandbox().catch(err => {
+    console.error(<span class="cs">'[SANDBOX ERROR]'</span>, err.message);
+    process.stdout.write(JSON.stringify({ flags: [], error: err.message }));
+});</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="m2-monitor">
+  <div class="section-badge sb-blue">Module 2 · Python Bridge</div>
+  <h2>dynamic_analysis.py — Python calls the Docker sandbox</h2>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('dm1')">
+      <div class="card-icon ci-b">🔗</div>
+      <div class="card-info"><div class="card-ttl">backend/dynamic_analysis.py — complete file</div><div class="card-sub">Python function that spins up a Docker container and gets the behaviour results back</div></div>
+      <div class="card-chev op" id="chev-dm1">▼</div>
+    </div>
+    <div class="card-body op" id="body-dm1">
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">backend/dynamic_analysis.py</span><span class="code-lang">Python</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="ck">import</span> subprocess
+<span class="ck">import</span> json
+<span class="ck">import</span> os
+<span class="ck">import</span> time
+
+<span class="cm"># ── FUNCTION: Run sandbox analysis via Docker ──────────────────</span>
+<span class="ck">def</span> <span class="cf">run_dynamic_analysis</span>(crx_path):
+    <span class="cs">"""
+    Runs the extension inside a Docker sandbox and returns
+    the list of suspicious behaviour flags detected.
+    """</span>
+    result = {
+        <span class="cs">"sandbox_ran"</span>: <span class="ck">False</span>,
+        <span class="cs">"duration_seconds"</span>: <span class="cn">0</span>,
+        <span class="cs">"outbound_request_count"</span>: <span class="cn">0</span>,
+        <span class="cs">"dynamic_flags"</span>: [],
+        <span class="cs">"dynamic_score"</span>: <span class="cn">0</span>,
+        <span class="cs">"error"</span>: <span class="ck">None</span>
+    }
+
+    <span class="ck">if</span> <span class="ck">not</span> os.path.exists(crx_path):
+        result[<span class="cs">"error"</span>] = <span class="cs">"CRX file not found"</span>
+        <span class="ck">return</span> result
+
+    crx_abs = os.path.abspath(crx_path)
+    crx_dir = os.path.dirname(crx_abs)
+    crx_filename = os.path.basename(crx_abs)
+    start_time = time.time()
+
+    <span class="ck">try</span>:
+        <span class="cm"># Run Docker container
+        # -v mounts the CRX file into the container
+        # -e passes the path as an environment variable
+        # --rm removes container after it finishes
+        # --network=none disables real internet (safety)</span>
+        docker_cmd = [
+            <span class="cs">"docker"</span>, <span class="cs">"run"</span>, <span class="cs">"--rm"</span>,
+            <span class="cs">"--network=none"</span>,           <span class="cm"># no real internet access</span>
+            <span class="cs">"--memory=512m"</span>,             <span class="cm"># limit memory</span>
+            <span class="cs">"--cpus=1"</span>,                  <span class="cm"># limit CPU</span>
+            <span class="cs">f"-v"</span>, <span class="cs">f"{crx_dir}:/crx_files"</span>,
+            <span class="cs">"-e"</span>, <span class="cs">f"CRX_PATH=/crx_files/{crx_filename}"</span>,
+            <span class="cs">"component1-sandbox"</span>
+        ]
+
+        proc = subprocess.run(
+            docker_cmd,
+            capture_output=<span class="ck">True</span>,
+            text=<span class="ck">True</span>,
+            timeout=<span class="cn">150</span>              <span class="cm"># 150s timeout (sandbox runs for 120s)</span>
+        )
+
+        result[<span class="cs">"duration_seconds"</span>] = round(time.time() - start_time, <span class="cn">1</span>)
+        result[<span class="cs">"sandbox_ran"</span>] = <span class="ck">True</span>
+
+        <span class="cm"># Parse the JSON output from the sandbox script</span>
+        <span class="ck">if</span> proc.stdout:
+            sandbox_data = json.loads(proc.stdout)
+            flags = sandbox_data.get(<span class="cs">"flags"</span>, [])
+            requests = sandbox_data.get(<span class="cs">"outbound_requests"</span>, [])
+
+            result[<span class="cs">"outbound_request_count"</span>] = len(requests)
+            result[<span class="cs">"dynamic_flags"</span>] = flags
+
+            <span class="cm"># Score based on number and severity of flags</span>
+            score = <span class="cn">0</span>
+            <span class="ck">for</span> flag <span class="ck">in</span> flags:
+                flag_type = flag.get(<span class="cs">"type"</span>, <span class="cs">""</span>)
+                <span class="ck">if</span> flag_type == <span class="cs">"BEACON_PATTERN"</span>:   score += <span class="cn">40</span>
+                <span class="ck">elif</span> flag_type == <span class="cs">"OUTBOUND_POST"</span>:   score += <span class="cn">25</span>
+                <span class="ck">elif</span> flag_type == <span class="cs">"DOM_SCRAPE"</span>:      score += <span class="cn">30</span>
+                <span class="ck">elif</span> flag_type == <span class="cs">"COOKIE_ACCESS"</span>:   score += <span class="cn">35</span>
+                <span class="ck">else</span>:                               score += <span class="cn">15</span>
+
+            result[<span class="cs">"dynamic_score"</span>] = min(<span class="cn">100</span>, score)
+
+    <span class="ck">except</span> subprocess.TimeoutExpired:
+        result[<span class="cs">"error"</span>] = <span class="cs">"Sandbox timed out after 150 seconds"</span>
+        result[<span class="cs">"dynamic_score"</span>] = <span class="cn">50</span>  <span class="cm"># timeout is suspicious</span>
+    <span class="ck">except</span> Exception <span class="ck">as</span> e:
+        result[<span class="cs">"error"</span>] = str(e)
+
+    <span class="ck">return</span> result</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ============================================================ MODULE 3 -->
+<div class="section" id="m3-overview">
+  <div class="module-header">
+    <div class="module-num mn-3">3</div>
+    <div class="module-header-info">
+      <h3>Verdict Engine + Database + Report</h3>
+      <p>Combines static + dynamic scores · Saves to SQLite · Generates human-readable report · Feeds dashboard</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="m3-engine">
+  <div class="section-badge sb-green">Module 3 · Verdict</div>
+  <h2>verdict_engine.py + database.py</h2>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('ve1')">
+      <div class="card-icon ci-g">⚖️</div>
+      <div class="card-info"><div class="card-ttl">backend/verdict_engine.py — combines all scores</div><div class="card-sub">Takes static and dynamic results and produces the final threat score and verdict</div></div>
+      <div class="card-chev op" id="chev-ve1">▼</div>
+    </div>
+    <div class="card-body op" id="body-ve1">
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">backend/verdict_engine.py</span><span class="code-lang">Python</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="ck">from</span> database <span class="ck">import</span> save_analysis_result
+<span class="ck">from</span> report_generator <span class="ck">import</span> generate_report
+
+<span class="ck">def</span> <span class="cf">compute_final_verdict</span>(static_result, dynamic_result=<span class="ck">None</span>):
+    <span class="cs">"""
+    Combines static + dynamic scores into one final verdict.
+    dynamic_result is None if sandbox was not triggered.
+    """</span>
+
+    static_score  = static_result.get(<span class="cs">"static_score"</span>, <span class="cn">0</span>)
+    dynamic_score = dynamic_result.get(<span class="cs">"dynamic_score"</span>, <span class="cn">0</span>) <span class="ck">if</span> dynamic_result <span class="ck">else</span> <span class="cn">0</span>
+    hash_match    = static_result.get(<span class="cs">"hash_match"</span>, <span class="ck">False</span>)
+    static_flags  = static_result.get(<span class="cs">"risk_flags"</span>, [])
+    dynamic_flags = dynamic_result.get(<span class="cs">"dynamic_flags"</span>, []) <span class="ck">if</span> dynamic_result <span class="ck">else</span> []
+    all_flags     = static_flags + [f.get(<span class="cs">"detail"</span>, str(f)) <span class="ck">for</span> f <span class="ck">in</span> dynamic_flags]
+    sandbox_ran   = dynamic_result.get(<span class="cs">"sandbox_ran"</span>, <span class="ck">False</span>) <span class="ck">if</span> dynamic_result <span class="ck">else</span> <span class="ck">False</span>
+
+    <span class="cm"># CASE 1: Definite hash match — always MALICIOUS</span>
+    <span class="ck">if</span> hash_match:
+        final_score = <span class="cn">100</span>
+        verdict = <span class="cs">"MALICIOUS"</span>
+        confidence = <span class="cs">"HIGH"</span>
+
+    <span class="cm"># CASE 2: Both static and dynamic scores available</span>
+    <span class="ck">elif</span> sandbox_ran:
+        <span class="cm"># Weight: 40% static, 60% dynamic (behaviour is stronger evidence)</span>
+        final_score = int(static_score * <span class="cn">0.4</span> + dynamic_score * <span class="cn">0.6</span>)
+        confidence = <span class="cs">"HIGH"</span>
+        <span class="ck">if</span> final_score >= <span class="cn">70</span>:
+            verdict = <span class="cs">"MALICIOUS"</span>
+        <span class="ck">elif</span> final_score >= <span class="cn">40</span>:
+            verdict = <span class="cs">"SUSPICIOUS"</span>
+        <span class="ck">else</span>:
+            verdict = <span class="cs">"SAFE"</span>
+
+    <span class="cm"># CASE 3: Static analysis only (safe extensions, no sandbox run)</span>
+    <span class="ck">else</span>:
+        final_score = static_score
+        confidence = <span class="cs">"MEDIUM"</span>
+        <span class="ck">if</span> final_score >= <span class="cn">70</span>:
+            verdict = <span class="cs">"MALICIOUS"</span>
+        <span class="ck">elif</span> final_score >= <span class="cn">40</span>:
+            verdict = <span class="cs">"SUSPICIOUS"</span>
+        <span class="ck">else</span>:
+            verdict = <span class="cs">"SAFE"</span>
+
+    verdict_result = {
+        <span class="cs">"extension_id"</span>:    static_result.get(<span class="cs">"extension_id"</span>, <span class="cs">"unknown"</span>),
+        <span class="cs">"file_hash"</span>:       static_result.get(<span class="cs">"file_hash"</span>, <span class="cs">""</span>),
+        <span class="cs">"static_score"</span>:    static_score,
+        <span class="cs">"dynamic_score"</span>:   dynamic_score,
+        <span class="cs">"final_score"</span>:     final_score,
+        <span class="cs">"verdict"</span>:         verdict,
+        <span class="cs">"confidence"</span>:      confidence,
+        <span class="cs">"sandbox_ran"</span>:     sandbox_ran,
+        <span class="cs">"alert_flags"</span>:     all_flags,
+        <span class="cs">"flag_count"</span>:      len(all_flags),
+        <span class="cs">"manifest"</span>:        static_result.get(<span class="cs">"manifest"</span>, {}),
+        <span class="cs">"features"</span>:        static_result.get(<span class="cs">"features"</span>, {}),
+    }
+
+    <span class="cm"># Save to database</span>
+    analysis_id = save_analysis_result(verdict_result)
+    verdict_result[<span class="cs">"analysis_id"</span>] = analysis_id
+
+    <span class="cm"># Generate human-readable report</span>
+    report = generate_report(verdict_result)
+    verdict_result[<span class="cs">"report"</span>] = report
+
+    <span class="ck">return</span> verdict_result</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="m3-db">
+  <div class="section-badge sb-green">Module 3 · Database</div>
+  <h2>database.py — SQLite storage</h2>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('db1')">
+      <div class="card-icon ci-g">🗄️</div>
+      <div class="card-info"><div class="card-ttl">backend/database.py — complete file</div><div class="card-sub">Creates and manages the SQLite database for all analysis results</div></div>
+      <div class="card-chev op" id="chev-db1">▼</div>
+    </div>
+    <div class="card-body op" id="body-db1">
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">backend/database.py</span><span class="code-lang">Python</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="ck">import</span> sqlite3
+<span class="ck">import</span> json
+<span class="ck">import</span> os
+<span class="ck">from</span> datetime <span class="ck">import</span> datetime
+
+DB_PATH = os.path.join(os.path.dirname(__file__), <span class="cs">"../data/component1.db"</span>)
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=<span class="ck">True</span>)
+
+<span class="ck">def</span> <span class="cf">init_db</span>():
+    <span class="cm">"""Create tables if they don't exist."""</span>
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(<span class="cs">"""
+        CREATE TABLE IF NOT EXISTS analyses (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysed_at TEXT    NOT NULL,
+            extension_id TEXT,
+            file_hash   TEXT,
+            static_score INTEGER,
+            dynamic_score INTEGER,
+            final_score INTEGER,
+            verdict     TEXT,
+            confidence  TEXT,
+            sandbox_ran INTEGER,
+            flag_count  INTEGER,
+            alert_flags TEXT,
+            manifest    TEXT,
+            features    TEXT
+        )
+    """</span>)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+<span class="ck">def</span> <span class="cf">save_analysis_result</span>(result):
+    <span class="cm">"""Save a verdict result to the database. Returns the new row ID."""</span>
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.execute(<span class="cs">"""
+        INSERT INTO analyses
+        (analysed_at, extension_id, file_hash, static_score,
+         dynamic_score, final_score, verdict, confidence,
+         sandbox_ran, flag_count, alert_flags, manifest, features)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    """</span>, (
+        datetime.now().isoformat(),
+        result.get(<span class="cs">"extension_id"</span>, <span class="cs">""</span>),
+        result.get(<span class="cs">"file_hash"</span>, <span class="cs">""</span>),
+        result.get(<span class="cs">"static_score"</span>, <span class="cn">0</span>),
+        result.get(<span class="cs">"dynamic_score"</span>, <span class="cn">0</span>),
+        result.get(<span class="cs">"final_score"</span>, <span class="cn">0</span>),
+        result.get(<span class="cs">"verdict"</span>, <span class="cs">"UNKNOWN"</span>),
+        result.get(<span class="cs">"confidence"</span>, <span class="cs">"LOW"</span>),
+        <span class="cn">1</span> <span class="ck">if</span> result.get(<span class="cs">"sandbox_ran"</span>) <span class="ck">else</span> <span class="cn">0</span>,
+        result.get(<span class="cs">"flag_count"</span>, <span class="cn">0</span>),
+        json.dumps(result.get(<span class="cs">"alert_flags"</span>, [])),
+        json.dumps(result.get(<span class="cs">"manifest"</span>, {})),
+        json.dumps(result.get(<span class="cs">"features"</span>, {}))
+    ))
+    conn.commit()
+    analysis_id = cursor.lastrowid
+    conn.close()
+    <span class="ck">return</span> analysis_id
+
+<span class="ck">def</span> <span class="cf">get_all_analyses</span>():
+    <span class="cm">"""Return all analyses for the dashboard."""</span>
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(<span class="cs">"SELECT * FROM analyses ORDER BY id DESC"</span>).fetchall()
+    conn.close()
+    result = []
+    <span class="ck">for</span> row <span class="ck">in</span> rows:
+        item = dict(row)
+        item[<span class="cs">"alert_flags"</span>] = json.loads(item[<span class="cs">"alert_flags"</span>] or <span class="cs">"[]"</span>)
+        result.append(item)
+    <span class="ck">return</span> result
+
+<span class="ck">def</span> <span class="cf">get_analysis_by_id</span>(analysis_id):
+    <span class="cm">"""Return one analysis by its ID."""</span>
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(<span class="cs">"SELECT * FROM analyses WHERE id=?"</span>, (analysis_id,)).fetchone()
+    conn.close()
+    <span class="ck">if not</span> row: <span class="ck">return</span> <span class="ck">None</span>
+    item = dict(row)
+    item[<span class="cs">"alert_flags"</span>] = json.loads(item[<span class="cs">"alert_flags"</span>] or <span class="cs">"[]"</span>)
+    item[<span class="cs">"manifest"</span>]    = json.loads(item[<span class="cs">"manifest"</span>]    or <span class="cs">"{}"</span>)
+    item[<span class="cs">"features"</span>]    = json.loads(item[<span class="cs">"features"</span>]    or <span class="cs">"{}"</span>)
+    <span class="ck">return</span> item</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="m3-report">
+  <div class="section-badge sb-green">Module 3 · Report</div>
+  <h2>report_generator.py + app.py</h2>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('rg1')">
+      <div class="card-icon ci-g">📋</div>
+      <div class="card-info"><div class="card-ttl">backend/report_generator.py</div><div class="card-sub">Generates a human-readable text report from verdict data</div></div>
+      <div class="card-chev" id="chev-rg1">▼</div>
+    </div>
+    <div class="card-body" id="body-rg1">
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">backend/report_generator.py</span><span class="code-lang">Python</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="ck">from</span> datetime <span class="ck">import</span> datetime
+
+<span class="ck">def</span> <span class="cf">generate_report</span>(verdict):
+    score   = verdict.get(<span class="cs">"final_score"</span>, <span class="cn">0</span>)
+    verdict_str = verdict.get(<span class="cs">"verdict"</span>, <span class="cs">"UNKNOWN"</span>)
+    flags   = verdict.get(<span class="cs">"alert_flags"</span>, [])
+    sandbox = verdict.get(<span class="cs">"sandbox_ran"</span>, <span class="ck">False</span>)
+    ext_id  = verdict.get(<span class="cs">"extension_id"</span>, <span class="cs">"unknown"</span>)
+    feats   = verdict.get(<span class="cs">"features"</span>, {})
+
+    risk_bar = <span class="cs">"█"</span> * (score // <span class="cn">10</span>) + <span class="cs">"░"</span> * (<span class="cn">10</span> - score // <span class="cn">10</span>)
+    lines = [
+        <span class="cs">f"╔══════════════════════════════════════════════════╗"</span>,
+        <span class="cs">f"║   COMPONENT 1 — MALICIOUS EXTENSION ANALYZER     ║"</span>,
+        <span class="cs">f"║   Browser Security Intelligence · R26-CS-003      ║"</span>,
+        <span class="cs">f"╚══════════════════════════════════════════════════╝"</span>,
+        <span class="cs">f""</span>,
+        <span class="cs">f"Extension ID  : {ext_id}"</span>,
+        <span class="cs">f"Analysed At   : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"</span>,
+        <span class="cs">f"Sandbox Run   : {'Yes' if sandbox else 'No (static only)'}"</span>,
+        <span class="cs">f""</span>,
+        <span class="cs">f"THREAT SCORE  : {score}/100  [{risk_bar}]"</span>,
+        <span class="cs">f"VERDICT       : *** {verdict_str} ***"</span>,
+        <span class="cs">f""</span>,
+        <span class="cs">f"── Declared Permissions ──────────────────────────"</span>,
+    ]
+
+    perm_map = {
+        <span class="cs">"has_webRequest"</span>:       <span class="cs">"webRequest"</span>,
+        <span class="cs">"has_all_urls"</span>:         <span class="cs">"&lt;all_urls&gt; (all websites)"</span>,
+        <span class="cs">"has_cookies"</span>:          <span class="cs">"cookies"</span>,
+        <span class="cs">"has_clipboardRead"</span>:    <span class="cs">"clipboardRead ⚠"</span>,
+        <span class="cs">"has_nativeMessaging"</span>:  <span class="cs">"nativeMessaging ⚠"</span>,
+        <span class="cs">"has_tabs"</span>:             <span class="cs">"tabs"</span>,
+        <span class="cs">"has_downloads"</span>:        <span class="cs">"downloads"</span>,
+        <span class="cs">"has_history"</span>:          <span class="cs">"history"</span>,
+        <span class="cs">"has_background_script"</span>:<span class="cs">"background script"</span>,
+    }
+    <span class="ck">for</span> key, label <span class="ck">in</span> perm_map.items():
+        <span class="ck">if</span> feats.get(key):
+            lines.append(<span class="cs">f"  [✓] {label}"</span>)
+    total = feats.get(<span class="cs">"total_permission_count"</span>, <span class="cn">0</span>)
+    lines.append(<span class="cs">f"  Total: {total} permissions declared"</span>)
+
+    <span class="ck">if</span> flags:
+        lines += [<span class="cs">f""</span>, <span class="cs">f"── Alert Flags ({len(flags)}) ─────────────────────────"</span>]
+        <span class="ck">for</span> i, flag <span class="ck">in</span> enumerate(flags, <span class="cn">1</span>):
+            lines.append(<span class="cs">f"  {i}. {flag}"</span>)
+
+    lines += [
+        <span class="cs">f""</span>,
+        <span class="cs">f"── Recommendation ────────────────────────────────"</span>,
+        <span class="cs">f"  {'BLOCK — Do not install this extension.' if verdict_str == 'MALICIOUS' else 'CAUTION — Review manually before installing.' if verdict_str == 'SUSPICIOUS' else 'ALLOW — Extension appears safe to install.'}"</span>,
+        <span class="cs">f"═══════════════════════════════════════════════════"</span>
+    ]
+    <span class="ck">return</span> <span class="cs">"\n"</span>.join(lines)</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('ap1')">
+      <div class="card-icon ci-g">🚀</div>
+      <div class="card-info"><div class="card-ttl">backend/app.py — the main Flask API server</div><div class="card-sub">The central server that ties all three modules together and exposes API endpoints</div></div>
+      <div class="card-chev op" id="chev-ap1">▼</div>
+    </div>
+    <div class="card-body op" id="body-ap1">
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">backend/app.py</span><span class="code-lang">Python</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="ck">from</span> flask <span class="ck">import</span> Flask, request, jsonify
+<span class="ck">from</span> flask_cors <span class="ck">import</span> CORS
+<span class="ck">import</span> os
+
+<span class="ck">from</span> static_analysis  <span class="ck">import</span> run_static_analysis
+<span class="ck">from</span> dynamic_analysis <span class="ck">import</span> run_dynamic_analysis
+<span class="ck">from</span> verdict_engine   <span class="ck">import</span> compute_final_verdict
+<span class="ck">from</span> database         <span class="ck">import</span> get_all_analyses, get_analysis_by_id
+
+app = Flask(__name__)
+CORS(app)  <span class="cm"># Allow frontend to call this API</span>
+
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), <span class="cs">"../data/uploads"</span>)
+os.makedirs(UPLOAD_FOLDER, exist_ok=<span class="ck">True</span>)
+
+<span class="cm"># ── ENDPOINT 1: Health check ───────────────────────────────────</span>
+<span class="co">@app.route</span>(<span class="cs">"/api/health"</span>)
+<span class="ck">def</span> <span class="cf">health</span>():
+    <span class="ck">return</span> jsonify({<span class="cs">"status"</span>: <span class="cs">"ok"</span>, <span class="cs">"message"</span>: <span class="cs">"Component 1 API running"</span>})
+
+<span class="cm"># ── ENDPOINT 2: Analyse an extension ──────────────────────────</span>
+<span class="co">@app.route</span>(<span class="cs">"/api/analyse"</span>, methods=[<span class="cs">"POST"</span>])
+<span class="ck">def</span> <span class="cf">analyse</span>():
+    <span class="ck">if</span> <span class="cs">"file"</span> <span class="ck">not in</span> request.files:
+        <span class="ck">return</span> jsonify({<span class="cs">"error"</span>: <span class="cs">"No file uploaded"</span>}), <span class="cn">400</span>
+
+    file = request.files[<span class="cs">"file"</span>]
+    <span class="ck">if not</span> file.filename.endswith(<span class="cs">".crx"</span>):
+        <span class="ck">return</span> jsonify({<span class="cs">"error"</span>: <span class="cs">"Only .crx files accepted"</span>}), <span class="cn">400</span>
+
+    <span class="cm"># Save the uploaded file</span>
+    save_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(save_path)
+
+    <span class="cm"># MODULE 1: Static analysis</span>
+    static_result = run_static_analysis(save_path)
+
+    <span class="cm"># MODULE 2: Dynamic analysis (only if suspicious)</span>
+    dynamic_result = <span class="ck">None</span>
+    run_sandbox = request.form.get(<span class="cs">"run_sandbox"</span>, <span class="cs">"auto"</span>)
+    <span class="ck">if</span> run_sandbox == <span class="cs">"always"</span> <span class="ck">or</span> (run_sandbox == <span class="cs">"auto"</span> <span class="ck">and</span> static_result[<span class="cs">"static_score"</span>] >= <span class="cn">40</span>):
+        dynamic_result = run_dynamic_analysis(save_path)
+
+    <span class="cm"># MODULE 3: Verdict engine</span>
+    final = compute_final_verdict(static_result, dynamic_result)
+
+    <span class="ck">return</span> jsonify(final)
+
+<span class="cm"># ── ENDPOINT 3: Get all past analyses ─────────────────────────</span>
+<span class="co">@app.route</span>(<span class="cs">"/api/analyses"</span>)
+<span class="ck">def</span> <span class="cf">get_analyses</span>():
+    <span class="ck">return</span> jsonify(get_all_analyses())
+
+<span class="cm"># ── ENDPOINT 4: Get one analysis by ID ────────────────────────</span>
+<span class="co">@app.route</span>(<span class="cs">"/api/analyses/&lt;int:analysis_id&gt;"</span>)
+<span class="ck">def</span> <span class="cf">get_analysis</span>(analysis_id):
+    result = get_analysis_by_id(analysis_id)
+    <span class="ck">if not</span> result:
+        <span class="ck">return</span> jsonify({<span class="cs">"error"</span>: <span class="cs">"Not found"</span>}), <span class="cn">404</span>
+    <span class="ck">return</span> jsonify(result)
+
+<span class="ck">if</span> __name__ == <span class="cs">"__main__"</span>:
+    print(<span class="cs">"Starting Component 1 API server..."</span>)
+    app.run(debug=<span class="ck">True</span>, host=<span class="cs">"0.0.0.0"</span>, port=<span class="cn">5001</span>)</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ============================================================ FRONTEND -->
+<div class="section" id="fe-overview">
+  <div class="section-badge sb-amber">Frontend</div>
+  <h2>Dashboard — frontend/index.html</h2>
+  <p class="lead">A full dashboard with upload form, results display, and analysis history. Open this file directly in your browser — it calls the Flask backend API.</p>
+</div>
+
+<div class="section" id="fe-html">
+  <div class="section-badge sb-amber">Frontend · Full file</div>
+  <h2>frontend/index.html</h2>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('fe1')">
+      <div class="card-icon ci-am">🖥️</div>
+      <div class="card-info"><div class="card-ttl">frontend/index.html — complete dashboard</div><div class="card-sub">Upload .crx file, see threat score, view flags, read report</div></div>
+      <div class="card-chev op" id="chev-fe1">▼</div>
+    </div>
+    <div class="card-body op" id="body-fe1">
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">frontend/index.html</span><span class="code-lang">HTML</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="UTF-8"&gt;
+&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+&lt;title&gt;Component 1 — Extension Analyzer&lt;/title&gt;
+&lt;style&gt;
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #0F0F11; color: #E8E4DC; font-size: 14px; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 40px 20px 80px; }
+h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+.subtitle { color: #888; font-size: 13px; margin-bottom: 32px; }
+
+/* Upload area */
+.upload-card { background: #18181C; border: 1px solid #2E2E38; border-radius: 12px; padding: 28px; margin-bottom: 24px; }
+.upload-card h2 { font-size: 16px; margin-bottom: 16px; }
+.drop-zone { border: 2px dashed #2E2E38; border-radius: 10px; padding: 40px 20px; text-align: center;
+  cursor: pointer; transition: border-color .2s; }
+.drop-zone:hover, .drop-zone.active { border-color: #7C6EF8; }
+.drop-icon { font-size: 32px; margin-bottom: 10px; }
+.drop-label { font-size: 14px; color: #888; margin-bottom: 6px; }
+.drop-sub { font-size: 12px; color: #555; }
+#file-input { display: none; }
+.options { display: flex; gap: 16px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
+.option-label { font-size: 13px; color: #888; }
+select { background: #222228; border: 1px solid #2E2E38; border-radius: 6px; padding: 6px 10px;
+  color: #E8E4DC; font-size: 13px; cursor: pointer; }
+.btn-analyse { background: #7C6EF8; color: #fff; border: none; border-radius: 8px; padding: 10px 24px;
+  font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; width: 100%; transition: opacity .15s; }
+.btn-analyse:hover { opacity: .85; }
+.btn-analyse:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Loading */
+.loading { display: none; text-align: center; padding: 40px; }
+.spinner { width: 36px; height: 36px; border: 3px solid #2E2E38; border-top-color: #7C6EF8;
+  border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 13px; color: #888; }
+
+/* Result */
+.result { display: none; background: #18181C; border: 1px solid #2E2E38; border-radius: 12px; margin-bottom: 24px; overflow: hidden; }
+.result-header { padding: 20px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #2E2E38; }
+.verdict-badge { padding: 6px 18px; border-radius: 8px; font-size: 14px; font-weight: 700; letter-spacing: .05em; }
+.verdict-MALICIOUS { background: rgba(240,82,82,.15); color: #F05252; border: 1px solid rgba(240,82,82,.3); }
+.verdict-SUSPICIOUS { background: rgba(245,158,11,.15); color: #F59E0B; border: 1px solid rgba(245,158,11,.3); }
+.verdict-SAFE { background: rgba(61,214,140,.12); color: #3DD68C; border: 1px solid rgba(61,214,140,.25); }
+.score-ring { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
+.score-ring svg { transform: rotate(-90deg); }
+.score-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; }
+.result-meta { flex: 1; }
+.result-meta h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.result-meta p { font-size: 12px; color: #888; }
+
+/* Tabs */
+.tabs { display: flex; border-bottom: 1px solid #2E2E38; }
+.tab { padding: 12px 20px; font-size: 13px; font-weight: 500; color: #888; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; }
+.tab.active { color: #7C6EF8; border-bottom-color: #7C6EF8; }
+.tab:hover { color: #E8E4DC; }
+.tab-content { display: none; padding: 20px 24px; }
+.tab-content.active { display: block; }
+
+/* Flags */
+.flag { display: flex; gap: 10px; padding: 10px 14px; background: #222228; border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
+.flag:last-child { margin-bottom: 0; }
+.flag-dot { width: 8px; height: 8px; border-radius: 50%; background: #F59E0B; flex-shrink: 0; margin-top: 5px; }
+.flag-dot.high { background: #F05252; }
+.no-flags { color: #555; font-size: 13px; padding: 20px 0; text-align: center; }
+
+/* Scores */
+.score-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.score-box { background: #222228; border-radius: 8px; padding: 14px; text-align: center; }
+.score-box .val { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+.score-box .lbl { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .06em; }
+
+/* Report */
+pre.report { font-family: monospace; font-size: 12px; color: #9EF7B9; background: #0A0A0C; padding: 18px;
+  border-radius: 8px; white-space: pre-wrap; line-height: 1.8; overflow-x: auto; }
+
+/* History */
+.history-card { background: #18181C; border: 1px solid #2E2E38; border-radius: 12px; padding: 24px; }
+.history-card h2 { font-size: 16px; margin-bottom: 16px; }
+.history-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #2E2E38; cursor: pointer; }
+.history-row:last-child { border-bottom: none; }
+.history-row:hover { opacity: .85; }
+.hist-score { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.hist-info { flex: 1; }
+.hist-name { font-size: 13px; font-weight: 500; }
+.hist-date { font-size: 11px; color: #888; margin-top: 2px; }
+.hist-verdict { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+.v-M { background: rgba(240,82,82,.15); color: #F05252; }
+.v-S { background: rgba(245,158,11,.15); color: #F59E0B; }
+.v-SA { background: rgba(61,214,140,.12); color: #3DD68C; }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div class="wrap"&gt;
+  &lt;h1&gt;🔍 Malicious Extension Analyzer&lt;/h1&gt;
+  &lt;div class="subtitle"&gt;Component 1 · Browser Security Intelligence · R26-CS-003&lt;/div&gt;
+
+  &lt;!-- Upload section --&gt;
+  &lt;div class="upload-card"&gt;
+    &lt;h2&gt;Analyse a Chrome Extension&lt;/h2&gt;
+    &lt;div class="drop-zone" id="dropZone" onclick="document.getElementById('file-input').click()"&gt;
+      &lt;div class="drop-icon"&gt;📦&lt;/div&gt;
+      &lt;div class="drop-label" id="dropLabel"&gt;Drop a .crx file here or click to browse&lt;/div&gt;
+      &lt;div class="drop-sub"&gt;Chrome Extension packages only&lt;/div&gt;
+      &lt;input type="file" id="file-input" accept=".crx" onchange="onFileSelect(this)"&gt;
+    &lt;/div&gt;
+    &lt;div class="options"&gt;
+      &lt;span class="option-label"&gt;Sandbox mode:&lt;/span&gt;
+      &lt;select id="sandbox-mode"&gt;
+        &lt;option value="auto"&gt;Auto (sandbox if suspicious)&lt;/option&gt;
+        &lt;option value="always"&gt;Always run sandbox&lt;/option&gt;
+        &lt;option value="never"&gt;Static analysis only&lt;/option&gt;
+      &lt;/select&gt;
+    &lt;/div&gt;
+    &lt;button class="btn-analyse" id="analyseBtn" disabled onclick="analyseFile()"&gt;
+      Analyse Extension
+    &lt;/button&gt;
+  &lt;/div&gt;
+
+  &lt;!-- Loading --&gt;
+  &lt;div class="loading" id="loading"&gt;
+    &lt;div class="spinner"&gt;&lt;/div&gt;
+    &lt;div class="loading-text" id="loadingText"&gt;Running static analysis...&lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;!-- Result --&gt;
+  &lt;div class="result" id="result"&gt;
+    &lt;div class="result-header"&gt;
+      &lt;div class="score-ring"&gt;
+        &lt;svg viewBox="0 0 64 64" width="64" height="64"&gt;
+          &lt;circle cx="32" cy="32" r="26" fill="none" stroke="#2E2E38" stroke-width="6"/&gt;
+          &lt;circle cx="32" cy="32" r="26" fill="none" id="scoreCircle"
+            stroke="#7C6EF8" stroke-width="6"
+            stroke-dasharray="163" stroke-dashoffset="163"
+            stroke-linecap="round" style="transition:stroke-dashoffset .6s"/&gt;
+        &lt;/svg&gt;
+        &lt;div class="score-num" id="scoreNum"&gt;0&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class="result-meta"&gt;
+        &lt;h3 id="result-title"&gt;Analysis Complete&lt;/h3&gt;
+        &lt;p id="result-sub"&gt;&lt;/p&gt;
+      &lt;/div&gt;
+      &lt;div class="verdict-badge" id="verdict-badge"&gt;&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class="tabs"&gt;
+      &lt;div class="tab active" onclick="showTab('scores')"&gt;Scores&lt;/div&gt;
+      &lt;div class="tab" onclick="showTab('flags')"&gt;Alert Flags&lt;/div&gt;
+      &lt;div class="tab" onclick="showTab('report')"&gt;Full Report&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class="tab-content active" id="tab-scores"&gt;
+      &lt;div class="score-grid"&gt;
+        &lt;div class="score-box"&gt;&lt;div class="val" id="s-static" style="color:#9F94FA"&gt;-&lt;/div&gt;&lt;div class="lbl"&gt;Static Score&lt;/div&gt;&lt;/div&gt;
+        &lt;div class="score-box"&gt;&lt;div class="val" id="s-dynamic" style="color:#60A5FA"&gt;-&lt;/div&gt;&lt;div class="lbl"&gt;Dynamic Score&lt;/div&gt;&lt;/div&gt;
+        &lt;div class="score-box"&gt;&lt;div class="val" id="s-final" style="color:#F59E0B"&gt;-&lt;/div&gt;&lt;div class="lbl"&gt;Final Score&lt;/div&gt;&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;p id="sandbox-note" style="font-size:12px;color:#888"&gt;&lt;/p&gt;
+    &lt;/div&gt;
+    &lt;div class="tab-content" id="tab-flags"&gt;&lt;/div&gt;
+    &lt;div class="tab-content" id="tab-report"&gt;&lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;!-- History --&gt;
+  &lt;div class="history-card"&gt;
+    &lt;h2&gt;Analysis History&lt;/h2&gt;
+    &lt;div id="history-list"&gt;&lt;div style="color:#555;font-size:13px"&gt;Loading...&lt;/div&gt;&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;script&gt;
+const API = 'http://localhost:5001/api';
+let selectedFile = null;
+
+function onFileSelect(input) {
+  selectedFile = input.files[0];
+  if (selectedFile) {
+    document.getElementById('dropLabel').textContent = '✓ ' + selectedFile.name;
+    document.getElementById('dropZone').style.borderColor = '#7C6EF8';
+    document.getElementById('analyseBtn').disabled = false;
+  }
+}
+
+async function analyseFile() {
+  if (!selectedFile) return;
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('analyseBtn').disabled = true;
+  document.getElementById('loadingText').textContent = 'Running static analysis...';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('run_sandbox', document.getElementById('sandbox-mode').value);
+
+  setTimeout(() =&gt; {
+    document.getElementById('loadingText').textContent = 'Checking hash database...';
+  }, 1000);
+  setTimeout(() =&gt; {
+    document.getElementById('loadingText').textContent = 'Running ML classifier...';
+  }, 3000);
+  setTimeout(() =&gt; {
+    document.getElementById('loadingText').textContent = 'Sandbox analysis in progress (120s)...';
+  }, 5000);
+
+  try {
+    const res = await fetch(`${API}/analyse`, { method: 'POST', body: formData });
+    const data = await res.json();
+    document.getElementById('loading').style.display = 'none';
+    showResult(data);
+    loadHistory();
+  } catch (err) {
+    document.getElementById('loading').style.display = 'none';
+    alert('Error: ' + err.message + '\n\nMake sure your Flask backend is running on port 5001.');
+  }
+  document.getElementById('analyseBtn').disabled = false;
+}
+
+function showResult(data) {
+  const r = document.getElementById('result');
+  r.style.display = 'block';
+
+  const score = data.final_score || 0;
+  const verdict = data.verdict || 'UNKNOWN';
+  const colors = { MALICIOUS: '#F05252', SUSPICIOUS: '#F59E0B', SAFE: '#3DD68C' };
+  const color = colors[verdict] || '#888';
+
+  document.getElementById('scoreNum').textContent = score;
+  document.getElementById('scoreCircle').style.stroke = color;
+  document.getElementById('scoreCircle').style.strokeDashoffset = 163 - (163 * score / 100);
+  document.getElementById('result-title').textContent = data.extension_id || 'Unknown Extension';
+  document.getElementById('result-sub').textContent = `Analysis ID: ${data.analysis_id || '-'} · Confidence: ${data.confidence || '-'}`;
+  const vb = document.getElementById('verdict-badge');
+  vb.textContent = verdict;
+  vb.className = `verdict-badge verdict-${verdict}`;
+
+  document.getElementById('s-static').textContent = data.static_score ?? '-';
+  document.getElementById('s-dynamic').textContent = data.dynamic_score ?? '-';
+  document.getElementById('s-final').textContent = score;
+  document.getElementById('sandbox-note').textContent = data.sandbox_ran
+    ? '✓ Sandbox analysis was performed'
+    : 'ℹ Static analysis only (score below sandbox threshold)';
+
+  const flagsDiv = document.getElementById('tab-flags');
+  const flags = data.alert_flags || [];
+  if (flags.length === 0) {
+    flagsDiv.innerHTML = '&lt;div class="no-flags"&gt;No alert flags detected&lt;/div&gt;';
+  } else {
+    flagsDiv.innerHTML = flags.map(f =&gt; `
+      &lt;div class="flag"&gt;
+        &lt;div class="flag-dot ${f.includes('BEACON') || f.includes('HASH') ? 'high' : ''}"&gt;&lt;/div&gt;
+        &lt;div&gt;${f}&lt;/div&gt;
+      &lt;/div&gt;`).join('');
+  }
+
+  document.getElementById('tab-report').innerHTML =
+    `&lt;pre class="report"&gt;${data.report || 'Report not available'}&lt;/pre&gt;`;
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t =&gt; t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t =&gt; t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch(`${API}/analyses`);
+    const data = await res.json();
+    const list = document.getElementById('history-list');
+    if (!data.length) { list.innerHTML = '&lt;div style="color:#555;font-size:13px"&gt;No analyses yet&lt;/div&gt;'; return; }
+    const colors = { MALICIOUS:'#F05252', SUSPICIOUS:'#F59E0B', SAFE:'#3DD68C' };
+    list.innerHTML = data.slice(0, 10).map(a =&gt; `
+      &lt;div class="history-row"&gt;
+        &lt;div class="hist-score" style="background:${colors[a.verdict]}20;color:${colors[a.verdict]}"&gt;${a.final_score}&lt;/div&gt;
+        &lt;div class="hist-info"&gt;
+          &lt;div class="hist-name"&gt;${a.extension_id || 'Unknown'}&lt;/div&gt;
+          &lt;div class="hist-date"&gt;${a.analysed_at?.split('T')[0] || '-'}&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class="hist-verdict v-${a.verdict?.[0]}"&gt;${a.verdict}&lt;/div&gt;
+      &lt;/div&gt;`).join('');
+  } catch {}
+}
+
+loadHistory();
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ============================================================ RUN -->
+<div class="section" id="run">
+  <div class="section-badge sb-teal">Run</div>
+  <h2>How to start everything</h2>
+
+  <div class="callout ca-accent">
+    <div class="ca-label">Start order — follow exactly</div>
+    Start the Flask backend first. Then open the frontend HTML in your browser. Docker Desktop must be open and running before any sandbox analysis.
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('run1')">
+      <div class="card-icon ci-t">▶</div>
+      <div class="card-info"><div class="card-ttl">Start the Flask backend</div><div class="card-sub">Open a terminal in VS Code in the backend folder</div></div>
+      <div class="card-chev op" id="chev-run1">▼</div>
+    </div>
+    <div class="card-body op" id="body-run1">
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">Terminal — from your component1_ml/backend folder</span><span class="code-lang">CMD</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre class="code"><span class="cm"># Navigate into the backend folder</span>
+cd component1_ml/backend
+
+<span class="cm"># Start the Flask server</span>
+python app.py</pre>
+      </div>
+      <div class="callout ca-green">
+        <div class="ca-label">Expected output</div>
+        ✓ ML model loaded<br>
+        ✓ Hash database loaded: XXX known malicious IDs<br>
+        Starting Component 1 API server...<br>
+        * Running on http://0.0.0.0:5001<br><br>
+        Leave this terminal open — the server must keep running.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="tog('run2')">
+      <div class="card-icon ci-t">🌐</div>
+      <div class="card-info"><div class="card-ttl">Open the frontend dashboard</div><div class="card-sub">Open index.html directly in your browser</div></div>
+      <div class="card-chev op" id="chev-run2">▼</div>
+    </div>
+    <div class="card-body op" id="body-run2">
+      <div class="step-list">
+        <div class="step-row"><div class="sn sn-g">1</div><div>In VS Code, right-click <strong>frontend/index.html</strong> in the file panel. Select <strong>Open with Live Server</strong> if you have the Live Server extension, or just open it in your browser directly with File → Open.</div></div>
+        <div class="step-row"><div class="sn sn-g">2</div><div>The page should load showing the upload area. To test the connection, the history section at the bottom will load (or show "No analyses yet" which is correct for a fresh start).</div></div>
+        <div class="step-row"><div class="sn sn-g">3</div><div>Find a test .crx file (you can download any Chrome extension's .crx file) and drop it into the upload area. Click Analyse Extension and watch the results appear.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ TEST -->
+<div class="section" id="test">
+  <div class="section-badge sb-teal">Testing</div>
+  <h2>Quick test checklist</h2>
+
+  <div class="checklist">
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Flask backend starts without errors (python app.py runs and shows "Running on http://...")</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Health check works — open browser and go to http://localhost:5001/api/health — you should see {"status":"ok"}</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Frontend index.html loads in browser and history section shows (even if empty)</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Upload a .crx file — static analysis runs and returns a score and verdict</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Docker Desktop is open — rebuild Docker image if needed: docker build -t component1-sandbox . (run from sandbox folder)</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Sandbox analysis runs for a suspicious extension (try sandbox mode = "always")</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Analysis appears in the history section after completion</span></div>
+    <div class="chk" onclick="chk(this)"><div class="chk-box"><span class="chk-tick">✓</span></div><span>Full Report tab shows the formatted text report with correct extension ID and verdict</span></div>
+  </div>
+
+  <div class="callout ca-amber" style="margin-top:20px">
+    <div class="ca-label">If you get an import error when starting app.py</div>
+    Make sure you are running the command from inside the <strong>backend/</strong> folder, not the root component1_ml folder. All Python files import each other using relative imports which only work correctly from the backend directory.
+  </div>
+
+  <div class="callout ca-green" style="margin-top:12px">
+    <div class="ca-label">You now have a complete working Component 1 system</div>
+    Static analysis with hash detection + ML scoring, a Docker/Puppeteer dynamic sandbox, a verdict engine, SQLite database storage, and a frontend dashboard. Every piece of this is your original research implementation. Well done.
+  </div>
+</div>
+
+</div><!-- end .main -->
+
+<script>
+function tog(id) {
+  const b = document.getElementById('body-' + id);
+  const c = document.getElementById('chev-' + id);
+  if (!b) return;
+  const op = b.classList.contains('op');
+  b.classList.toggle('op', !op);
+  c.classList.toggle('op', !op);
+}
+function chk(el) {
+  const box = el.querySelector('.chk-box');
+  box.classList.toggle('checked');
+  el.classList.toggle('done');
+}
+function copyCode(btn) {
+  const pre = btn.closest('.code-wrap').querySelector('pre.code');
+  const text = pre.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!'; btn.classList.add('ok');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 2000);
+  });
+}
+function scrollTo(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('.sb-link').forEach(l => l.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// Progress tracking
+const sections = ['intro','stack','structure','setup','m1-overview','m1-hash','m1-manifest','m1-api','m2-overview','m2-docker','m2-puppeteer','m2-monitor','m3-overview','m3-engine','m3-db','m3-report','fe-overview','fe-html','fe-connect','run','test'];
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const idx = sections.indexOf(e.target.id);
+      if (idx >= 0) {
+        const pct = Math.round((idx + 1) / sections.length * 100);
+        document.getElementById('prog-fill').style.width = pct + '%';
+        document.getElementById('prog-label').textContent = `Progress: ${pct}%`;
+      }
+    }
+  });
+}, { threshold: 0.3 });
+sections.forEach(id => { const el = document.getElementById(id); if (el) observer.observe(el); });
+</script>
+</body>
+</html>
