@@ -2,11 +2,25 @@
 C2 Layer 1 — Browser-in-the-Browser (BitB) / HTML Phishing detection
 Combines a trained DOM-feature ML model with hard-coded heuristics.
 Run scripts/prepare_html_dataset.py to train the model.
+
+The scoring core is synchronous; check_bitb runs it in a worker thread so a large DOM
+parse never blocks the event loop (important now that multiple tabs are analyzed at once).
 """
 import re
 import os
 import pickle
+import asyncio
+import hashlib
 from urllib.parse import urlparse
+
+try:
+    import pandas as pd
+except Exception:
+    pd = None
+try:
+    from bs4 import BeautifulSoup
+except Exception:
+    BeautifulSoup = None
 
 # ── Load trained model (optional) ────────────────────────────
 _bitb_model = None
@@ -34,12 +48,30 @@ _FEATURE_COLS = [
     "has_redirect", "html_size_kb",
 ]
 
+# ── Pre-compiled regexes (hot path — compiled once at import) ──
+_RE_IFRAME_FIXED = re.compile(r'<iframe[^>]*style=["\'][^"\']*position\s*:\s*fixed')
+_RE_ZINDEX_HIGH  = re.compile(r'z-index\s*:\s*(99[0-9]{2,}|[1-9]\d{4,})')
+_RE_WIDTH_FULL   = re.compile(r'width\s*:\s*100(vw|%)')
+_RE_HEIGHT_FULL  = re.compile(r'height\s*:\s*100(vh|%)')
+_RE_DRAG         = re.compile(r'(ondragstart|onselectstart|user-select\s*:\s*none)')
+_RE_FAKE_BAR     = re.compile(r'(fake.*address|address.*bar|browser.*bar)')
+_RE_ZINDEX_NUM   = re.compile(r'z-index\s*:\s*(\d+)')
+_RE_POS_FIXED    = re.compile(r'position\s*:\s*fixed')
+_RE_OVERLAY      = re.compile(r'\b(overlay|modal)\b')
+_RE_WINDOW_LOC   = re.compile(r'window\.location')
 
-def _extract_html_features(dom: str, url: str = "") -> dict:
-    """Extract the same 16 DOM features used during training."""
-    lo = dom.lower()
+# ── Result cache — L1 is a pure function of (url, dom); memoize to skip re-parsing the
+# same page (reloads, SPA re-fires, multiple tabs on the same site). ──
+_l1_cache: dict = {}
+_L1_CACHE_MAX = 256
+
+
+def _extract_html_features(dom: str, lo: str, url: str = "") -> dict:
+    """Extract the same 16 DOM features used during training. `lo` is the
+    already-lowercased DOM (computed once by the caller)."""
+    if BeautifulSoup is None:
+        return {col: 0 for col in _FEATURE_COLS}
     try:
-        from bs4 import BeautifulSoup
         soup = BeautifulSoup(dom, "lxml")
     except Exception:
         return {col: 0 for col in _FEATURE_COLS}
@@ -62,19 +94,14 @@ def _extract_html_features(dom: str, url: str = "") -> dict:
             favicon_url = lnk.get("href", "").lower()
             break
 
-    zindices = [int(m) for m in re.findall(r"z-index\s*:\s*(\d+)", lo)]
+    zindices = [int(m) for m in _RE_ZINDEX_NUM.findall(lo)]
     max_zindex = min(max(zindices) if zindices else 0, 9999)
 
-    has_fixed_iframe = int(
-        bool(iframes) and bool(re.search(r"position\s*:\s*fixed", lo))
-    )
+    has_fixed_iframe = int(bool(iframes) and bool(_RE_POS_FIXED.search(lo)))
     full_viewport = int(
-        bool(re.search(r"width\s*:\s*100(vw|%)", lo))
-        and bool(re.search(r"height\s*:\s*100(vh|%)", lo))
+        bool(_RE_WIDTH_FULL.search(lo)) and bool(_RE_HEIGHT_FULL.search(lo))
     )
-    drag_prevent = int(
-        bool(re.search(r"(ondragstart|onselectstart|user-select\s*:\s*none)", lo))
-    )
+    drag_prevent = int(bool(_RE_DRAG.search(lo)))
     n_pw_inputs     = sum(1 for i in inputs if i.get("type", "").lower() == "password")
     n_hidden_inputs = sum(1 for i in inputs if i.get("type", "").lower() == "hidden")
     n_ext_scripts   = sum(1 for s in scripts if s.get("src", "").startswith("http"))
@@ -91,8 +118,8 @@ def _extract_html_features(dom: str, url: str = "") -> dict:
 
     title_brand   = int(any(b in title for b in BRANDS))
     favicon_brand = int(any(b in favicon_url for b in BRANDS))
-    has_overlay   = int(bool(re.search(r"\b(overlay|modal)\b", lo)))
-    has_redirect  = int(bool(re.search(r"window\.location", lo)))
+    has_overlay   = int(bool(_RE_OVERLAY.search(lo)))
+    has_redirect  = int(bool(_RE_WINDOW_LOC.search(lo)))
 
     return {
         "n_iframes":        len(iframes),
@@ -114,47 +141,40 @@ def _extract_html_features(dom: str, url: str = "") -> dict:
     }
 
 
-async def check_bitb(url: str, dom: str) -> dict:
-    """
-    Detect BitB / HTML phishing.
-    Runs heuristic checks first, then overlays ML model probability if available.
-    Final score = max(heuristic, ml_prob) so heuristic signals are never suppressed.
-    """
-    if not dom:
-        return {"score": 0.0, "detail": "No DOM available"}
-
-    dom_lo = dom.lower()
+def _score_bitb(url: str, dom: str) -> dict:
+    """Synchronous scoring core — heuristics, then overlay ML probability if available.
+    Final score = max(heuristic, ml_prob) so heuristic signals are never suppressed."""
+    dom_lo = dom.lower()                 # lowercased once, reused by the heuristics + features
     heuristic_score = 0.0
     flags = []
 
-    # ── Heuristic rules (unchanged) ──────────────────────────
-    if re.search(r'<iframe[^>]*style=["\'][^"\']*position\s*:\s*fixed', dom_lo):
+    # ── Heuristic rules ──────────────────────────────────────
+    if _RE_IFRAME_FIXED.search(dom_lo):
         heuristic_score += 0.4
         flags.append("fixed-pos iframe")
 
-    if re.search(r'z-index\s*:\s*(99[0-9]{2,}|[1-9]\d{4,})', dom_lo):
+    if _RE_ZINDEX_HIGH.search(dom_lo):
         heuristic_score += 0.2
         flags.append("high z-index")
 
-    if re.search(r'width\s*:\s*100(vw|%)', dom_lo) and re.search(r'height\s*:\s*100(vh|%)', dom_lo):
+    if _RE_WIDTH_FULL.search(dom_lo) and _RE_HEIGHT_FULL.search(dom_lo):
         heuristic_score += 0.2
         flags.append("full-viewport coverage")
 
-    if re.search(r'(ondragstart|onselectstart|user-select\s*:\s*none)', dom_lo):
+    if _RE_DRAG.search(dom_lo):
         heuristic_score += 0.15
         flags.append("drag-prevention JS")
 
-    if re.search(r'(fake.*address|address.*bar|browser.*bar)', dom_lo):
+    if _RE_FAKE_BAR.search(dom_lo):
         heuristic_score += 0.3
         flags.append("fake address-bar element")
 
     heuristic_score = min(1.0, heuristic_score)
 
     # ── ML model overlay ──────────────────────────────────────
-    if _bitb_model is not None:
+    if _bitb_model is not None and pd is not None:
         try:
-            import pandas as pd
-            feats = _extract_html_features(dom, url)
+            feats = _extract_html_features(dom, dom_lo, url)
             X = pd.DataFrame([feats])[_FEATURE_COLS]
             ml_prob = float(_bitb_model.predict_proba(X)[0][1])
             final_score = max(heuristic_score, ml_prob)
@@ -167,3 +187,21 @@ async def check_bitb(url: str, dom: str) -> dict:
 
     detail = ", ".join(flags) if flags else "No BitB indicators"
     return {"score": round(heuristic_score, 4), "detail": detail}
+
+
+async def check_bitb(url: str, dom: str) -> dict:
+    """Detect BitB / HTML phishing. Memoized by (url, DOM digest) — identical pages skip the
+    parse; on a miss the CPU-bound scoring runs in a worker thread so the event loop stays
+    responsive while other tabs are analyzed."""
+    if not dom:
+        return {"score": 0.0, "detail": "No DOM available"}
+    key = (url, hashlib.blake2b(dom.encode("utf-8", "replace"), digest_size=16).digest())
+    cached = _l1_cache.get(key)
+    if cached is not None:
+        return cached
+    res = await asyncio.to_thread(_score_bitb, url, dom)
+    _l1_cache[key] = res
+    if len(_l1_cache) > _L1_CACHE_MAX:
+        for old in list(_l1_cache)[:len(_l1_cache) - _L1_CACHE_MAX]:
+            _l1_cache.pop(old, None)
+    return res

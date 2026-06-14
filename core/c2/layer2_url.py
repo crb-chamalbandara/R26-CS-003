@@ -7,7 +7,13 @@ Run scripts/prepare_dataset.py to train the model.
 import re
 import os
 import pickle
+import asyncio
 from urllib.parse import urlparse
+
+try:
+    import pandas as pd
+except Exception:
+    pd = None
 
 # Model path is relative to the project root (two levels up from core/c2/)
 _model = None
@@ -115,14 +121,13 @@ def _heuristic_score(feats: dict) -> float:
     return min(1.0, score)
 
 
-async def check_url(url: str) -> dict:
+def _score_url(url: str) -> dict:
     feats = extract_features(url)
     if not feats:
         return {"score": 0.0, "detail": "Could not parse URL"}
 
-    if _model is not None:
+    if _model is not None and pd is not None:
         try:
-            import pandas as pd
             feat_order = [
                 "url_len", "dots_in_host", "subdomain_depth", "has_ip",
                 "is_free_tld", "is_http", "has_free_host", "has_phish_kw",
@@ -140,3 +145,22 @@ async def check_url(url: str) -> dict:
              ("url_len", "dots_in_host", "query_len", "special_in_path", "hyphen_count", "subdomain_depth")]
     detail = "Heuristic: " + (", ".join(flags) if flags else "no flags")
     return {"score": round(score, 4), "detail": detail}
+
+
+# L2 is a pure function of the URL — memoize so repeat visits skip the model call.
+_l2_cache: dict = {}
+_L2_CACHE_MAX = 512
+
+
+async def check_url(url: str) -> dict:
+    """URL classifier — memoized by URL; on a miss the (model) scoring runs in a worker
+    thread to keep the loop free."""
+    cached = _l2_cache.get(url)
+    if cached is not None:
+        return cached
+    res = await asyncio.to_thread(_score_url, url)
+    _l2_cache[url] = res
+    if len(_l2_cache) > _L2_CACHE_MAX:
+        for old in list(_l2_cache)[:len(_l2_cache) - _L2_CACHE_MAX]:
+            _l2_cache.pop(old, None)
+    return res

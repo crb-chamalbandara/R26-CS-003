@@ -17,6 +17,13 @@ from urllib.parse import urlparse, parse_qs
 _SKIP_PREFIXES = ("about:", "chrome:", "devtools:", "data:", "blob:")
 _WS_INTERNAL   = ("websentinel-trigger", "websentinel-analyzing")
 
+
+def _etld1(host: str) -> str:
+    """Cheap registrable-host key (last two labels) for same-site comparison."""
+    host = (host or "").lower().split(":")[0]
+    parts = [p for p in host.split(".") if p]
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
+
 # ── Analyzing page — shown in the Playwright tab after intercepting install ───
 _ANALYZING_HTML = """\
 <!DOCTYPE html>
@@ -132,6 +139,194 @@ _CLICK_HOOK = r"""
 })();
 """
 
+# ── C2 interstitial — injected into the live page on a warn/block verdict ───────
+# Pure client-side: "Continue anyway" removes the overlay, "Go back" uses history.
+# Receives a payload: {level, url, score, verdict, reasons[]}.
+_INTERSTITIAL_JS = r"""
+(d) => {
+  try {
+    var old = document.getElementById('__ws_overlay'); if (old) old.remove();
+    var oldb = document.getElementById('__ws_banner');  if (oldb) oldb.remove();
+    var Z = '2147483647';
+
+    if (d.level === 'block') {
+      var ov = document.createElement('div');
+      ov.id = '__ws_overlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:'+Z+';background:rgba(7,10,18,.94);'
+        + 'backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;'
+        + 'align-items:center;justify-content:center;font-family:system-ui,Segoe UI,sans-serif';
+      var reasons = (d.reasons||[]).map(function(r){return '<li style="margin:4px 0">'+r+'</li>';}).join('');
+      ov.innerHTML =
+          '<div style="max-width:560px;margin:20px;padding:36px 40px;background:#15110f;'
+        + 'border:1px solid #5b1a1a;border-radius:16px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6)">'
+        + '<div style="font-size:46px;line-height:1">⛔</div>'
+        + '<h1 style="color:#f87171;font-size:22px;margin:14px 0 6px">Dangerous site blocked</h1>'
+        + '<p style="color:#cbd5e1;font-size:13px;margin:0 0 4px">WebSentinel flagged this page as <b>'
+        + (d.verdict||'PHISHING')+'</b> (risk '+d.score+'%).</p>'
+        + '<div style="color:#94a3b8;font-size:11px;word-break:break-all;margin:8px 0 14px">'+(d.url||'')+'</div>'
+        + (reasons ? '<ul style="text-align:left;color:#fca5a5;font-size:12px;margin:0 auto 18px;max-width:420px;padding-left:18px">'+reasons+'</ul>' : '')
+        + '<div style="display:flex;gap:12px;justify-content:center">'
+        + '<button id="__ws_back" style="cursor:pointer;border:0;border-radius:9px;padding:11px 20px;font-size:13px;font-weight:600;background:#2563eb;color:#fff">Go back to safety</button>'
+        + '<button id="__ws_continue" style="cursor:pointer;border:1px solid #5b1a1a;border-radius:9px;padding:11px 20px;font-size:13px;background:transparent;color:#9ca3af">Continue anyway</button>'
+        + '</div></div>';
+      document.documentElement.appendChild(ov);
+      var bk = document.getElementById('__ws_back');
+      if (bk) bk.onclick = function(){ try{ if(history.length>1){history.back();} else {location.href='https://www.google.com';} }catch(e){ ov.remove(); } };
+      var co = document.getElementById('__ws_continue');
+      if (co) co.onclick = function(){ ov.remove(); };
+    } else {
+      var bn = document.createElement('div');
+      bn.id = '__ws_banner';
+      bn.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:'+Z+';background:#7c5e10;'
+        + 'color:#fde68a;font-family:system-ui,Segoe UI,sans-serif;font-size:13px;'
+        + 'padding:10px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.4)';
+      bn.innerHTML =
+          '<span style="font-size:16px">⚠️</span>'
+        + '<span style="flex:1">WebSentinel: this page looks <b>suspicious</b> (risk '+d.score+'%). '
+        + 'Be careful before entering credentials or personal data.</span>'
+        + '<button id="__ws_bclose" style="cursor:pointer;border:0;background:rgba(0,0,0,.25);color:#fde68a;border-radius:6px;padding:4px 10px;font-size:12px">Dismiss</button>';
+      document.documentElement.appendChild(bn);
+      var bc = document.getElementById('__ws_bclose');
+      if (bc) bc.onclick = function(){ bn.remove(); };
+    }
+  } catch(e) {}
+}
+"""
+
+# ── C2 L6 runtime instrumentation (OFFLINE BATCH CAPTURE ONLY) ─────────────────
+# In-page monkeypatch that records behaviours into window.__ws_runtime. Used ONLY by
+# scripts/capture_fusion_vectors.py against saved HTML samples — it is NOT installed on
+# the live session, because overriding fetch/XHR/addEventListener trips anti-bot
+# integrity checks (e.g. Cloudflare) and breaks real browsing. The live session
+# collects the same signals non-invasively (network events + CDP) in get_runtime_signals().
+_RUNTIME_HOOK = r"""
+(function () {
+  if (window.__ws_rt_hooked) return;
+  window.__ws_rt_hooked = true;
+  var R = window.__ws_runtime = {
+    kb_listeners: 0, kb_on_password: false,
+    clipboard_listeners: 0, clipboard_api: false,
+    drag_block: 0, exfil_hosts: [], form_submit_external: false,
+    page_host: location.host
+  };
+  function pushHost(u, method) {
+    try {
+      var m = (method || 'GET').toUpperCase();
+      if (m !== 'POST') return;                 // only credential-style sinks
+      var h = new URL(u, location.href).host;
+      if (h && h !== location.host && R.exfil_hosts.indexOf(h) === -1) R.exfil_hosts.push(h);
+    } catch (e) {}
+  }
+  function isPwd(el) {
+    try { return el && el.tagName === 'INPUT' && (el.type || '').toLowerCase() === 'password'; }
+    catch (e) { return false; }
+  }
+
+  // addEventListener wrapper
+  try {
+    var origAdd = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function (type, fn, opts) {
+      try {
+        var t = (type || '').toLowerCase();
+        if (t === 'keydown' || t === 'keypress' || t === 'keyup' || t === 'input') {
+          R.kb_listeners++;
+          if (isPwd(this)) R.kb_on_password = true;
+        } else if (t === 'copy' || t === 'cut' || t === 'paste') {
+          R.clipboard_listeners++;
+        } else if (t === 'dragstart' || t === 'selectstart' || t === 'contextmenu') {
+          R.drag_block++;
+        }
+      } catch (e) {}
+      return origAdd.call(this, type, fn, opts);
+    };
+  } catch (e) {}
+
+  // fetch
+  try {
+    var origFetch = window.fetch;
+    window.fetch = function (input, init) {
+      try {
+        var u = (typeof input === 'string') ? input : (input && input.url);
+        var m = (init && init.method) || (input && input.method) || 'GET';
+        pushHost(u, m);
+      } catch (e) {}
+      return origFetch.apply(this, arguments);
+    };
+  } catch (e) {}
+
+  // XMLHttpRequest
+  try {
+    var origOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url) {
+      try { this.__ws_m = method; this.__ws_u = url; } catch (e) {}
+      return origOpen.apply(this, arguments);
+    };
+    var origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function () {
+      try { pushHost(this.__ws_u, this.__ws_m); } catch (e) {}
+      return origSend.apply(this, arguments);
+    };
+  } catch (e) {}
+
+  // sendBeacon (always POST-like)
+  try {
+    if (navigator.sendBeacon) {
+      var origBeacon = navigator.sendBeacon.bind(navigator);
+      navigator.sendBeacon = function (u, data) { pushHost(u, 'POST'); return origBeacon(u, data); };
+    }
+  } catch (e) {}
+
+  // clipboard read API
+  try {
+    if (navigator.clipboard) {
+      ['readText', 'read'].forEach(function (k) {
+        var o = navigator.clipboard[k];
+        if (typeof o === 'function') {
+          navigator.clipboard[k] = function () { R.clipboard_api = true; return o.apply(navigator.clipboard, arguments); };
+        }
+      });
+    }
+  } catch (e) {}
+
+  // form submit → off-origin action
+  try {
+    var origSubmit = HTMLFormElement.prototype.submit;
+    HTMLFormElement.prototype.submit = function () {
+      try {
+        var a = this.getAttribute('action') || '';
+        if (a) { var h = new URL(a, location.href).host; if (h && h !== location.host) R.form_submit_external = true; }
+      } catch (e) {}
+      return origSubmit.apply(this, arguments);
+    };
+    document.addEventListener('submit', function (e) {
+      try {
+        var f = e.target; var a = (f && f.getAttribute('action')) || '';
+        if (a) { var h = new URL(a, location.href).host; if (h && h !== location.host) R.form_submit_external = true; }
+      } catch (e2) {}
+    }, true);
+  } catch (e) {}
+})();
+"""
+
+# Active probe — focus the password field and fire synthetic key/input events so
+# keyloggers that attach handlers lazily are tripped. Never submits the form.
+_RUNTIME_PROBE_JS = r"""
+() => {
+  try {
+    var pw = document.querySelector('input[type=password]');
+    if (!pw) return false;
+    pw.focus();
+    ['keydown', 'keypress', 'input', 'keyup'].forEach(function (t) {
+      var ev = (t === 'input')
+        ? new Event('input', { bubbles: true })
+        : new KeyboardEvent(t, { bubbles: true, key: 'a', code: 'KeyA' });
+      pw.dispatchEvent(ev);
+    });
+    return true;
+  } catch (e) { return false; }
+}
+"""
+
 
 class PlaywrightSession:
     def __init__(self) -> None:
@@ -139,10 +334,18 @@ class PlaywrightSession:
         self._ctx         = None
         self._page        = None
         self._running     = False
-        self._last_url    = ""
         self._callbacks:  List[Callable] = []   # nav callbacks
         self._click_cbs:  List[Callable] = []   # C1 click callbacks
+        self._close_cbs:  List[Callable] = []   # tab-close callbacks (tab_id)
         self._extensions: List[str]      = []   # loaded extension paths
+        # Per-page state (keyed by page) so multiple tabs are tracked independently.
+        # L6 runtime is collected non-invasively (no in-page tampering, so anti-bot
+        # challenges like Cloudflare are not broken).
+        self._net_posts:  dict = {}             # page -> set of off-origin POST hosts
+        self._page_host:  dict = {}             # page -> current main-frame host
+        self._last_url_by_page: dict = {}       # page -> last analyzed URL (per-tab dedup)
+        self._page_ids:   dict = {}             # page -> stable tab id (for the dashboard)
+        self._page_seq:   int  = 0
 
     # ── Public properties ──────────────────────────────────────────
     @property
@@ -234,6 +437,10 @@ class PlaywrightSession:
 
         # C1 click hook — silent, no visual changes
         await self._ctx.add_init_script(script=_CLICK_HOOK)
+        # C2 L6 runtime — observe off-origin POSTs at the network layer (no page tampering,
+        # so Cloudflare / anti-bot challenges are not broken). Listener signals are read
+        # on demand via CDP in get_runtime_signals().
+        self._ctx.on("request", self._on_request)
         # Use a regex so the route fires regardless of URL scheme or the exact
         # query-string shape (sendBeacon is a POST with no querystring, fetch
         # is GET with one — both must match).
@@ -415,9 +622,24 @@ class PlaywrightSession:
         if cb not in self._click_cbs:
             self._click_cbs.append(cb)
 
+    def add_close_callback(self, cb: Callable) -> None:
+        """cb(tab_id: int) fires when a tab closes — lets the dashboard drop its card."""
+        if cb not in self._close_cbs:
+            self._close_cbs.append(cb)
+
     def clear_callbacks(self) -> None:
         self._callbacks.clear()
         self._click_cbs.clear()
+        self._close_cbs.clear()
+
+    def tab_id(self, page) -> int:
+        """Stable per-tab id assigned on first sight — used to show tabs separately."""
+        tid = self._page_ids.get(page)
+        if tid is None:
+            self._page_seq += 1
+            tid = self._page_seq
+            self._page_ids[page] = tid
+        return tid
 
     # ── Navigation ─────────────────────────────────────────────────
     async def navigate(self, url: str) -> str:
@@ -434,6 +656,30 @@ class PlaywrightSession:
         except Exception:
             pass
 
+    async def inject_interstitial(self, level: str, result: dict, page=None) -> None:
+        """Inject a C2 warning banner ('warn') or blocking overlay ('block') into the
+        given page (defaults to the active page). Client-side only: 'Continue anyway'
+        removes the overlay, 'Go back' uses browser history. No-op if unavailable."""
+        target = page or self._page
+        if not self.is_running or target is None:
+            return
+        layers = result.get("layers") or []
+        payload = {
+            "level":   level,
+            "url":     result.get("url", ""),
+            "score":   round(float(result.get("risk_score", 0))),
+            "verdict": result.get("verdict", ""),
+            "reasons": [
+                f'{l.get("name") or l.get("id", "")}: {l.get("detail", "")}'.strip(": ")
+                for l in layers
+                if float(l.get("score", 0)) > 0.28 and l.get("detail")
+            ][:4],
+        }
+        try:
+            await target.evaluate(_INTERSTITIAL_JS, payload)
+        except Exception:
+            pass
+
     async def _return_to_page(self, url: str, delay: float = 1.5) -> None:
         await asyncio.sleep(delay)
         if self._page and self.is_running and url:
@@ -443,36 +689,128 @@ class PlaywrightSession:
                 pass
 
     # ── Extraction helpers ─────────────────────────────────────────
-    async def get_dom(self) -> str:
-        if not self.is_running or self._page is None:
+    # Each accepts an optional `page` so per-tab analysis reads from the tab that
+    # actually navigated, not the session's last-active page (multi-tab correctness).
+    async def get_dom(self, page=None) -> str:
+        target = page or self._page
+        if not self.is_running or target is None:
             return ""
         try:
-            return await self._page.content()
+            return await target.content()
         except Exception:
             return ""
 
-    async def get_screenshot_b64(self) -> str:
-        if not self.is_running or self._page is None:
+    async def get_screenshot_b64(self, page=None) -> str:
+        target = page or self._page
+        if not self.is_running or target is None:
             return ""
         try:
-            data = await self._page.screenshot(type="jpeg", quality=75, full_page=False)
+            data = await target.screenshot(type="jpeg", quality=75, full_page=False)
             return base64.b64encode(data).decode()
         except Exception:
             return ""
 
-    async def current_url(self) -> str:
-        if not self.is_running or self._page is None:
+    def _on_request(self, request) -> None:
+        """Network-layer observer: record off-origin POST destinations per page.
+        Non-invasive — does not touch the page's JS, so anti-bot challenges still pass."""
+        try:
+            if (request.method or "").upper() != "POST":
+                return
+            host = (urlparse(request.url).hostname or "").lower()
+            if not host:
+                return
+            page = request.frame.page
+        except Exception:
+            return
+        page_host = self._page_host.get(page, "")
+        if page_host and _etld1(host) == _etld1(page_host):
+            return  # same-site POST — not exfil
+        self._net_posts.setdefault(page, set()).add(host)
+
+    async def _collect_listeners(self, page=None) -> dict:
+        """Count keystroke/clipboard/drag listeners via CDP DOMDebugger.getEventListeners
+        on document, window and any password field — read-only, no page modification."""
+        out = {"kb_listeners": 0, "kb_on_password": False,
+               "clipboard_listeners": 0, "drag_block": 0}
+        KB   = {"keydown", "keypress", "keyup", "input"}
+        CLIP = {"copy", "cut", "paste"}
+        DRAG = {"dragstart", "selectstart", "contextmenu"}
+        cdp = None
+        try:
+            cdp = await self._ctx.new_cdp_session(page or self._page)
+
+            async def listeners_for(expr):
+                r = await cdp.send("Runtime.evaluate", {"expression": expr})
+                oid = (r.get("result") or {}).get("objectId")
+                if not oid:
+                    return []
+                res = await cdp.send("DOMDebugger.getEventListeners", {"objectId": oid})
+                return res.get("listeners", []) or []
+
+            for expr in ("document", "window"):
+                for l in await listeners_for(expr):
+                    t = l.get("type", "")
+                    if t in KB:   out["kb_listeners"] += 1
+                    elif t in CLIP: out["clipboard_listeners"] += 1
+                    elif t in DRAG: out["drag_block"] += 1
+            for l in await listeners_for("document.querySelector('input[type=password]')"):
+                t = l.get("type", "")
+                if t in KB:
+                    out["kb_listeners"] += 1
+                    out["kb_on_password"] = True
+                elif t in CLIP:
+                    out["clipboard_listeners"] += 1
+        except Exception:
+            pass
+        finally:
+            if cdp is not None:
+                try:
+                    await cdp.detach()
+                except Exception:
+                    pass
+        return out
+
+    async def get_runtime_signals(self, active_probe: bool = False, page=None) -> dict:
+        """Collect L6 runtime signals non-invasively: off-origin POSTs from the network
+        observer + listener counts via CDP. With active_probe, dispatch synthetic key
+        events at the password field first (never submits)."""
+        target = page or self._page
+        if not self.is_running or target is None:
+            return {}
+        host = self._page_host.get(target, "") or (urlparse(target.url).hostname or "").lower()
+        signals = {
+            "page_host": host,
+            "exfil_hosts": sorted(self._net_posts.get(target, set())),
+            "kb_listeners": 0, "kb_on_password": False,
+            "clipboard_listeners": 0, "clipboard_api": False,
+            "drag_block": 0, "form_submit_external": False,
+        }
+        try:
+            if active_probe:
+                try:
+                    await target.evaluate(_RUNTIME_PROBE_JS)
+                except Exception:
+                    pass
+            signals.update(await self._collect_listeners(target))
+        except Exception:
+            pass
+        return signals
+
+    async def current_url(self, page=None) -> str:
+        target = page or self._page
+        if not self.is_running or target is None:
             return ""
         try:
-            return self._page.url
+            return target.url
         except Exception:
             return ""
 
-    async def get_title(self) -> str:
-        if not self.is_running or self._page is None:
+    async def get_title(self, page=None) -> str:
+        target = page or self._page
+        if not self.is_running or target is None:
             return ""
         try:
-            return await self._page.title()
+            return await target.title()
         except Exception:
             return ""
 
@@ -487,9 +825,12 @@ class PlaywrightSession:
                 return
             if any(s in url for s in _WS_INTERNAL):
                 return
-            if url == self._last_url:
+            if url == self._last_url_by_page.get(page):   # per-tab dedup
                 return
-            self._last_url = url
+            self._last_url_by_page[page] = url
+            # Reset L6 network state for the new page load.
+            self._page_host[page] = (urlparse(url).hostname or "").lower()
+            self._net_posts[page] = set()
             try:
                 await page.wait_for_load_state("domcontentloaded", timeout=5_000)
             except Exception:
@@ -498,7 +839,18 @@ class PlaywrightSession:
                 return
             for cb in list(self._callbacks):
                 asyncio.create_task(self._safe_nav_call(cb, url, page))
+
+        def _on_close(_=None) -> None:
+            tid = self._page_ids.pop(page, None)
+            self._net_posts.pop(page, None)
+            self._page_host.pop(page, None)
+            self._last_url_by_page.pop(page, None)
+            if tid is not None:
+                for cb in list(self._close_cbs):
+                    asyncio.ensure_future(self._safe_close_call(cb, tid))
+
         page.on("framenavigated", _handler)
+        page.on("close", _on_close)
 
     async def _on_new_page(self, page) -> None:
         self._page = page
@@ -518,6 +870,13 @@ class PlaywrightSession:
             import traceback
             print(f"[PW] Nav callback error for {url[:60]}: {exc}")
             traceback.print_exc()
+
+    @staticmethod
+    async def _safe_close_call(cb: Callable, tab_id: int) -> None:
+        try:
+            await cb(tab_id)
+        except Exception as exc:
+            print(f"[PW] Close callback error: {exc}")
 
 
 pw_session = PlaywrightSession()

