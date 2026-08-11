@@ -1,5 +1,6 @@
 import os, shutil, sqlite3, json, hashlib
 from datetime import datetime, timedelta
+from .crypto import load_master_key, decrypt_password
 
 CHROME_EPOCH = datetime(1601, 1, 1)
 
@@ -77,6 +78,11 @@ def _event(ts, atype, src, detail, risk=False, reasons=None):
             "risk_reasons": reasons or [], "anomaly_score": 0,
             "anomaly_reasons": [], "rule_flags": []}
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ARTIFACT EXTRACTION
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── [1] HISTORY ───────────────────────────────────────────────────────────────
 def extract_history(profile, tmp):
     src = find_file(profile, "History")
     db  = safe_copy(src, tmp, "History_c4")
@@ -95,6 +101,7 @@ def extract_history(profile, tmp):
             {"url":r["url"] or "","title":r["title"] or "","visit_count":r["visit_count"] or 0}))
     return events, None
 
+# ── [2] COOKIES ───────────────────────────────────────────────────────────────
 def extract_cookies(profile, tmp):
     src = find_file(profile, os.path.join("Network","Cookies"), "Cookies")
     db  = safe_copy(src, tmp, "Cookies_c4")
@@ -117,6 +124,7 @@ def extract_cookies(profile, tmp):
             risk=sens, reasons=["sensitive cookie name"] if sens else []))
     return events, None
 
+# ── [3] DOWNLOADS ─────────────────────────────────────────────────────────────
 def extract_downloads(profile, tmp):
     db = os.path.join(tmp, "History_c4")
     if not os.path.exists(db):
@@ -142,6 +150,7 @@ def extract_downloads(profile, tmp):
              "sha256":file_hash or "file not on disk"}, risk=risky, reasons=reasons))
     return events, None
 
+# ── [4] CREDENTIALS ───────────────────────────────────────────────────────────
 def extract_credentials(profile, tmp):
     src = find_file(profile, "Login Data")
     db  = safe_copy(src, tmp, "LoginData_c4")
@@ -151,16 +160,25 @@ def extract_credentials(profile, tmp):
             db = cached
         else:
             return [], "Login Data locked — close the browser and retry"
+    # Recover the AES master key once (DPAPI-protected, bound to this Windows user)
+    master_key = load_master_key(profile)
     events = []
-    for r in query(db, "SELECT origin_url,username_value,date_created,date_last_used,times_used FROM logins ORDER BY date_last_used DESC"):
+    for r in query(db, "SELECT origin_url,username_value,password_value,date_created,date_last_used,times_used FROM logins ORDER BY date_last_used DESC"):
         ts = chrome_time(r["date_last_used"] or r["date_created"])
         if ts:
+            dec = decrypt_password(r["password_value"], master_key)
+            reasons = ["saved credential record"]
+            if dec["status"] == "success":
+                reasons.append("credential decrypted via DPAPI + AES-GCM")
             events.append(_event(ts,"credential","Login Data",
                 {"origin":r["origin_url"] or "","username":r["username_value"] or "",
-                 "times_used":r["times_used"] or 0,"password":"[ENCRYPTED-DPAPI]"},
-                risk=True, reasons=["saved credential record"]))
+                 "times_used":r["times_used"] or 0,
+                 "password":dec["password"],"password_length":dec["length"],
+                 "decryption":dec["status"]},
+                risk=True, reasons=reasons))
     return events, None
 
+# ── [5] EXTENSIONS ────────────────────────────────────────────────────────────
 def extract_extensions(profile):
     ext_dir = os.path.join(profile, "Extensions")
     events  = []
@@ -187,6 +205,7 @@ def extract_extensions(profile):
             except: continue
     return events
 
+# ── [6] SESSION CLUSTERS ──────────────────────────────────────────────────────
 def extract_clusters(profile, tmp):
     """Read Chrome 110+ browsing session clusters from the History DB."""
     db = os.path.join(tmp, "History_c4")
@@ -231,6 +250,55 @@ def extract_clusters(profile, tmp):
     clusters.sort(key=lambda x: x["max_score"], reverse=True)
     return clusters, None
 
+# ── [7] LOCAL STORAGE (LevelDB) ───────────────────────────────────────────────
+import re as _re
+_ORIGIN_RE = _re.compile(rb"_(https?://[\w.\-:]+)\x00")
+
+def extract_local_storage(profile):
+    """Best-effort scan of the Chromium Local Storage LevelDB store.
+
+    A full LevelDB decode (block index + snappy) is out of scope; instead we
+    read the uncompacted .log/.ldb records and recover which *origins* hold
+    local-storage data plus a sample of their keys. Origins with stored state
+    but no matching browsing history become orphan candidates downstream.
+    """
+    ls_dir = os.path.join(profile, "Local Storage", "leveldb")
+    if not os.path.isdir(ls_dir):
+        return []
+    origins = {}
+    for fn in os.listdir(ls_dir):
+        if not fn.endswith((".log", ".ldb")):
+            continue
+        try:
+            with open(os.path.join(ls_dir, fn), "rb") as f:
+                blob = f.read()
+        except OSError:
+            continue
+        for m in _ORIGIN_RE.finditer(blob):
+            try:
+                origin = m.group(1).decode("utf-8", "ignore")
+            except Exception:
+                continue
+            if origin:
+                origins[origin] = origins.get(origin, 0) + 1
+    events = []
+    for origin, hits in origins.items():
+        host = _domain_from_origin(origin)
+        events.append(_event(datetime.now().isoformat(), "localstorage", "Local Storage",
+            {"origin": origin, "url": origin, "host": host, "entry_hits": hits},
+            risk=False))
+    return events
+
+def _domain_from_origin(origin):
+    try:
+        from urllib.parse import urlparse
+        return urlparse(origin).netloc.lower().replace("www.", "")
+    except Exception:
+        return ""
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MANIFEST + ORCHESTRATOR
+# ══════════════════════════════════════════════════════════════════════════════
 
 def collect_manifest(profile):
     files = {"History":find_file(profile,"History"),
@@ -264,10 +332,11 @@ def run_extraction(profile_path=None, tmp_dir=None):
     downloads, w = extract_downloads(profile_path, tmp_dir); warnings += [w] if w else []
     creds,     w = extract_credentials(profile_path, tmp_dir); warnings += [w] if w else []
     extensions = extract_extensions(profile_path)
+    localstore = extract_local_storage(profile_path)
     clusters, _w = extract_clusters(profile_path, tmp_dir)
     manifest   = collect_manifest(profile_path)
 
-    all_events = history + cookies + downloads + creds + extensions
+    all_events = history + cookies + downloads + creds + extensions + localstore
     if not all_events:
         raise ValueError("No events extracted. Close Chrome completely and try again.")
 

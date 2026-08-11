@@ -105,6 +105,8 @@ def get_summary(result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "temporal": algorithm_summary.get("temporal_count", 0),
         "attack_chains": algorithm_summary.get("attack_chain_count", 0),
         "domain_clusters": algorithm_summary.get("domain_cluster_count", 0),
+        "credential_reuse": algorithm_summary.get("credential_reuse_count", 0),
+        "download_exfil": algorithm_summary.get("download_exfil_count", 0),
         "warnings": result.get("warnings", []),
         "output_paths": result.get("output_paths", {}),
     }

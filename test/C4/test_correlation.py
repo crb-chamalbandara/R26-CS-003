@@ -181,12 +181,58 @@ for f in clusters:
 results.append(("Domain Clustering", passed))
 
 # ══════════════════════════════════════════════════════════════════════════════
+# SCENARIO 6 — Cross-Domain Credential Reuse
+# Same username saved against two different origin domains → reuse finding
+# ══════════════════════════════════════════════════════════════════════════════
+print(f"\n{BOLD}{CYAN}═══ Scenario 6: Cross-Domain Credential Reuse ═══{RESET}")
+print("  Attack: credential 'alice@corp.com' reused on 'mail.corp.com' and 'vpn.evil.net'")
+
+t0 = datetime(2024, 3, 15, 12, 0, 0)
+events_s6 = [
+    _event(fmt_ts(t0),                         "credential", {"origin":"https://mail.corp.com","username":"alice@corp.com","times_used":5,"password":"[ENCRYPTED]"}, risk=True),
+    _event(fmt_ts(t0 + timedelta(seconds=20)), "credential", {"origin":"https://vpn.evil.net","username":"alice@corp.com","times_used":0,"password":"[ENCRYPTED]"}, risk=True),
+    # Different user, single domain — must NOT flag
+    _event(fmt_ts(t0 + timedelta(seconds=40)), "credential", {"origin":"https://solo.site","username":"bob@x.com","times_used":1,"password":"[ENCRYPTED]"}, risk=True),
+]
+events_s6 = apply_single_artifact_rules(events_s6)
+corr_s6   = run_correlation(events_s6)
+
+reuse  = corr_s6["credential_reuse"]
+passed = any(f.get("username") == "alice@corp.com" and len(f.get("domains", [])) >= 2 for f in reuse)
+(ok if passed else fail)(f"Credential reuse found {len(reuse)} reused credential(s)")
+for f in reuse:
+    info(f"user={f['username']}  domains={f['domains']}  score={f['score']}")
+results.append(("Credential Reuse", passed))
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SCENARIO 7 — Download → Exfiltration Correlation
+# Risky download followed within 2 min by navigation to a DIFFERENT domain
+# ══════════════════════════════════════════════════════════════════════════════
+print(f"\n{BOLD}{CYAN}═══ Scenario 7: Download → Exfiltration Correlation ═══{RESET}")
+print("  Attack: 'tool.exe' downloaded from 'drop.site' then callback to 'c2-server.net'")
+
+t0 = datetime(2024, 3, 15, 22, 0, 0)
+events_s7 = [
+    _event(fmt_ts(t0),                         "download", {"filename":"tool.exe","source_url":"https://drop.site/tool.exe","size_bytes":51200,"danger_type":1}, risk=True),
+    _event(fmt_ts(t0 + timedelta(seconds=45)), "history",  {"url":"https://c2-server.net/beacon","title":"cb","visit_count":1}),
+]
+events_s7 = apply_single_artifact_rules(events_s7)
+corr_s7   = run_correlation(events_s7)
+
+exfil  = corr_s7["download_exfil"]
+passed = any("c2-server.net" in str(f.get("domain","")) for f in exfil)
+(ok if passed else fail)(f"Download→exfil correlation found {len(exfil)} pair(s)")
+for f in exfil:
+    info(f"file={f['filename']}  src={f['source_domain']}  dst={f['domain']}  score={f['score']}")
+results.append(("Download→Exfil", passed))
+
+# ══════════════════════════════════════════════════════════════════════════════
 # FULL PIPELINE — MITRE Mapping on combined scenario
 # ══════════════════════════════════════════════════════════════════════════════
 print(f"\n{BOLD}{CYAN}═══ Full Pipeline: MITRE ATT&CK Mapping ═══{RESET}")
 print("  Combining all scenario events through rules → correlation → MITRE mapper")
 
-all_events = events_s1 + events_s2 + events_s3 + events_s4 + events_s5
+all_events = events_s1 + events_s2 + events_s3 + events_s4 + events_s5 + events_s6 + events_s7
 all_events = apply_single_artifact_rules(all_events)
 full_corr  = run_correlation(all_events)
 mitre_out  = run_mitre_mapping(full_corr, all_events)
