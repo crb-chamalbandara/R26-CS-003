@@ -66,10 +66,11 @@ isolation.
 ```
 Browser profile directory
       |-- History SQLite database
-      |-- Cookies SQLite database
+      |-- Cookies SQLite database     (or the live jar when the browser holds the lock)
       |-- Login Data SQLite database  (credentials decrypted via DPAPI + AES-GCM)
       |-- Downloads table
-      |-- Extensions manifests
+      |-- Extensions manifests + the Secure Preferences extension registry
+      |-- Sessions SNSS store         (tabs the browser would restore)
       |-- Local Storage LevelDB store
       v
 [1] Artifact Extractor        -> normalizes every artifact into a common event schema
@@ -112,15 +113,36 @@ reduced to a comparable **domain** key.
 
 ### 4.1 Safe acquisition of locked databases
 
-While a browser is running it holds an exclusive lock on its SQLite files. The
-extractor first attempts a normal file copy; on a Windows sharing violation it
-falls back to SQLite's **online backup API** through an immutable read-only URI
-(`file:...?mode=ro&immutable=1`). This lets the engine read a consistent
-snapshot of a live profile without corrupting it — a forensically sound
-acquisition technique. Each source file's SHA-256 hash, size, and modification
-time are recorded in an **artifact manifest** to preserve chain-of-custody.
+While a browser is running it holds its SQLite files open. The extractor first
+attempts a normal file copy; on a Windows sharing violation it falls back to
+SQLite's **online backup API** through an immutable read-only URI
+(`file:...?mode=ro&immutable=1`), which reads a consistent snapshot without
+writing to or corrupting the original. Each source file's SHA-256 hash, size,
+and modification time are recorded in an **artifact manifest** to preserve
+chain-of-custody, and re-hashing after analysis confirms the evidence is
+unchanged.
 
-### 4.2 DPAPI credential decryption
+The two files are not locked the same way, which matters. `History` is opened
+share-read, so the backup path recovers it from a live profile. `Network/Cookies`
+is opened with an exclusive share mode: the handle cannot be obtained at all, so
+`copy2`, `immutable=1` and `nolock=1` all fail and *no* file-based technique
+recovers a cookie while the browser is up. For that store the engine performs
+**volatile acquisition** instead — the cookie jar is read from the running
+browser through the automation channel and normalized into the same event
+schema, tagged `acquisition: "live"` so the provenance of every cookie event
+stays explicit in the report.
+
+### 4.2 Extension acquisition beyond the Extensions folder
+
+An extension loaded with `--load-extension` — the standard side-loading route,
+and the one an attacker uses — creates no `Default/Extensions/<id>/` folder.
+Its record, including the full manifest and requested permissions, exists only
+in the `Secure Preferences` extension registry. The extractor reads both sources
+and de-duplicates by extension ID, and decodes the `location` field, so an
+`unpacked` install is reported as a finding in its own right, separately from
+the permissions it asks for.
+
+### 4.3 DPAPI credential decryption
 
 Chrome never stores saved passwords in plaintext. From Chrome 80 onward, each
 password in the `Login Data` database is encrypted with **AES-256-GCM**, and the
@@ -145,7 +167,20 @@ length, e.g. `h******3`) in on-disk reports by default, so the persisted
 forensic artifacts never contain live plaintext credentials while still proving
 that decryption succeeded.
 
-### 4.3 Local storage extraction
+### 4.4 Session-restore extraction
+
+`Default/Sessions/Session_*` and `Tabs_*` record the tabs the browser would
+restore and the URLs in their navigation stacks. They are written independently
+of the History database, so a tab can outlive its own history entry — a URL that
+is restorable but has no visit record is evidence in itself, and Stage 3 scores
+it as an orphan. The SNSS container is a versioned command log whose command IDs
+change between Chromium builds, so instead of decoding the log the extractor
+recovers the URL strings in both encodings Chromium writes (UTF-8 and UTF-16LE),
+de-duplicates them, and timestamps each from the Chrome timestamp embedded in
+the session filename. The session in progress is held open by the running
+browser and is reported as a warning rather than treated as a failure.
+
+### 4.5 Local storage extraction
 
 Chrome stores per-origin local storage in a LevelDB database. A full LevelDB
 decode is out of scope, but the extractor scans the uncompacted `.log`/`.ldb`
@@ -247,42 +282,117 @@ unified multi-component dashboard alongside the other three components.
 
 ## 9. Evaluation
 
-### 9.1 Detector correctness — unit test suite
+### 9.1 Function correctness — unit test suite
 
-`test/C4/test_correlation.py` drives eight synthetic attack scenarios (one per
-detector plus a combined full-pipeline MITRE test) through the real pipeline and
-asserts that the expected finding is produced.
+`test/C4/test_units.py` exercises the modules around the correlation engine one
+function at a time: timestamp conversion, evidence hashing, profile resolution
+and SQLite parsing in `extractor.py`; every `decrypt_password` status branch in
+`crypto.py`; rules R01–R06 in isolation; HTML/SIEM generation in `reporter.py`;
+and the risk-score bands in `service.py`. Each case asserts both that a signal
+fires when it should and that it stays silent when it should not.
 
-**Result: 8/8 scenarios pass.**
-
-| Scenario | Detector exercised | Outcome |
-|----------|--------------------|---------|
-| 1 | Co-occurrence | PASS |
-| 2 | Orphan detection | PASS |
-| 3 | Temporal anomaly | PASS |
-| 4 | Attack chain | PASS |
-| 5 | Domain risk clustering | PASS |
-| 6 | Cross-domain credential reuse | PASS |
-| 7 | Download → exfiltration | PASS |
-| 8 | Full-pipeline MITRE mapping | PASS |
+**Result: 55/55 cases pass.**
 
 ### 9.2 DPAPI decryption verification
 
-The DPAPI + AES-256-GCM chain was verified end-to-end on a live Windows profile:
-the 32-byte AES master key was successfully recovered from `Local State`, and a
-known value encrypted in Chrome's exact `v10` blob format was decrypted back to
-the original plaintext — confirming the full decryption path works against real
-Chrome-format data.
+The DPAPI + AES-256-GCM chain is verified end-to-end against Chrome-format data.
+The evaluation case seals a freshly generated 32-byte AES master key with
+`CryptProtectData`, stores it in `Local State` exactly as Chrome does, and writes
+each password as a genuine `v10` + nonce + AES-GCM blob into `Login Data`. C4
+then recovers the key through `CryptUnprotectData` and decrypts every record.
 
-### 9.3 End-to-end demonstration
+**Result: 3/3 credentials recovered** on a live Windows account. Because the key
+is DPAPI-bound, the same evidence yields `no-key` under any other account — the
+correct forensic outcome, and the reason reports store only a masked preview
+(`P**************6`), status and length rather than plaintext.
 
-`test/C4/demo_attack_profile.py` plants a coherent multi-stage breach (phishing
-landing → drive-by download → credential theft → exfiltration callback → orphan
-injection → cross-domain credential reuse) and runs it through the complete
-pipeline.
+### 9.3 End-to-end demonstration on real evidence
 
-**Result: all 7/7 detectors fire**, producing 25 MITRE-mapped findings
-(13 High, 11 Medium, 1 Low) and a full HTML/JSON/SIEM report.
+`test/C4/demo_attack_profile.py` (case builder in `core/c4/demo_case.py`) plants a
+coherent multi-stage breach and runs the *unmodified* production pipeline over
+it. The evidence is written to disk as real Chrome-schema SQLite databases, real
+encrypted credential blobs, a real dropped file and real LevelDB records, so the
+detectors receive events parsed by `run_extraction()` rather than hand-built
+dictionaries — the same code path a scan of a seized profile takes.
+
+The planted case is two weeks of ordinary 09:00–17:00 browsing (224 visits)
+overlaid with an automated 25-URL harvesting burst, a 03:00 phishing landing,
+a drive-by `.exe` drop, credential theft, an exfiltration callback, injected
+cookie/localStorage state for a never-visited domain, and one password reused
+across three corporate domains.
+
+**Result: 37/37 checks pass and all 7/7 detectors fire** on 277 extracted events
+(252 history, 8 cookie, 3 credential, 2 download, 4 extension, 6 session tab,
+2 localStorage):
+
+| Detector | Finding on the planted case | Score |
+|----------|-----------------------------|-------|
+| A · Co-occurrence | 5 artifact types on `secure-payroll-login.top` in 2 min | 100 |
+| B · Orphan detection | cookie + localStorage for a never-visited domain, and an open tab whose domain appears in no history entry | 40–55 |
+| C · Temporal anomaly | 7 artifacts at 03:00 vs a 09:00–17:00 personal baseline | 40–70 |
+| D · Attack chain | ordered browse → download → credential | 96 |
+| E · Domain risk clustering | breach domain ranks #1 of 5 | 100 |
+| F · Credential reuse | one identity saved on 3 domains | 85 |
+| G · Download → exfiltration | `payroll_update.exe` drop, then outbound navigation 90 s later | 60 |
+
+Rules R01–R06 all fire, while 257 of 277 events stay unflagged — the engine
+discriminates rather than blanket-flagging. The 23 correlation findings map to
+10 MITRE techniques across 9 tactics (9 High, 14 Medium), aggregating to a risk
+score of 72.6/100, verdict **HIGH**. Re-hashing the source files after the run
+confirms all five evidence files are byte-identical, and the run reports
+**67/67 tracked C4 functions executed**, measured by wrapping each function
+during the run rather than by assertion.
+
+### 9.4 Acquisition against a *live* profile
+
+Evaluating C4 against the browser profile the system is actually driving exposed
+three acquisition problems that a post-mortem, browser-closed evaluation hides.
+All three are now handled, and each was measured on the live profile:
+
+**Cookies are unreadable from disk while the browser runs.** Chromium holds
+`Network/Cookies` open with an exclusive Windows share mode for its entire
+lifetime. `shutil.copy2` fails with a sharing violation, and so does SQLite's
+`immutable=1` read-only URI and `nolock=1` — the handle cannot be opened at all,
+so no file-based technique recovers a single cookie. C4 therefore falls back to
+*volatile acquisition*: the cookie jar is read out of the running browser
+through the automation channel and converted into the same event schema, tagged
+`acquisition: "live"` so a report never implies the events came off the file.
+Measured on a live Chromium: 0 cookies file-only, 3/3 recovered live.
+
+**A side-loaded extension leaves no `Extensions/` folder.** Extensions started
+with `--load-extension`, the standard automation and malware side-loading route,
+are recorded only in `Secure Preferences` → `extensions.settings`, with their
+full manifest. Reading the folder alone reports "no extensions" on exactly the
+profiles where a hostile extension is most likely to be present. C4 now reads
+both sources and de-duplicates by extension ID, and treats an `unpacked`
+install location as a finding in its own right, independent of the permissions
+requested. Measured on the live profile: 0 extensions from the folder, 3
+recovered from the registry.
+
+**Session-restore data is a separate evidence source from history.**
+`Sessions/Session_*` and `Tabs_*` hold the tabs the browser would restore and
+every URL in their back/forward stacks. Because they are written independently
+of the History database, a tab can survive a cleared history — a URL that is
+restorable but has no visit record is a strong signal on its own, and is scored
+as an orphan (55). The SNSS container is a versioned command log, so rather
+than depending on the command IDs of one Chromium build, C4 recovers the URL
+strings in both encodings Chromium writes them in (UTF-8 and UTF-16LE) and
+timestamps each from the session filename. Measured on the live profile: 103
+restorable tab URLs across 16 hosts; the in-progress session file is held open
+by the browser and is reported as a warning rather than a failure.
+
+### 9.5 Live demonstration in the dashboard
+
+The same case drives the dashboard's Live Test Runner panel (`C4 Only`), which
+streams 21 rows over SSE. The first five read the live browser profile this
+session is actually driving — history, cookies acquired from the session,
+the Login Data store with its DPAPI master-key recovery, extensions from the
+registry, and restorable tabs — and the remaining rows walk the planted case
+one pipeline stage at a time: extraction, credential decryption, the rule
+engine, each of the seven detectors individually, MITRE mapping, report
+generation, verdict, evidence integrity and function coverage. Each row prints
+the concrete finding it produced, so the panel demonstrates *why* the component
+reached its verdict rather than only that its tests pass.
 
 ---
 
@@ -324,11 +434,15 @@ unified engine. The specific contributions are:
 ## 12. Conclusion
 
 Component 4 delivers a complete, tested, and integrated browser artifact
-forensic correlation engine. It extracts and normalizes six artifact types
-(including DPAPI-decrypted credentials and local storage), applies seven
-cross-table correlation detectors over a 120-second sliding window, maps every
-finding to MITRE ATT&CK, and exports analyst-ready JSON, HTML, and SIEM reports.
-Both the unit-test suite (8/8) and the end-to-end demonstration (7/7 detectors
-firing) confirm that the engine reconstructs multi-stage attack timelines that
+forensic correlation engine. It extracts and normalizes seven artifact types
+(history, cookies, downloads, DPAPI-decrypted credentials, extensions,
+session-restore tabs and local storage), applies seven cross-table correlation
+detectors over a 120-second sliding window, maps every finding to MITRE ATT&CK,
+and exports analyst-ready JSON, HTML, and SIEM reports. It acquires all of them
+from a *running* browser, where the cookie store is locked, side-loaded
+extensions leave no folder, and the session in progress is held open. The unit
+suite (55/55), the end-to-end demonstration on planted evidence (37/37 checks,
+7/7 detectors firing) and the live-profile rows in the dashboard together
+confirm that the engine reconstructs multi-stage attack timelines that
 single-artifact forensic tools cannot — answering the research question in the
 affirmative.

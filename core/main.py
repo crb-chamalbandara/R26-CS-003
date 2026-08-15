@@ -589,7 +589,7 @@ async def run_tests(component: str = "all"):
         "c1": ("C1 — Extension Analyzer",   os.path.join(_REPO_ROOT, "test", "C1", "test_c1_units.py")),
         "c2": ("C2 — Phishing Detection",   os.path.join(_REPO_ROOT, "test", "C2", "test_c2_layers.py")),
         "c3": ("C3 — Beacon Detector",      os.path.join(_REPO_ROOT, "test", "C3", "test_c3_units.py")),
-        "c4": ("C4 — Forensic Correlation", os.path.join(_REPO_ROOT, "test", "C4", "test_correlation.py")),
+        "c4": ("C4 — Forensic Correlation", os.path.join(_REPO_ROOT, "test", "C4", "test_units.py")),
     }
     targets = list(components_map.items()) if component == "all" else \
               [(component, components_map[component])] if component in components_map else []
@@ -812,68 +812,412 @@ async def _tc_c3_fusion_safe():
     assert result["verdict"] == "SAFE", f"Expected SAFE, got {result['verdict']}"
     return {"detail": f"all signals=0 → verdict={result['verdict']} score={result['score']:.2f}"}
 
-async def _tc_c4_cooccurrence():
-    from .c4.rules import apply_single_artifact_rules
-    from .c4.correlation import run_correlation
-    from datetime import datetime, timedelta
-    t0 = datetime(2024, 3, 15, 14, 0, 0)
-    def ev(ts, atype, detail, risk=False):
-        return {"timestamp": ts.isoformat(), "artifact_type": atype, "source_file": "test",
-                "detail": detail, "risk_flag": risk, "risk_reasons": [], "anomaly_score": 0,
-                "anomaly_reasons": [], "rule_flags": []}
-    events = [
-        ev(t0, "history", {"url": "https://evil-c4-test.com/login"}, risk=True),
-        ev(t0 + timedelta(seconds=30), "cookie", {"host": ".evil-c4-test.com", "name": "session", "path": "/", "secure": True, "httponly": True}, risk=True),
-        ev(t0 + timedelta(seconds=90), "credential", {"origin": "https://evil-c4-test.com", "username": "victim", "times_used": 0, "password": "[ENCRYPTED]"}, risk=True),
-    ]
-    events = apply_single_artifact_rules(events)
-    corr = run_correlation(events)
-    cooc = corr["cooccurrence"]
-    assert any("evil-c4-test.com" in str(f.get("domain","")) for f in cooc), "Co-occurrence not detected"
-    return {"detail": f"history+cookie+credential on evil-c4-test.com → {len(cooc)} co-occurrence cluster(s)"}
+# ══════════════════════════════════════════════════════════════════════════════
+# C4 — real-world forensic case
+# ══════════════════════════════════════════════════════════════════════════════
+# Every C4 row runs against evidence that exists on disk. Two sources feed it:
+#
+#   1. the live browser profile this session is driving (real Chromium artifacts)
+#   2. a planted case profile — real Chrome-schema SQLite databases, real
+#      AES-256-GCM credential blobs under a DPAPI-sealed master key, a real
+#      dropped file, real LevelDB records (see core/c4/demo_case.py)
+#
+# The detectors are never hand-fed event dictionaries: the production extractor
+# parses those files, exactly as a C4 scan of a seized profile would. The rows
+# then walk one stage of the pipeline each, so the panel shows where a finding
+# came from rather than just that it appeared.
+_C4_CASE: dict = {}
 
-async def _tc_c4_attack_chain():
-    from .c4.rules import apply_single_artifact_rules
-    from .c4.correlation import run_correlation
-    from datetime import datetime, timedelta
-    t0 = datetime(2024, 3, 15, 20, 0, 0)
-    def ev(ts, atype, detail, risk=False):
-        return {"timestamp": ts.isoformat(), "artifact_type": atype, "source_file": "test",
-                "detail": detail, "risk_flag": risk, "risk_reasons": [], "anomaly_score": 0,
-                "anomaly_reasons": [], "rule_flags": []}
-    events = [
-        ev(t0, "history", {"url": "https://phish-chain-test.net/update"}, risk=True),
-        ev(t0 + timedelta(seconds=40), "download", {"filename": "update.exe", "source_url": "https://phish-chain-test.net/update.exe", "size_bytes": 1024000, "danger_type": 1}, risk=True),
-        ev(t0 + timedelta(seconds=90), "credential", {"origin": "https://phish-chain-test.net", "username": "victim", "times_used": 0, "password": "[ENCRYPTED]"}, risk=True),
-    ]
-    events = apply_single_artifact_rules(events)
-    corr = run_correlation(events)
-    chains = corr["attack_chains"]
-    assert len(chains) > 0, "No attack chain detected"
-    return {"detail": f"browse→download.exe→credential on phish-chain-test.net → {len(chains)} chain(s) detected"}
+
+def _c4_state(key):
+    if key not in _C4_CASE:
+        raise AssertionError(
+            "C4 case profile not built — run the full C4 sequence from the start")
+    return _C4_CASE[key]
+
+
+def _c4_live_profile():
+    """The browser profile this session is actually using."""
+    from .c4.extractor import get_chrome_path
+    pw_default = os.path.join(PW_PROFILE_DIR, "Default")
+    profile = pw_default if os.path.isdir(pw_default) else get_chrome_path()
+    assert profile and os.path.isdir(profile), (
+        "No live browser profile found — start the Playwright session (Live tab) "
+        "so C4 has a real profile to read")
+    return profile
+
+
+def _c4_live_tmp():
+    tmp = os.path.join(tempfile.gettempdir(), "c4_live_probe")
+    os.makedirs(tmp, exist_ok=True)
+    return tmp
+
+
+async def _tc_c4_live_history():
+    """Browsing history off the profile the live browser is writing to."""
+    from .c4.extractor import collect_manifest, extract_history
+    live_url = "https://example.com/"
+    if pw_session.is_running:
+        try:
+            await pw_session.navigate(live_url)
+        except Exception:
+            pass
+
+    profile = _c4_live_profile()
+    loop = asyncio.get_event_loop()
+    events, warning = await loop.run_in_executor(None, extract_history, profile, _c4_live_tmp())
+    manifest = await loop.run_in_executor(None, collect_manifest, profile)
+    assert events, f"No history read from the live profile — {warning or 'profile is empty'}"
+
+    newest = events[0].get("timestamp", "")[:19].replace("T", " ")
+    return {
+        "detail": f"{len(events)} real visits read from the running browser's profile · "
+                  f"{len(manifest)} evidence file(s) hashed · newest visit {newest}",
+        "browser_url": live_url,
+    }
+
+
+async def _tc_c4_live_cookies():
+    """Cookies — locked on disk while the browser runs, so taken from the session."""
+    from .c4.extractor import extract_cookies
+    profile = _c4_live_profile()
+    jar = await _live_cookie_jar()
+    loop = asyncio.get_event_loop()
+    events, warning = await loop.run_in_executor(
+        None, extract_cookies, profile, _c4_live_tmp(), jar)
+    assert events, (
+        "No cookies recovered. The Cookies database is locked by the running "
+        "browser and no live jar was available — start the Playwright session "
+        "(Live tab) and browse to a site, then re-run."
+        if jar is None else f"Live jar acquired but empty — {warning or 'no cookies set yet'}")
+
+    live = sum(1 for e in events if e["detail"].get("acquisition") == "live")
+    sensitive = [e for e in events if e.get("risk_flag")]
+    hosts = sorted({e["detail"]["host"].lstrip(".") for e in events})
+    source = ("acquired live from the running browser (Cookies DB holds an "
+              "exclusive lock)" if live else "read from the Cookies database on disk")
+    return {"detail": f"{len(events)} real cookie(s) across {len(hosts)} host(s) {source} · "
+                      f"{len(sensitive)} session/auth token(s) flagged · "
+                      f"{', '.join(hosts[:4])}"}
+
+
+async def _tc_c4_live_logins():
+    """Login Data — read the real store and recover this profile's master key."""
+    from .c4.crypto import load_master_key
+    from .c4.extractor import extract_credentials
+    profile = _c4_live_profile()
+    loop = asyncio.get_event_loop()
+    events, warning = await loop.run_in_executor(
+        None, extract_credentials, profile, _c4_live_tmp())
+    assert warning is None, f"Login Data unreadable: {warning}"
+
+    key = await loop.run_in_executor(None, load_master_key, profile)
+    assert key, ("AES master key not recovered from this profile's Local State — "
+                 "saved passwords could not be decrypted")
+    statuses = {}
+    for e in events:
+        s = e["detail"].get("decryption", "?")
+        statuses[s] = statuses.get(s, 0) + 1
+    if events:
+        assert statuses.get("success") == len(events), \
+            f"only {statuses.get('success', 0)}/{len(events)} decrypted: {statuses}"
+        detail = (f"{len(events)} saved login(s) read and "
+                  f"{statuses.get('success', 0)} decrypted with the profile's own "
+                  f"{len(key)*8}-bit AES key")
+    else:
+        detail = (f"Login Data store readable, 0 saved logins in this profile · "
+                  f"{len(key)*8}-bit AES master key recovered from Local State via DPAPI "
+                  f"— decryption ready the moment a password is saved")
+    return {"detail": detail}
+
+
+async def _tc_c4_live_extensions():
+    """Extensions — recovered even though a Playwright profile has no Extensions/ folder."""
+    from .c4.extractor import extract_extensions
+    profile = _c4_live_profile()
+    loop = asyncio.get_event_loop()
+    events = await loop.run_in_executor(None, extract_extensions, profile)
+    assert events, ("No extensions recovered from the live profile — neither "
+                    "Extensions/ nor Secure Preferences held a record")
+
+    folder = sum(1 for e in events if e["source_file"] == "Extensions/")
+    prefs = len(events) - folder
+    risky = [e for e in events if e.get("risk_flag")]
+    names = [e["detail"]["name"] for e in events]
+    return {"detail": f"{len(events)} extension(s) — {folder} from Extensions/, {prefs} from "
+                      f"Secure Preferences · {len(risky)} holding risky permissions · "
+                      f"{', '.join(names[:4])}"}
+
+
+async def _tc_c4_live_sessions():
+    """Session restore — which tabs were open, straight out of the SNSS files."""
+    from .c4.extractor import extract_sessions
+    profile = _c4_live_profile()
+    loop = asyncio.get_event_loop()
+    events, warning = await loop.run_in_executor(None, extract_sessions, profile)
+    assert events, (f"No session tabs recovered — {warning or 'no Sessions/ store in this profile'}")
+
+    files = sorted({e["detail"]["session_file"] for e in events})
+    hosts = sorted({e["detail"]["host"] for e in events})
+    tabs = sum(1 for e in events if e["detail"]["kind"] == "tabs")
+    note = " · " + warning.split("—")[0].strip() if warning else ""
+    return {"detail": f"{len(events)} restorable tab URL(s) across {len(hosts)} host(s) from "
+                      f"{len(files)} session file(s) ({tabs} from the tab store){note}"}
+
+
+async def _tc_c4_case_build():
+    """Plant the breach evidence on disk as genuine Chromium databases."""
+    from .c4 import demo_case
+    loop = asyncio.get_event_loop()
+    demo_case.install_coverage()
+    case = await loop.run_in_executor(None, demo_case.build_case_profile)
+    _C4_CASE.clear()
+    _C4_CASE["case"] = case
+
+    profile = case["profile"]
+    for artifact in ("History", os.path.join("Network", "Cookies"), "Login Data"):
+        assert os.path.exists(os.path.join(profile, artifact)), \
+            f"case profile is missing {artifact}"
+    planted = case["planted"]
+    key_note = {"dpapi": "AES key sealed with real DPAPI",
+                "no-dpapi": "DPAPI unavailable — blobs written unsealed",
+                "unavailable": "AES-GCM library missing"}[case["key_status"]]
+    return {"detail": f"{planted['baseline_visits']} days-of-normal-browsing visits + "
+                      f"{planted['burst_visits']}-URL burst + breach at "
+                      f"{case['breach_at'][11:16]} written to real SQLite · {key_note}"}
+
+
+async def _tc_c4_extract():
+    """Run the production extractor + full pipeline over the planted profile."""
+    from .c4 import demo_case
+    case = _c4_state("case")
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, demo_case.run_case_pipeline, case["root"])
+    _C4_CASE["result"] = result
+
+    counts = {}
+    for event in result["events"]:
+        counts[event["artifact_type"]] = counts.get(event["artifact_type"], 0) + 1
+    missing = [t for t in ("history", "cookie", "download", "credential",
+                           "extension", "session", "localstorage") if not counts.get(t)]
+    assert not missing, f"artifact types not extracted: {', '.join(missing)}"
+    return {"detail": f"{result['total_events']} events off disk — "
+                      + "  ".join(f"{k}:{v}" for k, v in sorted(counts.items()))}
+
+
+async def _tc_c4_crypto():
+    """Recover saved passwords the way Chrome protects them."""
+    result = _c4_state("result")
+    case = _c4_state("case")
+    creds = [e for e in result["events"] if e["artifact_type"] == "credential"]
+    assert creds, "no credential records extracted"
+    statuses = {}
+    for c in creds:
+        status = c["detail"].get("decryption", "?")
+        statuses[status] = statuses.get(status, 0) + 1
+    assert all("Payr0ll" not in str(c["detail"].get("password", "")) for c in creds), \
+        "plaintext password leaked into the result"
+    if case["key_status"] == "dpapi":
+        assert statuses.get("success") == len(creds), \
+            f"only {statuses.get('success', 0)}/{len(creds)} credentials decrypted: {statuses}"
+    masked = sorted({c["detail"].get("password", "") for c in creds})
+    return {"detail": f"{statuses.get('success', 0)}/{len(creds)} decrypted via DPAPI → "
+                      f"AES-256-GCM · stored masked as {', '.join(masked)} "
+                      f"(REVEAL_PLAINTEXT off)"}
+
+
+async def _tc_c4_rules():
+    """Every single-artifact rule R01-R06 on the planted evidence."""
+    result = _c4_state("result")
+    fired = {}
+    for event in result["events"]:
+        for flag in event.get("rule_flags", []):
+            fired[flag["rule"]] = fired.get(flag["rule"], 0) + 1
+    expected = ["R01", "R02", "R02b", "R03", "R04", "R05", "R06"]
+    missing = [r for r in expected if not fired.get(r)]
+    assert not missing, f"rules that never fired: {', '.join(missing)}"
+    clean = sum(1 for e in result["events"] if not e.get("risk_flag"))
+    return {"detail": "  ".join(f"{r}×{fired[r]}" for r in expected)
+                      + f" · {clean} of {result['total_events']} events left clean"}
+
+
+async def _tc_c4_det_cooccurrence():
+    """Detector A — how many artifact types touch one domain in 2 minutes."""
+    result, case = _c4_state("result"), _c4_state("case")
+    domain = case["planted"]["breach_domain"]
+    hits = [f for f in result["correlation"]["cooccurrence"] if f["domain"] == domain]
+    assert hits, f"no co-occurrence finding for {domain}"
+    top = max(hits, key=lambda f: f["type_count"])
+    assert top["type_count"] >= 4, f"only {top['type_count']} artifact types linked"
+    return {"detail": f"{domain}: {' + '.join(top['artifact_types'])} within 2 min "
+                      f"→ score {top['score']}"}
+
+
+async def _tc_c4_det_orphan():
+    """Detector B — artifacts for a domain the user never visited."""
+    result, case = _c4_state("result"), _c4_state("case")
+    domain = case["planted"]["orphan_domain"]
+    session_domain = case["planted"]["session_orphan_domain"]
+    orphans = result["correlation"]["orphans"]
+    hits = [f for f in orphans if domain in f["domain"]]
+    session_hits = [f for f in orphans if session_domain in f["domain"]]
+    assert len(hits) >= 2, f"expected cookie + localStorage orphans for {domain}, got {len(hits)}"
+    assert session_hits, f"restored tab for {session_domain} was not flagged as an orphan"
+    return {"detail": f"{domain}: {', '.join(sorted(f['artifact_type'] for f in hits))} · "
+                      f"{session_domain}: open tab with no history entry — "
+                      f"{len(orphans)} orphaned artifact(s) total"}
+
+
+async def _tc_c4_det_temporal():
+    """Detector C — activity outside this user's own learned hours."""
+    result = _c4_state("result")
+    correlation = result["correlation"]
+    hits = [f for f in correlation["temporal"] if f["hour"] == 3]
+    assert len(hits) >= 2, f"only {len(hits)} finding(s) at 03:00"
+    baseline = correlation.get("baseline", {})
+    busiest = max(baseline.items(), key=lambda kv: kv[1])[0] if baseline else "?"
+    return {"detail": f"{len(hits)} artifact(s) at 03:00 — this user's baseline peaks at "
+                      f"{busiest:02d}:00 with only {baseline.get(3, 0)} visit(s) ever at 03:00"}
+
+
+async def _tc_c4_det_chain():
+    """Detector D — ordered browse → download → credential on one domain."""
+    result, case = _c4_state("result"), _c4_state("case")
+    domain = case["planted"]["breach_domain"]
+    chains = [f for f in result["correlation"]["attack_chains"] if f["domain"] == domain]
+    ordered = [f for f in chains
+               if f["artifact_types"] == ["history", "download", "credential"]]
+    assert ordered, f"browse→download→credential chain not found on {domain}"
+    top = max(ordered, key=lambda f: f["score"])
+    return {"detail": f"{domain}: {' → '.join(top['artifact_types'])} between "
+                      f"{top['window_start'][11:19]} and {top['window_end'][11:19]} "
+                      f"→ score {top['score']}"}
+
+
+async def _tc_c4_det_cluster():
+    """Detector E — which domain concentrates the most cross-artifact risk."""
+    result, case = _c4_state("result"), _c4_state("case")
+    domain = case["planted"]["breach_domain"]
+    clusters = result["correlation"]["domain_clusters"]
+    assert clusters, "no domain risk clusters produced"
+    assert clusters[0]["domain"] == domain, \
+        f"breach domain did not rank first — top was {clusters[0]['domain']}"
+    top = clusters[0]
+    return {"detail": f"{domain} ranks #1 of {len(clusters)}: {top['event_count']} events across "
+                      f"{len(top['artifact_types'])} artifact types, {top['flagged_count']} flagged "
+                      f"→ score {top['score']}"}
+
+
+async def _tc_c4_det_reuse():
+    """Detector F — one saved identity reused across several domains."""
+    result, case = _c4_state("result"), _c4_state("case")
+    findings = result["correlation"]["credential_reuse"]
+    assert findings, "credential reuse not detected"
+    top = findings[0]
+    assert len(top["domains"]) >= 3, f"reuse across only {len(top['domains'])} domain(s)"
+    assert top["username"] == case["planted"]["victim_user"].lower()
+    return {"detail": f"{top['username']} saved on {', '.join(top['domains'])} "
+                      f"→ one stolen password unlocks {len(top['domains'])} accounts "
+                      f"(score {top['score']})"}
+
+
+async def _tc_c4_det_exfil():
+    """Detector G — a drop followed by outbound navigation elsewhere."""
+    result, case = _c4_state("result"), _c4_state("case")
+    exfil_domain = case["planted"]["exfil_domain"]
+    hits = [f for f in result["correlation"]["download_exfil"] if f["domain"] == exfil_domain]
+    assert hits, f"download → {exfil_domain} correlation not detected"
+    top = hits[0]
+    return {"detail": f"{top['filename']} dropped from {top['source_domain']}, then "
+                      f"{exfil_domain} opened at {top['window_end'][11:19]} "
+                      f"— {int((_dt_seconds(top['window_start'], top['window_end'])))}s later"}
+
+
+def _dt_seconds(start_iso, end_iso):
+    try:
+        return (datetime.fromisoformat(end_iso) - datetime.fromisoformat(start_iso)).total_seconds()
+    except Exception:
+        return 0
+
 
 async def _tc_c4_mitre():
-    from .c4.rules import apply_single_artifact_rules
-    from .c4.correlation import run_correlation
-    from .c4.mitre import run_mitre_mapping
-    from datetime import datetime, timedelta
-    t0 = datetime(2024, 3, 15, 14, 0, 0)
-    def ev(ts, atype, detail, risk=False):
-        return {"timestamp": ts.isoformat(), "artifact_type": atype, "source_file": "test",
-                "detail": detail, "risk_flag": risk, "risk_reasons": [], "anomaly_score": 0,
-                "anomaly_reasons": [], "rule_flags": []}
-    events = [
-        ev(t0, "history", {"url": "https://mitre-test.ru/cmd"}, risk=True),
-        ev(t0 + timedelta(minutes=1), "download", {"filename": "dropper.ps1", "source_url": "https://mitre-test.ru/dropper.ps1", "size_bytes": 8192, "danger_type": 1}, risk=True),
-        ev(t0 + timedelta(minutes=2), "credential", {"origin": "https://mitre-test.ru", "username": "target", "times_used": 0, "password": "[ENCRYPTED]"}, risk=True),
-    ]
-    events = apply_single_artifact_rules(events)
-    corr = run_correlation(events)
-    mitre = run_mitre_mapping(corr, events)
+    """Map every correlation finding onto MITRE ATT&CK."""
+    result = _c4_state("result")
+    mitre = result["mitre_result"]
     findings = mitre["all_findings"]
-    assert len(findings) > 0, "No MITRE findings"
-    high = mitre["by_severity"]["High"]
-    return {"detail": f"{len(findings)} MITRE ATT&CK findings — High:{high} Medium:{mitre['by_severity']['Medium']} Low:{mitre['by_severity']['Low']}"}
+    assert findings, "no MITRE findings"
+    unmapped = [f for f in findings if not f.get("mitre", {}).get("technique_id")]
+    assert not unmapped, f"{len(unmapped)} finding(s) carry no technique"
+    techniques = sorted({f["mitre"]["technique_id"] for f in findings})
+    tactics = sorted({f["mitre"].get("tactic", "") for f in findings} - {""})
+    return {"detail": f"{len(findings)} findings → {len(techniques)} techniques across "
+                      f"{len(tactics)} tactics · High:{mitre['by_severity']['High']} "
+                      f"Medium:{mitre['by_severity']['Medium']} Low:{mitre['by_severity']['Low']} · "
+                      + ", ".join(techniques[:6])}
+
+
+async def _tc_c4_report():
+    """Analyst HTML report and SIEM export off the same case."""
+    from .c4 import reporter
+    result, case = _c4_state("result"), _c4_state("case")
+    loop = asyncio.get_event_loop()
+    html = await loop.run_in_executor(None, reporter.generate_html_report, result)
+    siem = await loop.run_in_executor(None, reporter.generate_siem_export, result)
+    out_dir = os.path.join(case["root"], "reports")
+    paths = await loop.run_in_executor(None, reporter.save_all_outputs, result, out_dir)
+    assert case["planted"]["breach_domain"] in html, "breach domain missing from the report"
+    assert siem["export_type"] == "C4_SIEM_Export" and siem["total_events"] > 0
+    assert all(os.path.exists(p) for p in paths.values()), "report files not written"
+    return {"detail": f"HTML {len(html):,} chars · SIEM envelope v{siem['export_version']} with "
+                      f"{siem['total_events']} records · 3 files written to "
+                      f"{os.path.basename(out_dir)}/"}
+
+
+async def _tc_c4_verdict():
+    """Aggregate the findings into the score the dashboard shows."""
+    from .c4 import service as c4_service
+    result = _c4_state("result")
+    summary = c4_service.get_summary(result)
+    assert summary["verdict"] in ("HIGH", "CRITICAL"), \
+        f"planted breach only reached {summary['verdict']} ({summary['risk_score']})"
+    return {"detail": f"risk {summary['risk_score']}/100 → {summary['verdict']} · "
+                      f"{summary['flagged_events']} of {summary['total_events']} events flagged · "
+                      f"{summary['total_findings']} findings from 7 detectors"}
+
+
+async def _tc_c4_integrity():
+    """Forensic soundness — reading evidence must not alter it."""
+    from .c4.extractor import sha256
+    case, result = _c4_state("case"), _c4_state("result")
+    manifest = result["artifact_manifest"]
+    assert manifest, "no evidence manifest recorded"
+    changed = []
+    for name, info in manifest.items():
+        current = sha256(info["path"])
+        if current != info["sha256"]:
+            changed.append(name)
+    assert not changed, f"evidence modified during analysis: {', '.join(changed)}"
+    return {"detail": f"{len(manifest)} source file(s) byte-identical after the full pipeline · "
+                      f"History sha256 {manifest['History']['sha256'][:24]}… · "
+                      f"analysis ran on copies in {os.path.basename(case['root'])}/tmp"}
+
+
+async def _tc_c4_coverage():
+    """Prove — not assert — that the whole C4 surface ran on this case."""
+    from .c4 import demo_case, service as c4_service
+    c4_service.get_default_profile_path()
+    c4_service.get_last_result()
+    c4_service.render_last_html()
+    c4_service.render_last_json()
+    c4_service.render_last_siem()
+    c4_service.report_filename("html")
+    coverage = demo_case.coverage_report()
+    demo_case.remove_coverage()
+    assert coverage["called"] == coverage["total"], \
+        f"{len(coverage['missing'])} function(s) never ran: {', '.join(coverage['missing'][:6])}"
+    return {"detail": f"{coverage['called']}/{coverage['total']} C4 functions executed against the "
+                      f"case — extractor, crypto, rules, correlation, mitre, reporter, service "
+                      f"(excluded: {', '.join(coverage['excluded'])})"}
 
 
 _ALL_TEST_CASES = [
@@ -891,9 +1235,27 @@ _ALL_TEST_CASES = [
     {"id":"c3_human_iat", "component":"c3","label":"Human browsing: IAT-CV > 0.10 (irregular)","fn":_tc_c3_human_iat},
     {"id":"c3_fusion_beacon","component":"c3","label":"Risk fusion: BEACON verdict at high signals","fn":_tc_c3_fusion_beacon},
     {"id":"c3_fusion_safe","component":"c3","label":"Risk fusion: SAFE verdict at zero signals","fn":_tc_c3_fusion_safe},
-    {"id":"c4_cooccurrence","component":"c4","label":"Co-occurrence: history+cookie+credential on same domain","fn":_tc_c4_cooccurrence},
-    {"id":"c4_attack_chain","component":"c4","label":"Attack chain: browse→download.exe→credential","fn":_tc_c4_attack_chain},
-    {"id":"c4_mitre",     "component":"c4","label":"MITRE ATT&CK mapping on attack scenario", "fn":_tc_c4_mitre},
+    {"id":"c4_live_hist", "component":"c4","label":"[Browser] Live profile: browsing history off the running browser","fn":_tc_c4_live_history,"browser":True},
+    {"id":"c4_live_ck",   "component":"c4","label":"Live profile: cookies acquired from the session (DB is locked)","fn":_tc_c4_live_cookies},
+    {"id":"c4_live_login","component":"c4","label":"Live profile: Login Data store + DPAPI master key recovery","fn":_tc_c4_live_logins},
+    {"id":"c4_live_ext",  "component":"c4","label":"Live profile: extensions from Secure Preferences","fn":_tc_c4_live_extensions},
+    {"id":"c4_live_sess", "component":"c4","label":"Live profile: restorable tabs from the SNSS session store","fn":_tc_c4_live_sessions},
+    {"id":"c4_case",      "component":"c4","label":"Evidence: breach profile planted as real Chrome SQLite","fn":_tc_c4_case_build},
+    {"id":"c4_extract",   "component":"c4","label":"Stage 1: extractor parses all 7 artifact types off disk","fn":_tc_c4_extract},
+    {"id":"c4_crypto",    "component":"c4","label":"Stage 1b: saved passwords decrypted via DPAPI + AES-256-GCM","fn":_tc_c4_crypto},
+    {"id":"c4_rules",     "component":"c4","label":"Stage 2: rules R01-R06 all fire on the planted case","fn":_tc_c4_rules},
+    {"id":"c4_det_a",     "component":"c4","label":"Detector A: co-occurrence — 4 artifact types, one domain","fn":_tc_c4_det_cooccurrence},
+    {"id":"c4_det_b",     "component":"c4","label":"Detector B: orphan — cookie/localStorage, no history","fn":_tc_c4_det_orphan},
+    {"id":"c4_det_c",     "component":"c4","label":"Detector C: temporal — 03:00 vs this user's own baseline","fn":_tc_c4_det_temporal},
+    {"id":"c4_det_d",     "component":"c4","label":"Detector D: attack chain — browse→download.exe→credential","fn":_tc_c4_det_chain},
+    {"id":"c4_det_e",     "component":"c4","label":"Detector E: domain risk clustering — breach domain ranks #1","fn":_tc_c4_det_cluster},
+    {"id":"c4_det_f",     "component":"c4","label":"Detector F: credential reuse — one identity, three domains","fn":_tc_c4_det_reuse},
+    {"id":"c4_det_g",     "component":"c4","label":"Detector G: download → exfiltration navigation","fn":_tc_c4_det_exfil},
+    {"id":"c4_mitre",     "component":"c4","label":"Stage 4: every finding mapped to MITRE ATT&CK","fn":_tc_c4_mitre},
+    {"id":"c4_report",    "component":"c4","label":"Stage 5: HTML report + SIEM export written to disk","fn":_tc_c4_report},
+    {"id":"c4_verdict",   "component":"c4","label":"Stage 6: risk score and verdict for the case","fn":_tc_c4_verdict},
+    {"id":"c4_integrity", "component":"c4","label":"Forensic integrity: evidence unchanged after analysis","fn":_tc_c4_integrity},
+    {"id":"c4_coverage",  "component":"c4","label":"Coverage: every C4 function executed on this case","fn":_tc_c4_coverage},
 ]
 
 
@@ -1119,14 +1481,32 @@ async def forensic_debug():
     }
 
 
+async def _live_cookie_jar():
+    """The cookie jar of the running browser, or None when no session is up.
+
+    Chromium keeps an exclusive Windows lock on Network/Cookies for its whole
+    lifetime, so a live profile can never be read from the file. Taking the jar
+    from the running session is the volatile-acquisition equivalent, and the
+    events it produces are labelled as such.
+    """
+    if not pw_session.is_running:
+        return None
+    try:
+        return await pw_session.context.cookies()
+    except Exception:
+        return None
+
+
 @app.post("/forensic/extract")
 async def forensic_extract(req: ForensicReq):
     profile_path = req.profile_path
     if not profile_path:
         if pw_session.is_running or os.path.isdir(PW_PROFILE_DIR):
             profile_path = PW_PROFILE_DIR
+    live_cookies = await _live_cookie_jar()
     try:
-        result = await asyncio.to_thread(run_forensic_analysis, profile_path, req.save_outputs)
+        result = await asyncio.to_thread(run_forensic_analysis, profile_path,
+                                         req.save_outputs, live_cookies)
         await _broadcast({"type": "forensic_analysis", "data": get_c4_summary(result)})
         return {"status": "ok", "summary": get_c4_summary(result), "result": result}
     except (FileNotFoundError, ValueError) as exc:

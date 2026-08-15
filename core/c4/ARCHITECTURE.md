@@ -14,10 +14,11 @@ techniques?
 Browser profile directory
       |
       |-- History SQLite database
-      |-- Cookies SQLite database
+      |-- Cookies SQLite database    (or the live jar — the file is exclusively locked)
       |-- Login Data SQLite database (credentials decrypted via DPAPI + AES-GCM)
       |-- Downloads table
-      |-- Extensions manifests
+      |-- Extensions manifests + Secure Preferences extension registry
+      |-- Sessions SNSS store        (tabs the browser would restore)
       |-- Local Storage LevelDB store
       |
       v

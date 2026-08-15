@@ -1,4 +1,4 @@
-import os, shutil, sqlite3, json, hashlib
+import os, shutil, sqlite3, json, hashlib, re as _re
 from datetime import datetime, timedelta
 from .crypto import load_master_key, decrypt_password
 
@@ -102,25 +102,56 @@ def extract_history(profile, tmp):
     return events, None
 
 # ── [2] COOKIES ───────────────────────────────────────────────────────────────
-def extract_cookies(profile, tmp):
+SENSITIVE_COOKIE_NAMES = {"session","auth","token","jwt","jsessionid","phpsessid",
+                          "__secure","sid","login","access_token","bearer","id_token"}
+
+def cookies_from_live(jar, acquired_at=None):
+    """Convert a live cookie jar (Playwright/CDP) into cookie events.
+
+    Chromium holds `Network/Cookies` with an exclusive Windows lock for as long
+    as the browser runs, so no file-based copy can succeed against a live
+    profile. Reading the jar out of the running browser is the standard
+    volatile-acquisition answer: the data is the same store, taken from memory
+    instead of from disk, and is marked as such so the report never implies the
+    events came off the file.
+    """
+    ts = acquired_at or datetime.now().isoformat()
+    events = []
+    for c in jar or []:
+        name = str(c.get("name", "") or "")
+        host = str(c.get("domain", "") or "")
+        sens = any(s in name.lower() for s in SENSITIVE_COOKIE_NAMES)
+        reasons = ["sensitive cookie name"] if sens else []
+        events.append(_event(ts, "cookie", "live session (volatile)",
+            {"host": host, "name": name, "path": str(c.get("path", "/") or "/"),
+             "secure": bool(c.get("secure")), "httponly": bool(c.get("httpOnly")),
+             "same_site": str(c.get("sameSite", "") or ""),
+             "acquisition": "live"},
+            risk=sens, reasons=reasons))
+    return events
+
+def extract_cookies(profile, tmp, live_cookies=None):
     src = find_file(profile, os.path.join("Network","Cookies"), "Cookies")
     db  = safe_copy(src, tmp, "Cookies_c4")
     if not db:
         cached = os.path.join(tmp, "Cookies_c4")
         if os.path.exists(cached):
             db = cached
+        elif live_cookies is not None:
+            events = cookies_from_live(live_cookies)
+            return events, (f"Cookies DB locked by the running browser — "
+                            f"{len(events)} cookie(s) acquired live from the session instead")
         else:
             return [], "Cookies locked — close the browser and retry"
-    SENS = {"session","auth","token","jwt","jsessionid","phpsessid",
-            "__secure","sid","login","access_token","bearer","id_token"}
     events = []
     for r in query(db, "SELECT host_key,name,path,expires_utc,is_secure,is_httponly,last_access_utc FROM cookies ORDER BY last_access_utc DESC"):
         ts = chrome_time(r["last_access_utc"])
         if not ts: continue
-        sens = any(s in (r["name"] or "").lower() for s in SENS)
+        sens = any(s in (r["name"] or "").lower() for s in SENSITIVE_COOKIE_NAMES)
         events.append(_event(ts,"cookie","Cookies.db",
             {"host":r["host_key"] or "","name":r["name"] or "","path":r["path"] or "",
-             "secure":bool(r["is_secure"]),"httponly":bool(r["is_httponly"])},
+             "secure":bool(r["is_secure"]),"httponly":bool(r["is_httponly"]),
+             "acquisition":"disk"},
             risk=sens, reasons=["sensitive cookie name"] if sens else []))
     return events, None
 
@@ -179,12 +210,48 @@ def extract_credentials(profile, tmp):
     return events, None
 
 # ── [5] EXTENSIONS ────────────────────────────────────────────────────────────
-def extract_extensions(profile):
+RISKY_PERMS = {"<all_urls>","tabs","cookies","webRequest","webRequestBlocking",
+               "nativeMessaging","debugger","clipboardRead","history"}
+
+# Chromium's Extension::Location enum, as stored in (Secure) Preferences.
+EXT_LOCATIONS = {1:"web store", 2:"external registry", 3:"unpacked (side-loaded)",
+                 4:"external pref", 5:"component", 6:"external registry",
+                 7:"unpacked (side-loaded)", 8:"command line", 9:"external policy",
+                 10:"external policy download"}
+
+def _perm_names(manifest):
+    """Manifest permission lists may hold objects (e.g. {'fileSystem':['write']})."""
+    raw = list(manifest.get("permissions", []) or []) \
+        + list(manifest.get("host_permissions", []) or []) \
+        + list(manifest.get("optional_permissions", []) or [])
+    names = []
+    for p in raw:
+        if isinstance(p, str):
+            names.append(p)
+        elif isinstance(p, dict):
+            names.extend(str(k) for k in p.keys())
+        else:
+            names.append(str(p))
+    return sorted(set(names))
+
+def _extension_event(eid, manifest, source, extra=None):
+    perms = _perm_names(manifest)
+    risky = sorted(set(perms) & RISKY_PERMS)
+    reasons = [f"risky permission: {p}" for p in risky]
+    detail = {"id": eid, "name": manifest.get("name", "Unknown"),
+              "version": manifest.get("version", ""),
+              "permissions": perms, "risky_perms": risky}
+    detail.update(extra or {})
+    if detail.get("location", "").startswith("unpacked"):
+        reasons.append("side-loaded extension — not installed from the Web Store")
+    return _event(datetime.now().isoformat(), "extension", source, detail,
+                  risk=len(risky) > 0, reasons=reasons)
+
+def _extensions_from_folder(profile):
+    """Unpacked manifests under Default/Extensions/<id>/<version>/."""
     ext_dir = os.path.join(profile, "Extensions")
-    events  = []
+    events = []
     if not os.path.exists(ext_dir): return events
-    RISKY = {"<all_urls>","tabs","cookies","webRequest","webRequestBlocking",
-             "nativeMessaging","debugger","clipboardRead","history"}
     for eid in os.listdir(ext_dir):
         vdir = os.path.join(ext_dir, eid)
         if not os.path.isdir(vdir): continue
@@ -195,14 +262,57 @@ def extract_extensions(profile):
             if not os.path.exists(mp): continue
             try:
                 with open(mp, encoding="utf-8", errors="ignore") as f: m = json.load(f)
-                perms = set(m.get("permissions",[]))|set(m.get("host_permissions",[]))
-                risky = perms & RISKY
-                events.append(_event(datetime.now().isoformat(),"extension","Extensions/",
-                    {"id":eid,"name":m.get("name","Unknown"),"version":m.get("version",""),
-                     "permissions":sorted(list(perms)),"risky_perms":sorted(list(risky))},
-                    risk=len(risky)>0, reasons=[f"risky permission: {p}" for p in risky]))
-                break
-            except: continue
+            except Exception:
+                continue
+            events.append(_extension_event(eid, m, "Extensions/",
+                                           {"path": os.path.join(vdir, ver)}))
+            break
+    return events
+
+def _extensions_from_prefs(profile):
+    """Extension records inside (Secure) Preferences.
+
+    Automation and side-loaded profiles frequently have no Extensions/ folder at
+    all — Chromium loads them from wherever --load-extension points and keeps the
+    installed-extension record, with its full manifest, in Secure Preferences.
+    Reading only the folder therefore reports "no extensions" on exactly the
+    profiles where a hostile extension is most likely to be side-loaded.
+    """
+    events = []
+    for prefs_name in ("Secure Preferences", "Preferences"):
+        path = os.path.join(profile, prefs_name)
+        if not os.path.exists(path): continue
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as f:
+                prefs = json.load(f)
+        except Exception:
+            continue
+        settings = (prefs.get("extensions", {}) or {}).get("settings", {}) or {}
+        for eid, record in settings.items():
+            if not isinstance(record, dict): continue
+            manifest = record.get("manifest") or {}
+            if not isinstance(manifest, dict): continue
+            location = EXT_LOCATIONS.get(record.get("location"), "unknown")
+            try:
+                installed = chrome_time(int(record.get("install_time") or 0)) or ""
+            except (TypeError, ValueError):
+                installed = ""
+            events.append(_extension_event(eid, manifest, prefs_name, {
+                "location": location,
+                "path": str(record.get("path", "")),
+                "install_time": installed,
+                "enabled": record.get("state", 1) == 1,
+            }))
+    return events
+
+def extract_extensions(profile):
+    """Installed extensions from every place Chromium records them."""
+    events = _extensions_from_folder(profile)
+    seen = {e["detail"]["id"] for e in events}
+    for event in _extensions_from_prefs(profile):
+        if event["detail"]["id"] in seen: continue
+        seen.add(event["detail"]["id"])
+        events.append(event)
     return events
 
 # ── [6] SESSION CLUSTERS ──────────────────────────────────────────────────────
@@ -250,8 +360,69 @@ def extract_clusters(profile, tmp):
     clusters.sort(key=lambda x: x["max_score"], reverse=True)
     return clusters, None
 
-# ── [7] LOCAL STORAGE (LevelDB) ───────────────────────────────────────────────
-import re as _re
+# ── [7] SESSION RESTORE (SNSS) ────────────────────────────────────────────────
+# Default/Sessions/{Session,Tabs}_<chrome-timestamp> hold what the browser will
+# restore: the tabs that were open and every URL in their back/forward stack.
+# Forensically this is the closest thing to "what was on screen", and it survives
+# a cleared History — a tab whose URL appears nowhere in History is a strong
+# signal on its own. The SNSS container is a length-prefixed command log with
+# pickled payloads; URLs appear inside it as UTF-8 or UTF-16LE strings, which is
+# what the bounded scan below recovers without depending on the command IDs of a
+# particular Chromium version.
+_SNSS_URL_U8  = _re.compile(rb"https?://[\x21-\x7e]{4,512}")
+_SNSS_URL_U16 = _re.compile(rb"(?:h\x00t\x00t\x00p\x00s?\x00:\x00/\x00/\x00)"
+                            rb"(?:[\x20-\x7e]\x00){4,512}")
+_SNSS_MAX_PER_FILE = 300
+
+def _snss_urls(blob):
+    """Recover distinct URLs from one SNSS file, in the order they appear."""
+    found, seen = [], set()
+    for match in _SNSS_URL_U8.finditer(blob):
+        url = match.group(0).decode("utf-8", "ignore").rstrip("\x00")
+        if url not in seen:
+            seen.add(url); found.append(url)
+    for match in _SNSS_URL_U16.finditer(blob):
+        url = match.group(0).decode("utf-16-le", "ignore").rstrip("\x00")
+        if url not in seen:
+            seen.add(url); found.append(url)
+    return found[:_SNSS_MAX_PER_FILE]
+
+def extract_sessions(profile):
+    """Read the session-restore store: which tabs were open, and their URLs."""
+    sess_dir = os.path.join(profile, "Sessions")
+    if not os.path.isdir(sess_dir):
+        return [], None
+    events, locked = [], []
+    for fn in sorted(os.listdir(sess_dir)):
+        kind = "tabs" if fn.startswith("Tabs_") else "session" if fn.startswith("Session_") else ""
+        if not kind:
+            continue
+        path = os.path.join(sess_dir, fn)
+        try:
+            with open(path, "rb") as fh:
+                blob = fh.read()
+        except OSError:
+            locked.append(fn)          # the session in progress stays open for writing
+            continue
+        # The filename suffix is the Chrome timestamp the session was written.
+        try:
+            ts = chrome_time(int(fn.split("_", 1)[1])) or datetime.now().isoformat()
+        except (IndexError, ValueError):
+            ts = datetime.now().isoformat()
+        for url in _snss_urls(blob):
+            host = _domain_from_origin(url)
+            if not host:
+                continue
+            events.append(_event(ts, "session", f"Sessions/{fn}",
+                {"url": url, "host": host, "kind": kind, "session_file": fn}))
+    warning = None
+    if locked:
+        warning = (f"{len(locked)} session file(s) held open by the running browser "
+                   f"({', '.join(locked[:2])}) — restored tabs read from the closed sessions")
+    return events, warning
+
+
+# ── [8] LOCAL STORAGE (LevelDB) ───────────────────────────────────────────────
 _ORIGIN_RE = _re.compile(rb"_(https?://[\w.\-:]+)\x00")
 
 def extract_local_storage(profile):
@@ -304,7 +475,8 @@ def collect_manifest(profile):
     files = {"History":find_file(profile,"History"),
              "Cookies":find_file(profile,os.path.join("Network","Cookies"),"Cookies"),
              "Login Data":find_file(profile,"Login Data"),
-             "Bookmarks":find_file(profile,"Bookmarks")}
+             "Bookmarks":find_file(profile,"Bookmarks"),
+             "Secure Preferences":find_file(profile,"Secure Preferences")}
     manifest = {}
     for name, fpath in files.items():
         if not fpath: continue
@@ -317,7 +489,13 @@ def collect_manifest(profile):
         except: continue
     return manifest
 
-def run_extraction(profile_path=None, tmp_dir=None):
+def run_extraction(profile_path=None, tmp_dir=None, live_cookies=None):
+    """Collect every artifact type from a profile.
+
+    `live_cookies` is an optional cookie jar read from a running browser. It is
+    used only when the Cookies database is locked, which is always the case while
+    Chromium is open — see cookies_from_live().
+    """
     if not profile_path: profile_path = get_chrome_path()
     else: profile_path = _resolve_profile(profile_path)
     if not profile_path or not os.path.exists(profile_path):
@@ -328,15 +506,17 @@ def run_extraction(profile_path=None, tmp_dir=None):
 
     warnings = []
     history,   w = extract_history(profile_path, tmp_dir);   warnings += [w] if w else []
-    cookies,   w = extract_cookies(profile_path, tmp_dir);   warnings += [w] if w else []
+    cookies,   w = extract_cookies(profile_path, tmp_dir, live_cookies); warnings += [w] if w else []
     downloads, w = extract_downloads(profile_path, tmp_dir); warnings += [w] if w else []
     creds,     w = extract_credentials(profile_path, tmp_dir); warnings += [w] if w else []
+    sessions,  w = extract_sessions(profile_path);           warnings += [w] if w else []
     extensions = extract_extensions(profile_path)
     localstore = extract_local_storage(profile_path)
     clusters, _w = extract_clusters(profile_path, tmp_dir)
     manifest   = collect_manifest(profile_path)
 
-    all_events = history + cookies + downloads + creds + extensions + localstore
+    all_events = (history + cookies + downloads + creds + sessions
+                  + extensions + localstore)
     if not all_events:
         raise ValueError("No events extracted. Close Chrome completely and try again.")
 

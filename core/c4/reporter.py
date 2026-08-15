@@ -14,6 +14,7 @@ TYPE_COLORS = {
     "download":   ("#EAF3DE","#27500A"),
     "extension":  ("#EEEDFE","#3C3489"),
     "localstorage": ("#E4F5F0","#0F5C48"),
+    "session":    ("#FDEFF6","#7A1F52"),
 }
 SEV_COLORS = {"High":("#FCEBEB","#791F1F","#A32D2D"),
               "Medium":("#FAEEDA","#633806","#854F0B"),

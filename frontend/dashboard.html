@@ -1451,7 +1451,8 @@ button{font-family:inherit;cursor:pointer}
         <button class="c4-atab" data-atype="cookie">Cookies <span class="c4-tabcount" id="cnt-cookie">0</span></button>
         <button class="c4-atab" data-atype="credential">Login Data <span class="c4-tabcount" id="cnt-credential">0</span></button>
         <button class="c4-atab" data-atype="extension">Extensions <span class="c4-tabcount" id="cnt-extension">0</span></button>
-        <button class="c4-atab" data-atype="cluster">Sessions <span class="c4-tabcount" id="cnt-cluster">0</span></button>
+        <button class="c4-atab" data-atype="session">Open Tabs <span class="c4-tabcount" id="cnt-session">0</span></button>
+        <button class="c4-atab" data-atype="cluster">Clusters <span class="c4-tabcount" id="cnt-cluster">0</span></button>
       </div>
 
       <!-- History -->
@@ -1479,7 +1480,12 @@ button{font-family:inherit;cursor:pointer}
         <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 7V4M12 7V4M15 7V4M9 17v3M12 17v3M15 17v3M7 9H4M7 12H4M7 15H4M17 9h3M17 12h3M17 15h3"/></svg></div><div class="emsg">Run a scan to view installed extensions</div></div>
       </div>
 
-      <!-- Sessions / Clusters -->
+      <!-- Session restore (SNSS) -->
+      <div class="c4-apane" id="apane-session">
+        <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 6v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6"/><path d="M8 6V4h5v2"/></svg></div><div class="emsg">Run a scan to view the tabs the browser would restore</div></div>
+      </div>
+
+      <!-- Session clusters -->
       <div class="c4-apane" id="apane-cluster">
         <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></div><div class="emsg">Run a scan to view Chrome session clusters (Chrome 110+)</div></div>
       </div>
@@ -3881,7 +3887,7 @@ document.getElementById('c4-atabs').addEventListener('click', (e) => {
 });
 
 function renderC4Artifacts(events) {
-  const types = ['history','download','cookie','credential','extension'];
+  const types = ['history','download','cookie','credential','extension','session'];
   const byType = {};
   types.forEach(t => { byType[t] = []; });
   (events || []).forEach(e => { if (byType[e.artifact_type]) byType[e.artifact_type].push(e); });
@@ -3907,6 +3913,31 @@ function renderC4Artifacts(events) {
   renderArtifactCookies(byType.cookie);
   renderArtifactCredentials(byType.credential);
   renderArtifactExtensions(byType.extension);
+  renderArtifactSessions(byType.session);
+}
+
+function renderArtifactSessions(events) {
+  const pane = document.getElementById('apane-session');
+  if (!pane) return;
+  if (!events.length) {
+    pane.innerHTML = '<div class="empty"><div class="eicon">&#128203;</div><div class="emsg">No session-restore data found — the browser may be holding the Sessions store open</div></div>';
+    return;
+  }
+  const sorted = [...events].sort((a,b) => String(b.timestamp||'').localeCompare(String(a.timestamp||'')));
+  pane.innerHTML = `<table class="c4-atable">
+    <thead><tr><th></th><th>Session Written</th><th>URL</th><th>Host</th><th>Store</th><th>Score</th></tr></thead>
+    <tbody>${sorted.slice(0,200).map(e => {
+      const d = e.detail || {};
+      return `<tr class="${e.risk_flag?'flagged':''}">
+        <td style="width:14px"><span class="c4-risk-dot ${e.risk_flag?'yes':'no'}"></span></td>
+        <td style="white-space:nowrap;color:var(--t3)">${fmtDateTime(e.timestamp)}</td>
+        <td style="color:${e.risk_flag?'var(--warn)':'var(--t0)'};max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(d.url||'')}">${escapeHtml(d.url||'—')}</td>
+        <td style="color:var(--t1)">${escapeHtml(d.host||'—')}</td>
+        <td style="color:var(--t3)" title="${escapeHtml(d.session_file||'')}">${d.kind==='tabs'?'tab store':'session'}</td>
+        <td style="color:${e.anomaly_score>0?'var(--warn)':'var(--t3)'}">${e.anomaly_score||0}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
 }
 
 function renderArtifactHistory(events) {
@@ -3973,12 +4004,14 @@ function renderArtifactCookies(events) {
   }
   const sorted = [...events].sort((a,b) => String(b.timestamp||'').localeCompare(String(a.timestamp||'')));
   pane.innerHTML = `<table class="c4-atable">
-    <thead><tr><th></th><th>Last Accessed</th><th>Host</th><th>Cookie Name</th><th>Path</th><th>Secure</th><th>HttpOnly</th><th>Score</th></tr></thead>
+    <thead><tr><th></th><th>Last Accessed</th><th>Source</th><th>Host</th><th>Cookie Name</th><th>Path</th><th>Secure</th><th>HttpOnly</th><th>Score</th></tr></thead>
     <tbody>${sorted.slice(0,200).map(e => {
       const d = e.detail || {};
+      const live = d.acquisition === 'live';
       return `<tr class="${e.risk_flag?'flagged':''}">
         <td style="width:14px"><span class="c4-risk-dot ${e.risk_flag?'yes':'no'}"></span></td>
         <td style="white-space:nowrap;color:var(--t3)">${fmtDateTime(e.timestamp)}</td>
+        <td style="color:var(--t3)" title="${live?'Cookies DB is locked by the running browser — jar acquired from the live session':'read from the Cookies database on disk'}">${live?'live session':'disk'}</td>
         <td style="color:var(--t1)">${escapeHtml(d.host||'—')}</td>
         <td style="color:${e.risk_flag?'var(--warn)':'var(--t0)'};font-weight:${e.risk_flag?'700':'400'}">${escapeHtml(d.name||'—')}</td>
         <td>${escapeHtml(d.path||'/')}</td>
@@ -4021,16 +4054,19 @@ function renderArtifactExtensions(events) {
     return;
   }
   pane.innerHTML = `<table class="c4-atable">
-    <thead><tr><th></th><th>Name</th><th>Version</th><th>ID</th><th>Risky Permissions</th><th>All Permissions</th><th>Score</th></tr></thead>
+    <thead><tr><th></th><th>Name</th><th>Version</th><th>ID</th><th>Install Source</th><th>Risky Permissions</th><th>All Permissions</th><th>Score</th></tr></thead>
     <tbody>${events.map(e => {
       const d = e.detail || {};
       const risky = (d.risky_perms||[]).join(', ') || '—';
       const all   = (d.permissions||[]).length;
+      const loc   = d.location || (e.source_file === 'Extensions/' ? 'unpacked folder' : '—');
+      const sideloaded = String(loc).startsWith('unpacked');
       return `<tr class="${e.risk_flag?'flagged':''}">
         <td style="width:14px"><span class="c4-risk-dot ${e.risk_flag?'yes':'no'}"></span></td>
         <td style="color:${e.risk_flag?'var(--warn)':'var(--t1)'};font-weight:600">${escapeHtml(d.name||'Unknown')}</td>
         <td>${escapeHtml(d.version||'—')}</td>
         <td style="font-family:monospace;font-size:10px;color:var(--t3)">${escapeHtml(d.id||'—')}</td>
+        <td style="color:${sideloaded?'var(--danger)':'var(--t3)'}" title="recovered from ${escapeHtml(e.source_file||'')}">${escapeHtml(loc)}</td>
         <td style="color:${e.risk_flag?'var(--danger)':'var(--t3)'}" title="${escapeHtml(risky)}">${escapeHtml(risky)}</td>
         <td style="color:var(--t3)">${all} permission${all!==1?'s':''}</td>
         <td style="color:${e.anomaly_score>0?'var(--warn)':'var(--t3)'}">${e.anomaly_score||0}</td>

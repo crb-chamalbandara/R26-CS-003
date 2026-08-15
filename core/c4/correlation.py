@@ -37,6 +37,8 @@ def _event_domain(event):
         return _domain(detail.get("source_url", ""))
     if atype == "localstorage":
         return detail.get("host", "") or _domain(detail.get("origin", ""))
+    if atype == "session":
+        return detail.get("host", "") or _domain(detail.get("url", ""))
     return ""
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -67,18 +69,12 @@ def run_cooccurrence(events):
         cluster = [e for e in candidates
                    if _ts(e["timestamp"]) and t0 <= _ts(e["timestamp"]) <= t1]
 
-        # Group by domain
+        # Group by domain. _event_domain covers every artifact type that carries
+        # one — including localStorage and restored session tabs, which are just
+        # as much "this domain touched the machine" evidence as a cookie is.
         domain_map = defaultdict(lambda: defaultdict(list))
         for e in cluster:
-            dom = ""
-            if e["artifact_type"] == "history":
-                dom = _domain(e["detail"].get("url",""))
-            elif e["artifact_type"] == "cookie":
-                dom = e["detail"].get("host","").lstrip(".").lower()
-            elif e["artifact_type"] == "credential":
-                dom = _domain(e["detail"].get("origin",""))
-            elif e["artifact_type"] == "download":
-                dom = _domain(e["detail"].get("source_url",""))
+            dom = _event_domain(e)
             if dom:
                 domain_map[dom][e["artifact_type"]].append(e)
 
@@ -116,7 +112,8 @@ def run_cooccurrence(events):
 # Normal: visit site → site sets cookie.
 # Orphan: cookie exists for domain NEVER visited → suspicious injection.
 # ═══════════════════════════════════════════════════════════════════════════
-ORPHAN_SCORES = {"cookie":40, "credential":60, "download":70, "extension":50, "localstorage":45}
+ORPHAN_SCORES = {"cookie":40, "credential":60, "download":70, "extension":50,
+                 "localstorage":45, "session":55}
 
 def run_orphan_detection(events):
     """
@@ -135,19 +132,8 @@ def run_orphan_detection(events):
         atype = e["artifact_type"]
         if atype not in ORPHAN_SCORES: continue
 
-        # Extract domain for this event
-        if atype == "cookie":
-            dom = e["detail"].get("host","").lstrip(".").lower()
-        elif atype == "credential":
-            dom = _domain(e["detail"].get("origin",""))
-        elif atype == "download":
-            dom = _domain(e["detail"].get("source_url",""))
-        elif atype == "localstorage":
-            dom = e["detail"].get("host","") or _domain(e["detail"].get("origin",""))
-        elif atype == "extension":
-            dom = ""
-        else:
-            continue
+        # Extract domain for this event (extensions have none, so they never orphan)
+        dom = _event_domain(e)
 
         if not dom: continue
 
@@ -177,7 +163,8 @@ def run_orphan_detection(events):
 # Flag events that happen at hours when this user is NEVER normally active.
 # Personalised per user — not a generic "2am is suspicious" threshold.
 # ═══════════════════════════════════════════════════════════════════════════
-TEMPORAL_SCORES = {"credential":70, "download":50, "cookie":40, "history":30, "extension":35}
+TEMPORAL_SCORES = {"credential":70, "download":50, "cookie":40, "history":30,
+                   "extension":35, "session":45, "localstorage":30}
 
 def run_temporal_anomaly(events):
     """
