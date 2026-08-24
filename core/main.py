@@ -660,6 +660,28 @@ async def serve_test_page(name: str):
     return HTMLResponse(html)
 
 
+# The official EICAR anti-malware test string — a 68-byte ASCII signature every
+# AV engine on earth recognizes as "found: EICAR-Test-File". It contains no
+# executable logic and is completely harmless; it exists specifically so
+# security tools can be tested without using real malware. See eicar.org.
+# Served locally (rather than fetched from eicar.org's own secure.eicar.org
+# host) because that host's payload endpoint resets the connection from this
+# environment's network path before the response completes — likely network-
+# level content inspection intercepting the known signature in transit. The
+# bytes here are byte-for-byte identical to the official file either way.
+EICAR_TEST_STRING = rb'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
+EICAR_SHA256 = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
+
+
+@app.get("/dev/test-file/eicar")
+async def serve_eicar_testfile():
+    return Response(
+        EICAR_TEST_STRING,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="eicar.com"'},
+    )
+
+
 # ── Inline test cases ─────────────────────────────────────────────────────────
 
 async def _tc_c1_benign_manifest():
@@ -853,27 +875,221 @@ def _c4_live_tmp():
     return tmp
 
 
-async def _tc_c4_live_history():
-    """Browsing history off the profile the live browser is writing to."""
-    from .c4.extractor import collect_manifest, extract_history
-    live_url = "https://example.com/"
+async def _ensure_browser_running():
+    """Auto-launch the shared Playwright browser if it isn't already up.
+
+    Waits out an in-progress startup rather than racing it (server boot already
+    kicks one off via the lifespan hook), and only calls start() itself if
+    nothing is happening.
+    """
+    global _session_starting
     if pw_session.is_running:
+        return
+    if _session_starting:
+        for _ in range(40):
+            await asyncio.sleep(0.5)
+            if pw_session.is_running:
+                return
+    if not pw_session.is_running:
+        _session_starting = True
         try:
-            await pw_session.navigate(live_url)
+            await pw_session.start()
+        finally:
+            _session_starting = False
+
+
+# 15 real, legitimate, long-lived domains — a Sri Lankan-weighted set (government,
+# education, news, banking) plus a handful of well-known international sites, so
+# the resulting History file reads like genuine local + general browsing rather
+# than a scripted probe of one or two sites.
+_C4_LIVE_TOUR = [
+    # Sri Lanka — government / official
+    "https://www.gov.lk/", "https://www.cbsl.gov.lk/", "https://www.police.lk/",
+    "https://www.customs.gov.lk/",
+    # Sri Lanka — education
+    "https://www.sliit.lk/", "https://www.uom.lk/", "https://www.pdn.ac.lk/",
+    # Sri Lanka — news
+    "https://www.adaderana.lk/", "https://www.newsfirst.lk/",
+    # Sri Lanka — banking
+    "https://www.combank.lk/",
+    # other legitimate sites — dev/tech, reference, news, security research
+    "https://github.com/", "https://en.wikipedia.org/wiki/Phishing",
+    "https://www.python.org/", "https://www.bbc.com/news", "https://www.eicar.org/",
+]
+
+
+async def _tc_c4_live_history():
+    """Browsing history off the profile the live browser is writing to.
+
+    Auto-launches the Playwright browser if it isn't already running, then drives
+    it through 15 real, legitimate sites (Sri Lankan government/education/news/
+    banking plus a few international ones) so there is genuine, fresh, multi-domain
+    history on disk to extract — not a handful of stale visits. The panel shows
+    the browser window actually navigating, then those same domains coming back
+    out of the real SQLite History file.
+    """
+    from urllib.parse import urlparse
+    from .c4.extractor import collect_manifest, extract_history
+
+    await _ensure_browser_running()
+
+    visited = []
+    for site in _C4_LIVE_TOUR:
+        try:
+            await pw_session.navigate(site, timeout=7_000)
+            visited.append(site)
+            await asyncio.sleep(0.3)
         except Exception:
             pass
+    assert visited, "Could not drive the live browser to any site — session failed to start or navigate"
 
     profile = _c4_live_profile()
     loop = asyncio.get_event_loop()
-    events, warning = await loop.run_in_executor(None, extract_history, profile, _c4_live_tmp())
+    visited_domains = {urlparse(s).netloc for s in visited}
+
+    # Chrome's History backend batches its SQLite commit (~10s interval), so the
+    # freshly-navigated visits may not be on disk the instant we copy the file.
+    # Poll instead of guessing a fixed wait.
+    events, warning, confirmed = [], None, []
+    for _ in range(13):
+        events, warning = await loop.run_in_executor(None, extract_history, profile, _c4_live_tmp())
+        found_domains = {urlparse(e["detail"].get("url", "")).netloc for e in events}
+        confirmed = sorted(visited_domains & found_domains)
+        if len(confirmed) >= min(8, len(visited)):
+            break
+        await asyncio.sleep(1)
     manifest = await loop.run_in_executor(None, collect_manifest, profile)
     assert events, f"No history read from the live profile — {warning or 'profile is empty'}"
+    assert confirmed, "The sites just navigated to haven't hit the History file yet — Chrome batches its commits"
 
     newest = events[0].get("timestamp", "")[:19].replace("T", " ")
     return {
         "detail": f"{len(events)} real visits read from the running browser's profile · "
+                  f"drove the live browser to {len(visited)}/{len(_C4_LIVE_TOUR)} real sites, "
+                  f"{len(confirmed)} confirmed back in history (e.g. {', '.join(confirmed[:6])}"
+                  f"{', …' if len(confirmed) > 6 else ''}) · "
                   f"{len(manifest)} evidence file(s) hashed · newest visit {newest}",
-        "browser_url": live_url,
+        "browser_url": visited[-1],
+    }
+
+
+async def _tc_c4_live_download():
+    """A real file, downloaded through the live browser, picked up by the same
+    production downloads extractor a seized-profile scan would use — genuine
+    bytes on disk, hashed straight off the file, not asserted."""
+    from .c4.extractor import extract_downloads, extract_history
+
+    download_url = "https://www.irs.gov/pub/irs-pdf/f1040.pdf"
+
+    await _ensure_browser_running()
+
+    info = await pw_session.download_file(download_url)
+    assert info.get("path"), "Browser did not report a completed download"
+    assert os.path.exists(info["path"]), f"Downloaded file missing on disk: {info['path']}"
+
+    profile = _c4_live_profile()
+    loop = asyncio.get_event_loop()
+
+    # extract_downloads deliberately reuses the History_c4 copy extract_history
+    # just made (production's run_extraction calls history before downloads, to
+    # avoid copying the live-locked file twice) — so refresh that copy first on
+    # each poll, same ~10s Chrome commit-batching wait as the history test.
+    events, warning, match = [], None, None
+    for _ in range(13):
+        await loop.run_in_executor(None, extract_history, profile, _c4_live_tmp())
+        events, warning = await loop.run_in_executor(None, extract_downloads, profile, _c4_live_tmp())
+        match = next((e for e in events if e["detail"].get("target_path") == info["path"]), None)
+        if match:
+            break
+        await asyncio.sleep(1)
+    assert match, (f"Download not yet recorded in History.db's downloads table — "
+                    f"{warning or info['path']}")
+
+    real_hash = match["detail"].get("sha256", "")
+    assert real_hash and real_hash != "file not on disk", "Downloaded file wasn't hashed off disk"
+
+    size = match["detail"].get("size_bytes", 0)
+    return {
+        "detail": f"Real file downloaded via the live browser: {info['suggested_filename']} "
+                  f"({size:,} bytes) from {download_url} · sha256={real_hash[:24]}… "
+                  f"hashed straight off the file on disk, read back through History.db's "
+                  f"downloads table",
+        "browser_url": download_url,
+    }
+
+
+async def _tc_c4_live_malware_download():
+    """The EICAR anti-malware test file, downloaded through the live browser, then
+    run through C4's OWN rule engine — proves the component's dangerous-download
+    detectors fire on a real, live download, not a hand-fed event dict. R02b
+    (Chrome's own Safe Browsing content check) is the one expected to reliably
+    fire here; R02 (extension check) only fires if the on-disk filename happens
+    to survive Playwright's download automation, which usually renames it to an
+    opaque ID with no extension — see the comment below the poll loop. Also
+    reports whether Windows Defender quarantined the file after it landed.
+    """
+    from .c4.extractor import extract_downloads, extract_history, sha256 as file_sha256
+    from .c4.rules import apply_single_artifact_rules
+
+    download_url = "http://127.0.0.1:8765/dev/test-file/eicar"
+
+    await _ensure_browser_running()
+
+    info = await pw_session.download_file(download_url)
+    assert info.get("path"), (
+        "Chrome never reported a completed download — Windows Defender or Chrome's own "
+        "Safe Browsing likely blocked/interrupted the EICAR test file before it finished "
+        "writing to disk. That's itself a real detection outcome, just one this specific "
+        "check can't inspect further (there's no target_path to look up in History.db). "
+        "Check the Downloads folder and Windows Security's Protection History.")
+
+    # Windows Defender's real-time scanner may quarantine/delete the file the
+    # instant it lands — that's a genuine detection event in its own right, not
+    # a test failure, so check for it rather than assuming the file survives.
+    on_disk = os.path.exists(info["path"])
+    file_hash = file_sha256(info["path"]) if on_disk else ""
+
+    profile = _c4_live_profile()
+    loop = asyncio.get_event_loop()
+    events, warning, match = [], None, None
+    for _ in range(13):
+        await loop.run_in_executor(None, extract_history, profile, _c4_live_tmp())
+        events, warning = await loop.run_in_executor(None, extract_downloads, profile, _c4_live_tmp())
+        match = next((e for e in events if e["detail"].get("target_path") == info["path"]), None)
+        if match:
+            break
+        await asyncio.sleep(1)
+    assert match, (f"Download not yet recorded in History.db's downloads table — "
+                    f"{warning or info['path']}")
+
+    apply_single_artifact_rules([match])
+    fired = {f["rule"] for f in match.get("rule_flags", [])}
+    # R02 (extension) can't see ".com" here: Playwright saves automated downloads
+    # in a persistent context under an opaque internal ID with no extension at
+    # all, so that's genuinely what lands in Chrome's own History.db — a quirk of
+    # automating the download, not of a real user's browser. R02b doesn't care
+    # about the filename: it's Chrome's own Safe Browsing engine recognizing the
+    # actual EICAR content signature, so either one firing is real detection.
+    assert fired & {"R02", "R02b"}, (
+        f"C4's own rule engine did not flag this download as dangerous at all — "
+        f"rule_flags={match.get('rule_flags')}")
+
+    if on_disk:
+        authentic = " (byte-identical to the public EICAR signature)" if file_hash == EICAR_SHA256 else ""
+        disk_note = f"file survived on disk, sha256={file_hash[:24]}…{authentic}"
+    else:
+        disk_note = "Windows Defender removed the file the instant Chrome wrote it — real-time quarantine"
+    fired_notes = []
+    if "R02b" in fired:
+        fired_notes.append("R02b (Chrome's own Safe Browsing caught the malware signature live)")
+    if "R02" in fired:
+        fired_notes.append("R02 (dangerous file extension)")
+
+    return {
+        "detail": f"Downloaded the official EICAR anti-malware test file through the live "
+                  f"browser · C4's own rule engine flagged it live: {', '.join(fired_notes)} · "
+                  f"{disk_note}",
+        "browser_url": download_url,
     }
 
 
@@ -1235,7 +1451,9 @@ _ALL_TEST_CASES = [
     {"id":"c3_human_iat", "component":"c3","label":"Human browsing: IAT-CV > 0.10 (irregular)","fn":_tc_c3_human_iat},
     {"id":"c3_fusion_beacon","component":"c3","label":"Risk fusion: BEACON verdict at high signals","fn":_tc_c3_fusion_beacon},
     {"id":"c3_fusion_safe","component":"c3","label":"Risk fusion: SAFE verdict at zero signals","fn":_tc_c3_fusion_safe},
-    {"id":"c4_live_hist", "component":"c4","label":"[Browser] Live profile: browsing history off the running browser","fn":_tc_c4_live_history,"browser":True},
+    {"id":"c4_live_hist", "component":"c4","label":"[Browser] Auto-launches browser, tours 15 real sites (incl. Sri Lanka), reads history back","fn":_tc_c4_live_history,"browser":True},
+    {"id":"c4_live_dl",   "component":"c4","label":"[Browser] Real file download → sha256 hashed off disk","fn":_tc_c4_live_download,"browser":True},
+    {"id":"c4_live_mal",  "component":"c4","label":"[Browser] EICAR test file downloaded live → C4's dangerous-download rule fires for real","fn":_tc_c4_live_malware_download,"browser":True},
     {"id":"c4_live_ck",   "component":"c4","label":"Live profile: cookies acquired from the session (DB is locked)","fn":_tc_c4_live_cookies},
     {"id":"c4_live_login","component":"c4","label":"Live profile: Login Data store + DPAPI master key recovery","fn":_tc_c4_live_logins},
     {"id":"c4_live_ext",  "component":"c4","label":"Live profile: extensions from Secure Preferences","fn":_tc_c4_live_extensions},

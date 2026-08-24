@@ -161,7 +161,7 @@ def extract_downloads(profile, tmp):
     if not os.path.exists(db):
         db = safe_copy(find_file(profile,"History"), tmp, "History_c4")
     if not db: return [], "History locked"
-    SUSP = {".exe",".bat",".cmd",".ps1",".vbs",".scr",".msi",".dll",".hta",".pif",".lnk"}
+    SUSP = {".exe",".bat",".cmd",".ps1",".vbs",".scr",".msi",".dll",".hta",".pif",".lnk",".com"}
     events = []
     for r in query(db, "SELECT target_path,tab_url,total_bytes,start_time,danger_type FROM downloads ORDER BY start_time DESC LIMIT 500"):
         ts = chrome_time(r["start_time"])

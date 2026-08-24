@@ -597,6 +597,7 @@ button{font-family:inherit;cursor:pointer}
 /* ── C1 Extension Analyzer ─────────────────────────────── */
 /* ── C1 layout ─────────────────────────────────────────────── */
 #c1-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.tests-body{flex:1;overflow-y:auto;padding:16px 20px 0}
 .c1-card{background:var(--bg2);border:1px solid var(--b1);border-radius:var(--radius-lg);padding:13px 14px}
 .c1-lbl{font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
 .c1-ta{width:100%;background:var(--bg0);border:1px solid var(--b2);border-radius:var(--radius);
@@ -1612,7 +1613,7 @@ button{font-family:inherit;cursor:pointer}
     <span class="panel-sub">Executes each test case live — browser tests navigate the Playwright window</span>
   </div>
 
-  <div style="padding:16px 20px 0">
+  <div class="tests-body">
     <!-- Controls -->
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button class="c1-btn primary" id="tests-run-all" onclick="testsRunAll()" style="display:inline-flex;align-items:center;gap:6px">

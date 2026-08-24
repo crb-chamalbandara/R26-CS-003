@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 SUSPICIOUS_DOMAINS = {"onion","bit.ly","tinyurl.com","pastebin.com",
                       "ngrok.io","serveo.net","0.0.0.0","raw.githubusercontent.com"}
-SUSPICIOUS_EXT     = {".exe",".bat",".cmd",".ps1",".vbs",".scr",".msi",".dll",".hta"}
+SUSPICIOUS_EXT     = {".exe",".bat",".cmd",".ps1",".vbs",".scr",".msi",".dll",".hta",".com",".pif",".lnk"}
 SENSITIVE_COOKIES  = {"session","auth","token","jwt","jsessionid","phpsessid",
                       "sid","login","access_token","bearer","id_token","refresh_token"}
 
