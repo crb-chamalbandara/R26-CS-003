@@ -1117,6 +1117,96 @@ async def _tc_c4_live_cookies():
                       f"{', '.join(hosts[:4])}"}
 
 
+_C4_LIVE_LOGIN_ORIGIN = "https://c4-livetest.websentinel.internal"
+_C4_LIVE_LOGIN_USER = "c4-livetest@websentinel.internal"
+_C4_LIVE_LOGIN_PASSWORD = "C4LiveTest!2026"
+
+
+async def _tc_c4_live_login_plant():
+    """Plant one genuine saved login into the live profile's real Login Data
+    store — the live-evidence counterpart to the history/download tests above,
+    so the dashboard's Login Data tab has real, non-zero rows instead of the
+    profile simply never having saved a password.
+
+    Playwright exposes no API to drive Chrome's native "save password?" bubble
+    (it lives outside the page DOM), and the Login Data file is held open for
+    as long as the browser process is alive — even a bare read-only connect
+    attempt against it while the session is running fails immediately with
+    "database is locked". So this stops the shared session, writes one row
+    straight into the real `logins` table using the exact scheme Chrome itself
+    uses (AES-256-GCM under the master key already DPAPI-sealed inside this
+    profile's own Local State — recovered for real, not fabricated), then
+    restarts the browser so the rest of the Live Test Runner keeps working.
+    """
+    from .c4.crypto import load_master_key
+    from .c4.demo_case import to_chrome_time, _encrypt_password
+
+    profile = _c4_live_profile()
+    login_db = os.path.join(profile, "Login Data")
+    assert os.path.exists(login_db), "Live profile has no Login Data store yet"
+
+    loop = asyncio.get_event_loop()
+    master_key = await loop.run_in_executor(None, load_master_key, profile)
+    assert master_key, ("AES master key not recovered from this profile's Local State "
+                        "— cannot encrypt a real credential for it")
+
+    blob = _encrypt_password(_C4_LIVE_LOGIN_PASSWORD, master_key)
+    assert blob, "AES-GCM unavailable — cannot encrypt a real credential for this profile"
+
+    was_running = pw_session.is_running
+    if was_running:
+        await pw_session.stop()
+    try:
+        def _plant():
+            import sqlite3
+            now = to_chrome_time(datetime.now())
+            con = sqlite3.connect(login_db, timeout=15)
+            try:
+                # No-op if the real table is somehow already present (it always
+                # is on a Chromium-initialised profile); creates a minimal one
+                # otherwise so this stays robust on a brand-new profile.
+                con.execute("""CREATE TABLE IF NOT EXISTS logins (
+                    origin_url VARCHAR NOT NULL, action_url VARCHAR,
+                    username_element VARCHAR, username_value VARCHAR,
+                    password_element VARCHAR, password_value BLOB,
+                    submit_element VARCHAR, signon_realm VARCHAR NOT NULL,
+                    date_created INTEGER NOT NULL, blacklisted_by_user INTEGER NOT NULL,
+                    scheme INTEGER NOT NULL, password_type INTEGER, times_used INTEGER,
+                    display_name VARCHAR, icon_url VARCHAR, federation_url VARCHAR,
+                    skip_zero_click INTEGER, id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date_last_used INTEGER, date_password_modified INTEGER)""")
+                existing = con.execute(
+                    "SELECT COUNT(*) FROM logins WHERE origin_url=? AND username_value=?",
+                    (_C4_LIVE_LOGIN_ORIGIN, _C4_LIVE_LOGIN_USER)).fetchone()[0]
+                if existing:
+                    return False
+                con.execute(
+                    "INSERT INTO logins (origin_url,action_url,username_element,"
+                    "username_value,password_element,password_value,submit_element,"
+                    "signon_realm,date_created,blacklisted_by_user,scheme,password_type,"
+                    "times_used,display_name,icon_url,federation_url,skip_zero_click,"
+                    "date_last_used,date_password_modified) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,0,0,0,0,?,?,?,0,?,?)",
+                    (_C4_LIVE_LOGIN_ORIGIN, _C4_LIVE_LOGIN_ORIGIN + "/auth", "username",
+                     _C4_LIVE_LOGIN_USER, "password", blob, "",
+                     _C4_LIVE_LOGIN_ORIGIN + "/", now, "", "", "", now, now))
+                con.commit()
+                return True
+            finally:
+                con.close()
+        inserted = await loop.run_in_executor(None, _plant)
+    finally:
+        if was_running:
+            await _ensure_browser_running()
+
+    return {"detail": (
+        f"{'Planted' if inserted else 'Already present'}: real login for "
+        f"{_C4_LIVE_LOGIN_USER} @ {_C4_LIVE_LOGIN_ORIGIN} written into the live "
+        f"profile's actual Login Data SQLite table, AES-256-GCM encrypted under "
+        f"this profile's own {len(master_key)*8}-bit DPAPI-sealed master key "
+        f"· browser {'restarted after the write' if was_running else 'was not running'}")}
+
+
 async def _tc_c4_live_logins():
     """Login Data — read the real store and recover this profile's master key."""
     from .c4.crypto import load_master_key
@@ -1455,6 +1545,7 @@ _ALL_TEST_CASES = [
     {"id":"c4_live_dl",   "component":"c4","label":"[Browser] Real file download → sha256 hashed off disk","fn":_tc_c4_live_download,"browser":True},
     {"id":"c4_live_mal",  "component":"c4","label":"[Browser] EICAR test file downloaded live → C4's dangerous-download rule fires for real","fn":_tc_c4_live_malware_download,"browser":True},
     {"id":"c4_live_ck",   "component":"c4","label":"Live profile: cookies acquired from the session (DB is locked)","fn":_tc_c4_live_cookies},
+    {"id":"c4_live_login_plant","component":"c4","label":"[Browser] Plants a real saved login into the live profile's Login Data store","fn":_tc_c4_live_login_plant,"browser":True},
     {"id":"c4_live_login","component":"c4","label":"Live profile: Login Data store + DPAPI master key recovery","fn":_tc_c4_live_logins},
     {"id":"c4_live_ext",  "component":"c4","label":"Live profile: extensions from Secure Preferences","fn":_tc_c4_live_extensions},
     {"id":"c4_live_sess", "component":"c4","label":"Live profile: restorable tabs from the SNSS session store","fn":_tc_c4_live_sessions},
