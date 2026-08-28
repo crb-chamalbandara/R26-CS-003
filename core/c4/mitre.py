@@ -197,6 +197,26 @@ def map_domain_cluster(finding):
     }
     return {**finding, "mitre": mitre, "severity": mitre["severity"]}
 
+def map_credential_reuse(finding):
+    mitre = {
+        "technique_id":   "T1078",
+        "technique_name": "Valid Accounts",
+        "tactic":         "Persistence",
+        "severity":       _severity(finding.get("score", 0)),
+        "description":    "Same credential saved across multiple domains — reuse widens compromise blast radius"
+    }
+    return {**finding, "mitre": mitre, "severity": mitre["severity"]}
+
+def map_download_exfil(finding):
+    mitre = {
+        "technique_id":   "T1567",
+        "technique_name": "Exfiltration Over Web Service",
+        "tactic":         "Exfiltration",
+        "severity":       _severity(finding.get("score", 0)),
+        "description":    "File download followed by outbound navigation to another domain — possible tool transfer then exfiltration"
+    }
+    return {**finding, "mitre": mitre, "severity": mitre["severity"]}
+
 def map_rule_flags(events):
     """Map single-artifact rule flags to MITRE for each event."""
     for e in events:
@@ -216,10 +236,13 @@ def run_mitre_mapping(correlation_result, events):
     mapped_temp  = [map_temporal(f)     for f in correlation_result.get("temporal",[])]
     mapped_chain = [map_attack_chain(f) for f in correlation_result.get("attack_chains",[])]
     mapped_clust = [map_domain_cluster(f) for f in correlation_result.get("domain_clusters",[])]
+    mapped_reuse = [map_credential_reuse(f) for f in correlation_result.get("credential_reuse",[])]
+    mapped_exfil = [map_download_exfil(f)   for f in correlation_result.get("download_exfil",[])]
     events       = map_rule_flags(events)
 
     # Count by severity
-    all_findings = mapped_cooc + mapped_orph + mapped_temp + mapped_chain + mapped_clust
+    all_findings = (mapped_cooc + mapped_orph + mapped_temp + mapped_chain +
+                    mapped_clust + mapped_reuse + mapped_exfil)
     by_severity  = {"High":0,"Medium":0,"Low":0}
     for f in all_findings:
         sev = f.get("severity","Low")
@@ -231,6 +254,8 @@ def run_mitre_mapping(correlation_result, events):
         "temporal":     mapped_temp,
         "attack_chains": mapped_chain,
         "domain_clusters": mapped_clust,
+        "credential_reuse": mapped_reuse,
+        "download_exfil":   mapped_exfil,
         "by_severity":  by_severity,
         "all_findings": sorted(all_findings,
                                key=lambda x: SEVERITY_ORDER.get(x.get("severity","Low"),0),

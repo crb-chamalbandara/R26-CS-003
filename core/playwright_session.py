@@ -378,6 +378,9 @@ class PlaywrightSession:
         dl["default_directory"]   = _DOWNLOADS_DIR
         dl["prompt_for_download"] = False
         dl["directory_upgrade"]   = True
+        # Force PDFs to actually download instead of opening in Chrome's inline
+        # viewer, so a live "download" test produces a real downloads-table row.
+        prefs.setdefault("plugins", {})["always_open_pdf_externally"] = True
         try:
             with open(prefs_path, "w", encoding="utf-8") as f:
                 json.dump(prefs, f)
@@ -642,11 +645,33 @@ class PlaywrightSession:
         return tid
 
     # ── Navigation ─────────────────────────────────────────────────
-    async def navigate(self, url: str) -> str:
+    async def navigate(self, url: str, timeout: int = 30_000) -> str:
         if not self.is_running:
             raise RuntimeError("Playwright session not running")
-        await self._page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        await self._page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         return self._page.url
+
+    async def download_file(self, url: str, timeout: int = 20_000) -> dict:
+        """Trigger a genuine browser download and report where it landed on disk.
+
+        Navigating straight to a downloadable resource makes Chromium abort the
+        navigation itself (net::ERR_ABORTED) once it hands the response to the
+        download manager — that's expected, the download event still fires.
+        """
+        if not self.is_running:
+            raise RuntimeError("Playwright session not running")
+        async with self._page.expect_download(timeout=timeout) as dl_info:
+            try:
+                await self._page.goto(url, timeout=timeout)
+            except Exception:
+                pass
+        download = await dl_info.value
+        path = await download.path()
+        return {
+            "suggested_filename": download.suggested_filename,
+            "path": str(path) if path else "",
+            "url": download.url,
+        }
 
     async def set_page_html(self, html: str) -> None:
         if not self.is_running or self._page is None:

@@ -14,10 +14,12 @@ techniques?
 Browser profile directory
       |
       |-- History SQLite database
-      |-- Cookies SQLite database
-      |-- Login Data SQLite database
+      |-- Cookies SQLite database    (or the live jar — the file is exclusively locked)
+      |-- Login Data SQLite database (credentials decrypted via DPAPI + AES-GCM)
       |-- Downloads table
-      |-- Extensions manifests
+      |-- Extensions manifests + Secure Preferences extension registry
+      |-- Sessions SNSS store        (tabs the browser would restore)
+      |-- Local Storage LevelDB store
       |
       v
 Artifact Extractor
@@ -26,12 +28,14 @@ Artifact Extractor
 Single-Artifact Rule Engine
       |
       v
-Cross-Artifact Correlation
+Cross-Artifact Correlation (7 cross-table detectors)
       |-- Co-occurrence analysis
       |-- Orphan artifact detection
       |-- Temporal anomaly detection
       |-- Ordered attack-chain detection
       |-- Domain risk clustering
+      |-- Cross-domain credential reuse
+      |-- Download -> exfiltration correlation
       |
       v
 MITRE ATT&CK Mapper
@@ -44,9 +48,10 @@ JSON report, HTML forensic report, SIEM export
 
 | File             | Role                                                                                                                                               |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `extractor.py`   | Finds browser profiles, copies locked SQLite artifacts safely, extracts history, cookies, downloads, credentials, extensions, and artifact hashes. |
+| `extractor.py`   | Finds browser profiles, copies locked SQLite artifacts safely, extracts history, cookies, downloads, credentials, extensions, local storage, and artifact hashes. |
+| `crypto.py`      | Decrypts Chrome saved credentials: recovers the AES master key from `Local State` via Windows DPAPI (ctypes/crypt32), then AES-256-GCM decrypts each `v10`/`v11` password blob. On-disk reports store masked previews by default. |
 | `rules.py`       | Applies single-artifact rules for suspicious domains, dangerous downloads, sensitive cookies, credentials, risky extensions, and URL bursts.       |
-| `correlation.py` | Runs the cross-artifact correlation algorithms: co-occurrence, orphan detection, temporal anomaly detection, ordered attack-chain detection, and domain risk clustering. |
+| `correlation.py` | Runs the 7 cross-table correlation detectors: co-occurrence, orphan detection, temporal anomaly detection, ordered attack-chain detection, domain risk clustering, cross-domain credential reuse, and download→exfiltration correlation. |
 | `mitre.py`       | Maps rule and correlation findings to MITRE ATT&CK techniques with Low, Medium, and High severity.                                                 |
 | `reporter.py`    | Generates the detailed HTML forensic report, JSON report, and SIEM-compatible export.                                                              |
 | `service.py`     | WebSentinel adapter that runs the full pipeline and stores the latest result for FastAPI endpoints.                                                |
@@ -113,6 +118,8 @@ The generated files are:
 | Dangerous download                | `T1204.002` Malicious File                |
 | Orphan download                   | `T1105` Ingress Tool Transfer             |
 | Risky extension permissions       | `T1176` Browser Extensions                |
+| Cross-domain credential reuse     | `T1078` Valid Accounts                    |
+| Download then outbound navigation | `T1567` Exfiltration Over Web Service     |
 
 ## Test Result From Bundled Source Profile
 

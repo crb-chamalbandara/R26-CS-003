@@ -1,10 +1,12 @@
 fastapi
 uvicorn[standard]
+python-multipart
 pydantic
 playwright
 httpx
 Pillow
 imagehash
+cryptography
 pandas
 numpy
 scikit-learn
