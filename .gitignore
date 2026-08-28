@@ -37,6 +37,7 @@ output/
 
 # ── Dataset (large zip — store separately) ───────────────────
 Dataset/
+notebooks/
 
 # ── Playwright browser profile (user session data) ────────────
 .websentinel/
