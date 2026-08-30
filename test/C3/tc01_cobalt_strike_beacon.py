@@ -4,7 +4,7 @@ TC-01 — Cobalt Strike C2 Beacon via Compromised WordPress Site
 Simulates a 30-second GET beacon from a background tab while the user
 is idle.  Validates that C3 detects the beacon pattern via heuristic
 rules (regular timing + background traffic + same endpoint) and the
-Isolation Forest anomaly engine.
+RF classifier (Random Forest, HTTP-behaviour features).
 
 Run via:  run_testcase_01.bat   (from project root)
 """
@@ -34,7 +34,7 @@ RED = "\033[91m"; YEL = "\033[93m"; GRN = "\033[92m"
 CYN = "\033[96m"; BLU = "\033[94m"; WHT = "\033[97m"
 
 def c(t, *codes): return "".join(codes) + str(t) + _R
-def risk_col(s): return RED if s >= 0.6 else YEL if s >= 0.3 else GRN
+def risk_col(s): return RED if s >= 0.52 else YEL if s >= 0.3 else GRN
 def score_s(v):
     if v is None: return c(" n/a", _D)
     return c(f"{round(v*100):>3}%", risk_col(v))
@@ -131,7 +131,7 @@ def print_features(feats):
 
 def print_signals(sigs, detail_map=None):
     print(c("\n  Signal Breakdown:", _B, WHT))
-    for key, label in [("anomaly","Anomaly (IF)   "),("browser_anomaly","Browser (RF)   "),
+    for key, label in [("rf","RF Classifier  "),
                         ("heuristic","Heuristic      "),("reputation","Reputation (TI)")]:
         val = sigs.get(key)
         if val is not None:
@@ -156,7 +156,7 @@ def validate(host_row, all_hosts):
         results.append((name, ok, detail))
 
     check("Verdict is BEACON",              verdict == "BEACON",     f"got {verdict}")
-    check("Fusion score >= 0.60",           score >= 0.60,           f"got {score:.4f}")
+    check("Fusion score >= 0.52",           score >= 0.52,           f"got {score:.4f}")
     check("F02 IAT CV < 0.10",             float(feats.get("iat_cv",1)) < 0.10,
           f"got {feats.get('iat_cv','?')}")
     check("F10 User Active Ratio < 0.10",  float(feats.get("user_active_ratio",1)) < 0.10,
@@ -197,7 +197,7 @@ def main():
     print()
     print(f"  Beacon interval  : {c(str(interval)+'ms', WHT)}")
     print(f"  Beacon method    : {c('GET', WHT)}")
-    print(f"  Expected verdict : {c('BEACON', _B, RED)} (score >= 0.60)")
+    print(f"  Expected verdict : {c('BEACON', _B, RED)} (score >= 0.52)")
     print(f"  Expected rules   : {c('regular timing + background traffic + same endpoint', YEL)}")
     print()
 
@@ -207,9 +207,9 @@ def main():
     wait_backend()
     c3 = api_get("/c3/status")
     print(c("  Backend       : Online", GRN))
-    print(c(f"  C3 Model      : {c3.get('model_type','?')} "
-            f"({'loaded' if c3.get('model_loaded') else 'heuristic-only'})",
-            GRN if c3.get("model_loaded") else YEL))
+    print(c(f"  C3 Model      : {'random_forest' if c3.get('rf_model_loaded') else 'heuristic-only'} "
+            f"({'loaded' if c3.get('rf_model_loaded') else 'heuristic-only'})",
+            GRN if c3.get("rf_model_loaded") else YEL))
     print(c(f"  Analyzer      : {'running' if c3.get('analyzer_running') else 'stopped'}",
             GRN if c3.get("analyzer_running") else YEL))
     print()
@@ -251,7 +251,7 @@ def main():
     print(c("    3. After 10+ requests: IAT CV < 0.05 → Rule 1 fires (+0.30)", _D))
     print(c("    4. bg_tab_ratio > 0.80 → Rule 3 fires (+0.20)", _D))
     print(c("    5. path_entropy < 0.50 + timing → Rule 5 fires (+0.10)", _D))
-    print(c("    6. Heuristic total = 0.60 → BEACON verdict", _D))
+    print(c("    6. Heuristic total = 0.73 → BEACON verdict", _D))
     print()
     navigate(beacon_url)
     time.sleep(3)
@@ -262,7 +262,7 @@ def main():
     print(f"\n  Need {MIN_EVENTS}+ requests for BEACON — ETA ~{eta}s")
     print(c(f"  Polling /c3/hosts every {POLL_EVERY}s...\n", _D))
     print(c(f"  {'Time':>7}  {'Host':<22}  {'Reqs':>5}  {'Score':>6}  "
-            f"{'Verdict':<12}  {'Anomaly':>7}  {'Heuristic':>9}", _D))
+            f"{'Verdict':<12}  {'RF':>7}  {'Heuristic':>9}", _D))
     print(c(f"  {'---':>7}  {'-'*22}  {'---':>5}  {'---':>6}  "
             f"{'-'*12}  {'---':>7}  {'---':>9}", _D))
 
@@ -287,7 +287,7 @@ def main():
                     step(el, f"{c(BEACON_HOST,BLU):<30}  "
                              f"reqs={c(str(rq),WHT):<5}  {score_s(sc):>12}  "
                              f"{verdict_s(vd):<20}  "
-                             f"A={score_s(sg.get('anomaly'))}  "
+                             f"A={score_s(sg.get('rf'))}  "
                              f"H={score_s(sg.get('heuristic'))}")
                     if rq < MIN_EVENTS:
                         rem = MIN_EVENTS - rq

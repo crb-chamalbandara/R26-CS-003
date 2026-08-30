@@ -37,10 +37,13 @@ from .c2.layer4_form       import check_form
 from .c2.layer5_reputation import check_reputation
 
 # ── C3 — Browser Execution-Aware C2 Beacon Detector ───────────────────────────
-from .c3.context_tagger import c3_tagger
-from .c3.interceptor    import c3_interceptor
-from .c3.analyzer       import c3_analyzer
-from .c3.alert_store    import c3_alert_store
+from .c3.context_tagger  import c3_tagger
+from .c3.interceptor     import c3_interceptor
+from .c3.analyzer        import c3_analyzer
+from .c3.alert_store     import c3_alert_store
+from .c3.reputation_engine import set_virustotal_key as _c3_set_virustotal_key
+from .c3.reputation_engine import set_abuseipdb_key as _c3_set_abuseipdb_key
+from .c3.reputation_engine import set_otx_key as _c3_set_otx_key
 
 # ── C4 — Browser Artifact Forensic Correlation Engine ─────────────────────────
 from .c4 import (
@@ -144,7 +147,10 @@ _SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 _SETTINGS_DEFAULTS: dict = {
     "layers": {"l1": True, "l2": True, "l3": True, "l4": True, "l5": True},
     "whitelist": [],
-    "gsb_key": "",
+    "gsb_key": "",           # C2 Layer-5 phishing check (Google Safe Browsing)
+    "abuseipdb_key": "",     # C3 reputation engine
+    "otx_key": "",           # C3 reputation engine
+    "virustotal_key": "",    # C3 reputation engine (replaced GSB here 2026-08-29)
     "pw_home_url": "",
 }
 
@@ -166,6 +172,9 @@ def _save_settings(s: dict) -> None:
         pass
 
 settings: dict = _load_settings()
+_c3_set_virustotal_key(settings.get("virustotal_key", ""))
+_c3_set_abuseipdb_key(settings.get("abuseipdb_key", ""))
+_c3_set_otx_key(settings.get("otx_key", ""))
 
 # ── Request / response models ──────────────────────────────────────────────────
 class AnalyzeReq(BaseModel):
@@ -176,7 +185,10 @@ class AnalyzeReq(BaseModel):
 class SettingsReq(BaseModel):
     layers: dict
     whitelist: List[str] = []
-    gsb_key: str = ""
+    gsb_key: str = ""            # C2 Layer-5 phishing check
+    abuseipdb_key: str = ""      # C3 reputation engine
+    otx_key: str = ""            # C3 reputation engine
+    virustotal_key: str = ""     # C3 reputation engine
     pw_home_url: str = ""
 
 class ExtensionAnalyzeReq(BaseModel):
@@ -275,8 +287,13 @@ async def get_alerts(limit: int = 50):
 @app.post("/settings")
 async def save_settings(req: SettingsReq):
     settings.update({"layers": req.layers, "whitelist": req.whitelist,
-                      "gsb_key": req.gsb_key, "pw_home_url": req.pw_home_url})
+                      "gsb_key": req.gsb_key, "abuseipdb_key": req.abuseipdb_key,
+                      "otx_key": req.otx_key, "virustotal_key": req.virustotal_key,
+                      "pw_home_url": req.pw_home_url})
     _save_settings(settings)
+    _c3_set_virustotal_key(req.virustotal_key)
+    _c3_set_abuseipdb_key(req.abuseipdb_key)
+    _c3_set_otx_key(req.otx_key)
     return {"status": "saved"}
 
 
@@ -800,15 +817,15 @@ async def _tc_c3_human_iat():
 async def _tc_c3_fusion_beacon():
     from .c3.risk_fusion import C3RiskFusion
     fusion = C3RiskFusion()
-    result = fusion.fuse(anomaly=0.8, reputation=0.9, heuristic=0.7)
+    result = fusion.fuse(rf=0.8, reputation=0.9, heuristic=0.7)
     assert result["verdict"] == "BEACON", f"Expected BEACON, got {result['verdict']}"
     assert result["score"] >= 0.6
-    return {"detail": f"anomaly=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
+    return {"detail": f"rf=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
 
 async def _tc_c3_fusion_safe():
     from .c3.risk_fusion import C3RiskFusion
     fusion = C3RiskFusion()
-    result = fusion.fuse(anomaly=0.0, reputation=0.0, heuristic=0.0)
+    result = fusion.fuse(rf=0.0, reputation=0.0, heuristic=0.0)
     assert result["verdict"] == "SAFE", f"Expected SAFE, got {result['verdict']}"
     return {"detail": f"all signals=0 → verdict={result['verdict']} score={result['score']:.2f}"}
 
@@ -1029,6 +1046,32 @@ async def c3_unblock_host(host: str):
     return c3_analyzer.status()
 
 
+# NOTE ON ROUTE ORDER: this must stay registered *after* /unblock above.
+# {host:path} matches slashes, so "/c3/hosts/example.com/unblock" would also
+# satisfy this pattern with host="example.com/un".  Starlette matches routes in
+# registration order, so /unblock claims that URL first and this route only ever
+# sees a genuine .../block.  Do not move this above the unblock route.
+@app.post("/c3/hosts/{host:path}/block")
+async def c3_block_host(host: str):
+    """Manually block a host (the 'Block Host' quick action on a C3 alert card).
+
+    Calls the same interceptor path the opt-in auto-block uses, so a manual
+    block and an automatic block are the same operation.
+    """
+    await c3_interceptor.block_host(host, reason="manual block via dashboard")
+    return c3_analyzer.status()
+
+
+@app.post("/c3/auto-block/enable")
+async def c3_auto_block_enable():
+    return c3_analyzer.enable_auto_block()
+
+
+@app.post("/c3/auto-block/disable")
+async def c3_auto_block_disable():
+    return c3_analyzer.disable_auto_block()
+
+
 @app.post("/c3/collect/start")
 async def c3_collect_start(req: C3CollectReq):
     return c3_analyzer.start_collection(req.label)
@@ -1081,7 +1124,15 @@ async def c3_test_beacon_page(interval: int = 30000, method: str = "GET"):
     const log = document.getElementById('log');
     async function tick() {{
       try {{
-        const res = await fetch('/c3/test/beacon-target?ts=' + Date.now(), {{
+        // Fixed URL (no cache-busting query string) -- `cache: 'no-store'`
+        // already prevents caching. A query string that changes every
+        // request (e.g. `?ts=...`) would make this test beacon hit a
+        // different "path" on every check-in, which is NOT how real C2
+        // beacons behave (they poll one fixed URI) and defeats both the
+        // heuristic's "same endpoint" rule and the ML model's URL-diversity
+        // feature -- i.e. it would make this demo LESS representative of a
+        // real beacon, not more realistic.
+        const res = await fetch('/c3/test/beacon-target', {{
           method: '{method}',
           headers: {headers},
           body: {body},
@@ -1204,6 +1255,7 @@ async def forensic_report_siem():
 
 async def _pw_nav_handler(url: str, page=None) -> None:
     """C2 phishing analysis on every navigation. C1 runs on click, not navigation."""
+    c3_tagger.record_navigation(url)
     dom        = await pw_session.get_dom()
     screenshot = await pw_session.get_screenshot_b64()
     title      = await pw_session.get_title()

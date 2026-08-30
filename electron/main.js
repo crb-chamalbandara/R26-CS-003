@@ -8,7 +8,9 @@ app.disableHardwareAcceleration();
 let mainWindow;
 let backendProcess;
 
-const PYTHON = process.env.PYTHON_PATH || 'C:\\Python312\\python.exe';
+const VENV_PYTHON = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
+const PYTHON = process.env.PYTHON_PATH
+  || (require('fs').existsSync(VENV_PYTHON) ? VENV_PYTHON : 'python');
 const BACKEND_DIR = path.join(__dirname, '..');   // project root — uvicorn runs from here
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 const BACKEND_PORT = 8765;

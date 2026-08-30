@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+python-multipart
 pydantic
 playwright
 httpx
@@ -9,3 +10,5 @@ pandas
 numpy
 scikit-learn
 xgboost
+tldextract
+imbalanced-learn

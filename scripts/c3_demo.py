@@ -7,10 +7,10 @@ Pipeline:
   Browser (Playwright/Chromium)
     -> CDP network interception (C3 interceptor)
     -> Context tagging (idle time, background tab, user activity)
-    -> Feature extraction (14 features: IAT stats, rate, browser context)
-    -> Isolation Forest scoring (5 timing features)
-    -> Heuristic scoring (4 rules)
-    -> Risk fusion (adaptive weights)
+    -> Feature extraction (16 features: IAT stats, rate, browser context)
+    -> RF classifier scoring (7 network-flow features, CTU-13 C2-trained)
+    -> Heuristic scoring (9 rules)
+    -> Risk fusion (fixed weight table)
     -> BEACON verdict + alert storage
 
 Usage (called by test_c3_beacon.bat):
@@ -32,11 +32,12 @@ from urllib import error, request as urlrequest
 # ── Configuration ──────────────────────────────────────────────────────────────
 API              = "http://127.0.0.1:8001"
 BEACON_TARGET    = "127.0.0.1"    # host the beacon page fires to (same server)
-DEFAULT_INTERVAL = 5000           # ms between beacon pulses
+DEFAULT_INTERVAL = 3000           # ms between beacon pulses (3s for reliable demo)
 BASELINE_URL     = "https://en.wikipedia.org/wiki/Main_Page"
 BASELINE_WAIT    = 25             # seconds to observe normal traffic
 POLL_EVERY       = 10             # seconds between /c3/hosts polls
 MIN_EVENTS       = 10             # must match analyzer allow_beacon threshold
+WARMUP_EVENTS    = 55             # need 55+ requests so all initial page-load entries exit the 50-slot window
 MAX_DEMO_WAIT    = 300            # hard stop after 5 minutes
 
 # ── ANSI colour helpers (Windows 10+ / Windows Terminal) ─────────────────────
@@ -122,7 +123,7 @@ def _step(elapsed: float, msg: str) -> None:
 def _col_headers() -> None:
     print(c(
         f"  {'Time':>7}  {'Host':<22}  {'Reqs':>5}  {'Score':>6}  {'Verdict':<12}"
-        f"  {'Anomaly':>7}  {'Heuristic':>9}  {'Reputation':>10}",
+        f"  {'RF':>7}  {'Heuristic':>9}  {'Reputation':>10}",
         _D
     ))
     print(c(
@@ -148,7 +149,7 @@ def _print_row(elapsed: float, host_row: dict | None) -> str:
         f"{c(BEACON_TARGET, BLU):<30}  "
         f"reqs={c(str(reqs), WHT):<8}  "
         f"{score_str(score):>12}  {verdict_str(verd):<20}  "
-        f"A={score_str(sigs.get('anomaly'))}  "
+        f"A={score_str(sigs.get('rf'))}  "
         f"H={score_str(sigs.get('heuristic'))}  "
         f"R={score_str(sigs.get('reputation'))}"
     )
@@ -214,7 +215,7 @@ def _print_alert_box(host_row: dict, alert: dict | None) -> None:
         print(f"  Time      : {c(ts[:19], _D)}")
     print()
     print(c("  Signal breakdown:", _B + WHT))
-    for sig, label in [("anomaly", "Anomaly (IF model)  "),
+    for sig, label in [("rf", "RF classifier       "),
                         ("heuristic", "Heuristic rules     "),
                         ("reputation", "Reputation (TI)     ")]:
         val = sigs.get(sig)
@@ -316,16 +317,16 @@ def main() -> None:
     _divider("=", color=CYN)
     print()
     print(f"  Beacon interval  : {c(str(interval_ms) + ' ms', WHT)}"
-          f"  (1 pulse every {interval_ms // 1000}s)")
+          f"  (1 pulse every {round(interval_ms / 1000, 1)}s)")
     print(f"  Beacon host      : {c(BEACON_TARGET, WHT)}")
     print(f"  BEACON threshold : {c(str(MIN_EVENTS) + '+ requests', WHT)}"
           f"  and  fused score >= 0.60")
     print()
     print(c("  Detection pipeline:", _D))
     print(c("    Browser -> CDP intercept -> Context tag -> Feature extract", _D))
-    print(c("    -> Isolation Forest (4 timing features)", _D))
-    print(c("    -> Heuristic rules (4 rules)", _D))
-    print(c("    -> Risk fusion (adaptive weights) -> Verdict", _D))
+    print(c("    -> RF classifier (7 network-flow features, CTU-13 C2-trained)", _D))
+    print(c("    -> Heuristic rules (9 rules)", _D))
+    print(c("    -> Risk fusion (fixed weight table) -> Verdict", _D))
     print()
 
     # ── Step 1: Backend connection ────────────────────────────────
@@ -335,8 +336,8 @@ def main() -> None:
     if health:
         print()
     c3_st = api_get("/c3/status")
-    ml  = c3_st.get("model_loaded", False)
-    mty = c3_st.get("model_type", "unknown")
+    ml  = c3_st.get("rf_model_loaded", False)
+    mty = "random_forest" if ml else "heuristic-only"
     print(c("  Backend  : Online", GREEN))
     print(c(f"  C3 model : {mty} ({'loaded' if ml else 'NOT loaded -- heuristic only'})",
             GREEN if ml else YELLOW))
@@ -398,18 +399,59 @@ def main() -> None:
     print(c("    1. CDP captures every POST to /c3/test/beacon-target", _D))
     print(c("    2. Context tagger records idle time + tab visibility per request", _D))
     print(c("    3. After 10+ requests: IAT CV < 0.05 fires 'regular timing'", _D))
-    print(c("    4. Isolation Forest sees timing regularity -> high anomaly score", _D))
+    print(c("    4. RF classifier scores HTTP behaviour -> elevated bot probability", _D))
     print(c("    5. Fused score crosses 0.60 -> BEACON verdict", _D))
     print()
     print(c(f"  Navigating Playwright browser to beacon page...", _D))
+    # Navigate to blank first so any lingering 127.0.0.1 state is cleared.
+    navigate_browser("about:blank")
+    time.sleep(2)
     navigate_browser(beacon_url)
-    # Let the page load and fire its first pulse
-    time.sleep(4)
+    # The beacon page fires one immediate tick() then setInterval(tick, interval).
+    # That first tick arrives ~50ms after the page-load GET, creating a single
+    # very-short IAT that inflates iat_cv until it is pushed out of the 50-slot
+    # rolling window.  We wait until iat_cv drops below 0.05 (clean beacon signal)
+    # before starting the scored display loop.
+    eta_s = WARMUP_EVENTS * interval_ms // 1000
+    print(c(f"  Warming up — waiting for clean beacon signal  (~{eta_s}s)...",
+            _D), end="", flush=True)
+    warmup_start = time.time()
+    while True:
+        time.sleep(3)
+        try:
+            hosts    = api_get("/c3/hosts")
+            host_row = find_host(hosts, BEACON_TARGET)
+            if host_row:
+                reqs    = int(host_row.get("request_count") or 0)
+                verdict = str(host_row.get("verdict") or "")
+                # If the analyzer already declared BEACON, skip straight to result
+                if verdict == "BEACON":
+                    print(c(f" signal clean — BEACON already firing!", GREEN))
+                    break
+                # Use live feature detail endpoint for accurate iat_cv
+                try:
+                    detail = api_get(f"/c3/hosts/{BEACON_TARGET}")
+                    feats  = detail.get("features") or {}
+                    iat_cv = float(feats.get("iat_cv") or 1.0)
+                except RuntimeError:
+                    feats  = host_row.get("features") or {}
+                    iat_cv = float(feats.get("iat_cv") or 1.0)
+                # Window is clean when requests fill the deque AND timing is regular
+                if reqs >= WARMUP_EVENTS and iat_cv < 0.05:
+                    print(c(f" ready ({reqs} reqs, iat_cv={iat_cv:.4f}).", GREEN))
+                    break
+            elapsed_w = int(time.time() - warmup_start)
+            if elapsed_w > MAX_DEMO_WAIT - 60:
+                reqs = int((host_row or {}).get("request_count") or 0)
+                print(c(f" proceeding ({reqs} reqs).", YELLOW))
+                break
+            print(c(".", _D), end="", flush=True)
+        except RuntimeError:
+            print(c(".", _D), end="", flush=True)
 
     print()
     print(c("  Monitoring C3 detection (polling every 10s)...", _D))
-    print(c(f"  BEACON verdict requires {MIN_EVENTS}+ requests -- "
-            f"ETA ~{(MIN_EVENTS * interval_ms) // 1000 + 20}s", _D))
+    print(c("  BEACON verdict fires when fused score >= 0.60 -- ETA ~10-20s", _D))
     print()
     _col_headers()
 
@@ -437,15 +479,22 @@ def main() -> None:
                     detected = True
                     break
 
-                # Show progress hint while accumulating
+                # Show progress hint while score is building
                 if host_row:
-                    reqs = int(host_row.get("request_count") or 0)
+                    score = float(host_row.get("score") or 0.0)
+                    reqs  = int(host_row.get("request_count") or 0)
                     if reqs < MIN_EVENTS:
                         remaining = MIN_EVENTS - reqs
                         eta_s = remaining * interval_ms // 1000 + 10
                         print(c(
                             f"    -> Need {remaining} more requests for BEACON verdict"
                             f"  (ETA ~{eta_s}s)",
+                            _D
+                        ))
+                    elif score < 0.60:
+                        gap = round((0.60 - score) * 100, 1)
+                        print(c(
+                            f"    -> Score {round(score*100)}% — need +{gap}% more to reach BEACON threshold",
                             _D
                         ))
             except RuntimeError as exc:

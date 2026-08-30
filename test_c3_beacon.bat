@@ -20,8 +20,8 @@ echo     2. Launch the Playwright browser session
 echo     3. Navigate to the built-in beacon test page
 echo     4. Show live C3 scores as the beacon is detected
 echo.
-echo   The beacon fires a POST request every 5 seconds.
-echo   BEACON verdict fires after 10+ requests (approx 60-90s).
+echo   The beacon fires a POST request every 3 seconds.
+echo   BEACON verdict fires after ~150s warmup + 10-20s detection = ~2.5-3 minutes total.
 echo.
 echo   Flags you can append:
 echo     --interval 3000    change beacon pulse interval (ms)
@@ -110,7 +110,7 @@ echo        Press Ctrl+C at any time to stop.
 echo.
 
 set PYTHONUTF8=1
-"%PYTHON%" -u "%DEMO_SCRIPT%" %*
+"%PYTHON%" -u "%DEMO_SCRIPT%" --no-baseline %*
 set "DEMO_EXIT=%ERRORLEVEL%"
 
 echo.

@@ -35,6 +35,16 @@ models/*.bin
 data/urls_labeled.csv
 output/
 
+# ── Generated CTU-13 training dataset ────────────────────────
+# c3_ctu13_dataset.csv is ~465 MB — over GitHub's 100 MB file limit, and
+# fully regenerable via: python scripts/build_ctu13_dataset.py
+# (deterministic, ~5 min, reads D:\CTU-13-Dataset).
+# label_mapping_report.csv is intentionally NOT ignored — it is small (93 KB)
+# and serves as the auditable label-mapping record for the research writeup.
+data/c3_ctu13_dataset.csv
+data/c3_ctu13_c2_dataset.csv
+data/_ctu13_build_stats.csv
+
 # ── Dataset (large zip — store separately) ───────────────────
 Dataset/
 
@@ -64,3 +74,13 @@ core/settings.json
 
 # ── Claude Code internal state ────────────────────────────────
 .claude/
+*.md
+C3_FULL_EXPLANATION.txt
+C3_Problems_And_Fixes.txt
+*.txt
+C3 - Train Score.png
+C3 - Train Score.png
+*.csv
+notebooks/IF_model_training.ipynb
+notebooks/RF_model_training.ipynb
+models/archive/c3_ctu13_rf_ip_botnet_label_OBSOLETE.pkl

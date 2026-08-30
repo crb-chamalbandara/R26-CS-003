@@ -45,7 +45,7 @@ RED = "\033[91m"; YEL = "\033[93m"; GRN = "\033[92m"
 CYN = "\033[96m"; BLU = "\033[94m"; WHT = "\033[97m"
 
 def c(t, *codes): return "".join(codes) + str(t) + _R
-def risk_col(s): return RED if s >= 0.6 else YEL if s >= 0.3 else GRN
+def risk_col(s): return RED if s >= 0.52 else YEL if s >= 0.3 else GRN
 def score_s(v):
     if v is None: return c(" n/a", _D)
     return c(f"{round(v*100):>3}%", risk_col(v))
@@ -142,7 +142,7 @@ def print_features(feats):
 
 def print_signals(sigs, detail_map=None):
     print(c("\n  Signal Breakdown:", _B, WHT))
-    for key, label in [("anomaly","Anomaly (IF)   "),("browser_anomaly","Browser (RF)   "),
+    for key, label in [("rf","RF Classifier  "),
                         ("heuristic","Heuristic      "),("reputation","Reputation (TI)")]:
         val = sigs.get(key)
         if val is not None:
@@ -208,7 +208,7 @@ def validate(host_row, all_hosts):
         results.append((name, ok, detail))
 
     check("Verdict is BEACON",              verdict == "BEACON",     f"got {verdict}")
-    check("Fusion score >= 0.60",           score >= 0.60,           f"got {score:.4f}")
+    check("Fusion score >= 0.52",           score >= 0.52,           f"got {score:.4f}")
     check("F10 User Active Ratio < 0.10 (beacon)",
           float(feats.get("user_active_ratio",1)) < 0.10,
           f"got {feats.get('user_active_ratio','?')}")
@@ -275,9 +275,9 @@ def main():
     wait_backend()
     c3 = api_get("/c3/status")
     print(c("  Backend       : Online", GRN))
-    print(c(f"  C3 Model      : {c3.get('model_type','?')} "
-            f"({'loaded' if c3.get('model_loaded') else 'heuristic-only'})",
-            GRN if c3.get("model_loaded") else YEL))
+    print(c(f"  C3 Model      : {'random_forest' if c3.get('rf_model_loaded') else 'heuristic-only'} "
+            f"({'loaded' if c3.get('rf_model_loaded') else 'heuristic-only'})",
+            GRN if c3.get("rf_model_loaded") else YEL))
     print(c(f"  Analyzer      : {'running' if c3.get('analyzer_running') else 'stopped'}",
             GRN if c3.get("analyzer_running") else YEL))
     print()
@@ -295,7 +295,7 @@ def main():
     print(c("    2. Context tagger: background tab, user idle IN THIS TAB", _D))
     print(c("    3. Key: user clicks in OTHER tabs do NOT reset beacon tab idle", _D))
     print(c("    4. Heuristic rules: regular timing + background + same endpoint", _D))
-    print(c("    5. Fusion score >= 0.60 → BEACON", _D))
+    print(c("    5. Fusion score >= 0.52 → BEACON", _D))
     print()
     navigate(beacon_url)
     time.sleep(3)
@@ -332,7 +332,7 @@ def main():
     print(f"\n  Need {MIN_EVENTS}+ requests for BEACON — ETA ~{eta}s remaining")
     print(c(f"  Polling /c3/hosts every {POLL_EVERY}s...\n", _D))
     print(c(f"  {'Time':>7}  {'Host':<22}  {'Reqs':>5}  {'Score':>6}  "
-            f"{'Verdict':<12}  {'Anomaly':>7}  {'Heuristic':>9}", _D))
+            f"{'Verdict':<12}  {'RF':>7}  {'Heuristic':>9}", _D))
     print(c(f"  {'---':>7}  {'-'*22}  {'---':>5}  {'---':>6}  "
             f"{'-'*12}  {'---':>7}  {'---':>9}", _D))
 
@@ -357,7 +357,7 @@ def main():
                     step(el, f"{c(BEACON_HOST,BLU):<30}  "
                              f"reqs={c(str(rq),WHT):<5}  {score_s(sc):>12}  "
                              f"{verdict_s(vd):<20}  "
-                             f"A={score_s(sg.get('anomaly'))}  "
+                             f"A={score_s(sg.get('rf'))}  "
                              f"H={score_s(sg.get('heuristic'))}")
                     if rq < MIN_EVENTS:
                         rem = MIN_EVENTS - rq
