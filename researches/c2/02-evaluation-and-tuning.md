@@ -84,3 +84,21 @@ URLs**, which is left as future work.
   may be stale/blank (DOM/URL/runtime/reputation remain accurate).
 - **CPU parallelism** is GIL-bound; a process pool could give true multi-core scaling under heavy
   multi-tab load.
+
+### Found while building realistic tests (session 2)
+
+- **The hand-tuned L1 heuristics were tuned to our own synthetic pages, not real attacker kits.**
+  The real mrd0x BitB templates scored only 0.35 (CSS-class styling, `url-bar`/`title-bar` ids, no
+  forms). Fixed additively with the R6 (fake window chrome + lock motif) / R7 (draggable fake
+  window) rules → kits score 0.95. Lesson: heuristics should be validated against public attack
+  tooling corpora, not only against self-authored fixtures.
+- **The retuned L1 ML model is brittle out-of-distribution.** In-distribution it is fine (legit
+  mean 0.119 on `html_features.csv`), but an all-zero feature vector scores 0.64 and a realistic
+  benign login page scores ML 1.00, while the real kits score 0.06. In production this is masked by
+  the verified-domain gate and L1's 0.15 weight, but per-layer scores shown in the UI can mislead.
+  Proper fix = retrain with realistic *legit* login pages (and real BitB kit HTML) in the corpus.
+  Mitigation for now: the fusion floor keys off the deterministic heuristic sub-score, not the ML
+  overlay.
+- **Weight caps hide decisive signals.** With L1 = 0.15, even a perfect BitB DOM detection
+  contributed ≤ 15 points — below SUSPICIOUS. The decisive-signal floor (heuristic ≥ 0.9 → PHISHING,
+  ≥ 0.7 → SUSPICIOUS) fixes this without re-weighting the general case.

