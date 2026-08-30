@@ -27,14 +27,21 @@ def get_default_profile_path() -> str:
 def run_forensic_analysis(
     profile_path: Optional[str] = None,
     save_outputs: bool = True,
+    live_cookies: Optional[list] = None,
 ) -> Dict[str, Any]:
-    """Run the full C4 browser artifact pipeline."""
+    """Run the full C4 browser artifact pipeline.
+
+    `live_cookies` is an optional jar read from the running browser; it is used
+    only when the Cookies database is locked, which is always the case while the
+    browser is open.
+    """
     global LAST_RESULT
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     tmp_dir = os.path.join(OUTPUT_DIR, "tmp")
 
-    raw = run_extraction(profile_path=profile_path or None, tmp_dir=tmp_dir)
+    raw = run_extraction(profile_path=profile_path or None, tmp_dir=tmp_dir,
+                         live_cookies=live_cookies)
     events = apply_single_artifact_rules(raw["events"])
     correlation = run_correlation(events)
     mitre_result = run_mitre_mapping(correlation, events)
@@ -105,6 +112,8 @@ def get_summary(result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "temporal": algorithm_summary.get("temporal_count", 0),
         "attack_chains": algorithm_summary.get("attack_chain_count", 0),
         "domain_clusters": algorithm_summary.get("domain_cluster_count", 0),
+        "credential_reuse": algorithm_summary.get("credential_reuse_count", 0),
+        "download_exfil": algorithm_summary.get("download_exfil_count", 0),
         "warnings": result.get("warnings", []),
         "output_paths": result.get("output_paths", {}),
     }

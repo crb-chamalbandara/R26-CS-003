@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--
+  Realistic LEGITIMATE OAuth consent page (authorize flow) — benign control.
+  Brand-free naming, same-origin form POST back to the authorize endpoint.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Authorize App - Acme ID</title>
+<style>
+  body { margin: 0; background: #fafafa; font-family: "Segoe UI", Arial, sans-serif; }
+  .wrap { max-width: 380px; margin: 10vh auto; background: #fff; border: 1px solid #e2e2e2;
+          border-radius: 10px; padding: 32px; }
+  .app { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .app .icon { width: 42px; height: 42px; border-radius: 8px; background: #3856a6;
+               color: #fff; display: flex; align-items: center; justify-content: center;
+               font-weight: 700; }
+  ul.scopes { margin: 14px 0; padding-left: 20px; font-size: 14px; color: #333; }
+  .row { display: flex; gap: 10px; margin-top: 22px; }
+  .row button { flex: 1; padding: 10px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .allow { background: #3856a6; color: #fff; border: 0; }
+  .deny  { background: #fff; border: 1px solid #bbb; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="app"><div class="icon">N</div>
+    <div><b>NotesApp</b><div style="font-size:12px;color:#666">by Example Labs</div></div>
+  </div>
+  <p style="font-size:14px">NotesApp is requesting permission to:</p>
+  <ul class="scopes">
+    <li>View your basic profile</li>
+    <li>Read your email address</li>
+  </ul>
+  <form action="/oauth/authorize" method="POST">
+    <input type="hidden" name="client_id" value="notesapp-123">
+    <input type="hidden" name="redirect_uri" value="https://notesapp.example.com/callback">
+    <input type="hidden" name="scope" value="profile email">
+    <div class="row">
+      <button class="deny" type="submit" name="decision" value="deny">Cancel</button>
+      <button class="allow" type="submit" name="decision" value="allow">Allow</button>
+    </div>
+  </form>
+  <p style="font-size:11px;color:#888;margin-top:18px">
+    You can revoke access at any time in your account settings.</p>
+</div>
+</body>
+</html>

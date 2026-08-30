@@ -1,0 +1,64 @@
+{
+  "n_samples": 600,
+  "n_phishing": 300,
+  "n_legit": 300,
+  "weights": {
+    "L1": 0.15,
+    "L2": 0.3,
+    "L3": 0.2,
+    "L4": 0.15,
+    "L5": 0.2
+  },
+  "per_layer": {
+    "L1": {
+      "auc": 0.9577,
+      "ap": 0.9595
+    },
+    "L2": {
+      "auc": 0.9075,
+      "ap": 0.9219
+    },
+    "L4": {
+      "auc": 0.5161,
+      "ap": 0.5303
+    }
+  },
+  "fused": {
+    "auc": 0.9693,
+    "operating_points": {
+      "suspicious": {
+        "threshold": 30,
+        "precision": 0.9758,
+        "recall": 0.6733,
+        "f1": 0.7968,
+        "confusion": [
+          [
+            295,
+            5
+          ],
+          [
+            98,
+            202
+          ]
+        ]
+      },
+      "phishing": {
+        "threshold": 60,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "confusion": [
+          [
+            300,
+            0
+          ],
+          [
+            300,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  "note": "static mode \u2014 L3/L5/L6 scored 0 (need live browser)"
+}

@@ -1,0 +1,32 @@
+{
+  "l1": {
+    "cv_f1": 0.8933,
+    "test_auc": 0.9637,
+    "f1_at_0.5": 0.905,
+    "best_threshold": 0.4328,
+    "f1_at_best_threshold": 0.9065,
+    "best_params": {
+      "colsample_bytree": 0.9425192044349383,
+      "learning_rate": 0.10529185536854381,
+      "max_depth": 7,
+      "min_child_weight": 2,
+      "n_estimators": 489,
+      "subsample": 0.7723076398078035
+    }
+  },
+  "l2": {
+    "cv_f1": 0.7749,
+    "test_auc": 0.9022,
+    "f1_at_0.5": 0.784,
+    "best_threshold": 0.4888,
+    "f1_at_best_threshold": 0.785,
+    "best_params": {
+      "colsample_bytree": 0.8628088249474745,
+      "learning_rate": 0.05945878299293354,
+      "max_depth": 7,
+      "min_child_weight": 1,
+      "n_estimators": 494,
+      "subsample": 0.9960660809801551
+    }
+  }
+}

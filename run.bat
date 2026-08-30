@@ -65,6 +65,7 @@ echo  [OK] Close the WebSentinel window to stop
 echo.
 
 cd electron
+set ELECTRON_RUN_AS_NODE=
 npx electron .
 
 if errorlevel 1 (

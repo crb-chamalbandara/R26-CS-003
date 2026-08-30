@@ -4,11 +4,12 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 
 // Prevent GPU process conflicts when Playwright launches its own Chromium window
-app.disableHardwareAcceleration();
+if (app) app.disableHardwareAcceleration();
 
 let mainWindow;
 let backendProcess;
 
+const PYTHON = process.env.PYTHON_PATH || 'python';
 const BACKEND_DIR = path.join(__dirname, '..');   // project root — uvicorn runs from here
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 const BACKEND_PORT = 8765;

