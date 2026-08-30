@@ -2518,6 +2518,54 @@ async def c3_test_beacon_page(interval: int = 30000, method: str = "GET"):
 </html>"""
 
 
+# The Detection Lab "Run Test" button used to just navigate the live browser to
+# the toy /c3/test/beacon-page above. It now runs the real scenario instead:
+# test_c3_real_world_beacon.bat deploys a genuine, publicly-reachable C2 mimicry
+# beacon over an ngrok tunnel, drives the already-running Playwright session to
+# it, and waits for C3's ML + heuristic engines to confirm BEACON (the batch
+# owns ngrok, the mimicry server, and its own cleanup). It runs in its own
+# console window so its live progress and final PASS/FAIL validation stay on
+# screen next to the dashboard.
+_C3_REALWORLD_BAT = os.path.join(_REPO_ROOT, "test_c3_real_world_beacon.bat")
+_c3_realworld_proc: Optional[subprocess.Popen] = None
+
+
+@app.post("/c3/test/real-world-beacon")
+async def c3_test_real_world_beacon():
+    global _c3_realworld_proc
+    if sys.platform != "win32":
+        raise HTTPException(
+            status_code=400,
+            detail="The real-world beacon test is Windows-only "
+                   "(test_c3_real_world_beacon.bat).",
+        )
+    if not os.path.isfile(_C3_REALWORLD_BAT):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Batch script not found: {_C3_REALWORLD_BAT}",
+        )
+    if _c3_realworld_proc is not None and _c3_realworld_proc.poll() is None:
+        return {"status": "already_running", "pid": _c3_realworld_proc.pid,
+                "detail": "A real-world beacon test is already running in its "
+                          "console window."}
+    try:
+        _c3_realworld_proc = subprocess.Popen(
+            ["cmd", "/c", _C3_REALWORLD_BAT],
+            cwd=_REPO_ROOT,
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500,
+                            detail=f"Could not launch the test: {exc}")
+    return {
+        "status": "launched",
+        "pid": _c3_realworld_proc.pid,
+        "detail": "Real-world C2 beacon test launched in a new console window. "
+                  "It deploys an ngrok-tunnelled mimicry beacon and drives the "
+                  "live browser to it -- watch the C3 dashboard for detection.",
+    }
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  C4 — Browser Artifact Forensic Correlation Engine
 # ══════════════════════════════════════════════════════════════════════════════

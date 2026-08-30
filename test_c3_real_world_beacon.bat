@@ -3,7 +3,12 @@ setlocal enabledelayedexpansion
 title C3 Live Demo -- Real-World C2 Beacon (ngrok)
 
 set "APP_ROOT=%~dp0"
+:: Prefer the project venv, but fall back to python on PATH -- run.bat /
+:: electron\main.js both resolve Python the same way, and neither creates a
+:: .venv, so requiring one here made this script unrunnable in the exact
+:: setup the dashboard's "Run Test" button launches it from.
 set "PYTHON=%APP_ROOT%.venv\Scripts\python.exe"
+if not exist "%PYTHON%" set "PYTHON=python"
 set "TEST_SCRIPT=%APP_ROOT%test\C3\tc03_real_world_c2_beacon.py"
 set "MIMIC_SERVER=%APP_ROOT%test\C3\tc03_mimicry_server.py"
 set "NGROK_URL_SCRIPT=%APP_ROOT%test\C3\tc03_get_ngrok_url.py"
@@ -45,11 +50,14 @@ echo   Watch the C3 dashboard on screen for live updates throughout.
 echo ================================================================
 echo.
 
-:: ── Validate venv ────────────────────────────────────────────────
-if not exist "%PYTHON%" (
-    echo [ERROR] Python venv not found at: %PYTHON%
-    echo         Create it:  python -m venv .venv
-    echo         Install:    .venv\Scripts\pip install -r requirements.txt
+:: ── Validate Python ─────────────────────────────────────────────
+"%PYTHON%" -c "import sys" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] No usable Python found.
+    echo         Looked for %APP_ROOT%.venv\Scripts\python.exe, then "python" on PATH.
+    echo         Install Python 3.10+ and add it to PATH, or create the venv:
+    echo           python -m venv .venv
+    echo           .venv\Scripts\pip install -r requirements.txt
     pause
     exit /b 1
 )

@@ -1,0 +1,11 @@
+# Windows batch/script files must check out with CRLF endings regardless of
+# the consumer's core.autocrlf setting. Without this, the blobs were stored
+# LF-only, so a ZIP download / an autocrlf=false clone got LF .bat files that
+# cmd.exe mis-parses (labels, goto, delayed-expansion blocks) -- i.e. the
+# script silently would not run.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Shell scripts stay LF everywhere.
+*.sh    text eol=lf

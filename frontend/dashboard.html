@@ -2474,7 +2474,7 @@ input,textarea,select{font-family:inherit}
         <div class="empty" id="c3-empty-requests">
           <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
           <div class="emsg">No requests captured yet &mdash; browsing activity will appear here</div>
-          <div class="ehint">Try the Beacon Simulation Test in <b>Detection Lab</b> to see this populate</div>
+          <div class="ehint">Run the Real-World C2 Beacon Test in <b>Detection Lab</b> to see this populate</div>
         </div>
       </div>
 
@@ -2483,7 +2483,7 @@ input,textarea,select{font-family:inherit}
         <div class="empty" id="c3-empty-alerts">
           <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
           <div class="emsg">No beacon alerts yet &mdash; C3 is monitoring all outbound requests</div>
-          <div class="ehint">Try the Beacon Simulation Test in <b>Detection Lab</b> to see this populate</div>
+          <div class="ehint">Run the Real-World C2 Beacon Test in <b>Detection Lab</b> to see this populate</div>
         </div>
       </div>
 
@@ -2585,15 +2585,15 @@ input,textarea,select{font-family:inherit}
           <div class="lab-card-hdr">
             <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"/></svg></span>
             <div>
-              <div class="lab-card-title">Beacon Simulation Test</div>
-              <div class="lab-card-sub">Fires a test POST beacon every 5 seconds</div>
+              <div class="lab-card-title">Real-World C2 Beacon Test</div>
+              <div class="lab-card-sub">Deploys an ngrok-tunnelled C2 mimicry beacon and drives the live browser to it</div>
             </div>
             <button type="button" class="lab-btn-test btn-cyber-primary" onclick="openC3BeaconTest()">
               &#9654; Run Test
             </button>
           </div>
 
-          <!-- Illustration of the test page's fixed 5s POST cadence, not a plot
+          <!-- Illustration of the beacon's jittered ~1.5s POST cadence, not a plot
                of captured traffic (see Host Analysis > Request Timing for that). -->
           <div class="lab-wave">
             <svg viewBox="0 0 480 56" preserveAspectRatio="none" aria-hidden="true">
@@ -2610,7 +2610,7 @@ input,textarea,select{font-family:inherit}
               <circle class="wave-beat" cx="450" cy="8" r="2.8" style="animation-delay:2.1s"></circle>
             </svg>
             <div class="lab-wave-cap">
-              <span>Simulated cadence &mdash; POST every <b>5 s</b></span>
+              <span>Real-world C2 beacon &mdash; jittered POST every <b>~1.5 s</b> via ngrok</span>
             </div>
           </div>
         </div>
@@ -3895,10 +3895,24 @@ function downloadC3Log() {
   showToast('Detection log downloaded (' + recent.length + ' alerts)');
 }
 
-function openC3BeaconTest() {
-  const beaconUrl = API + '/c3/test/beacon-page?interval=5000&method=POST';
-  navigatePw(beaconUrl);
-  showToast('Beacon test page loaded in the monitored browser session.');
+async function openC3BeaconTest() {
+  showToast('Launching real-world C2 beacon test — a console window will open…');
+  try {
+    const res = await fetch(API + '/c3/test/real-world-beacon', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast('Could not start the test: ' + (data.detail || ('HTTP ' + res.status)), 7000);
+      return;
+    }
+    if (data.status === 'already_running') {
+      showToast('Real-world beacon test is already running (PID ' + data.pid + ').');
+    } else {
+      showToast('Real-world beacon test running in a new console window. '
+        + 'Watch the C3 dashboard for live detection.', 7000);
+    }
+  } catch (err) {
+    showToast('Could not reach the backend to start the test.', 7000);
+  }
 }
 
 function c3HostResult(host) {

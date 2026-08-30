@@ -158,9 +158,17 @@ class C3RFClassifierEngine:
         #   BEACON_THRESHOLD stays at 0.52 in every case (re-validated per
         #      swap — see C3_XGB_HTTP_Deployment_Results.md,
         #      C3_ML_Live_Score_Fix.md, and C3_ML_Feature_Correlation_Fix.md).
-        self._model_path = (
-            Path(__file__).resolve().parents[2] / "models" / "c3_xgb_classifier.pkl"
-        )
+        #   -> If the production slot below was never generated (models/*.pkl is
+        #      gitignored, so a fresh clone has none and the dataset to retrain
+        #      isn't in the repo), fall back to the archived cadence-invariant
+        #      model that DOES ship here. Same {model, feature_names, threshold}
+        #      format, same BEACON_THRESHOLD 0.52 -- so C3 gets a live ML signal
+        #      out of the box instead of silently dropping to heuristic-only
+        #      (which shows on the Detection Lab pipeline as "XGBoost: Offline").
+        _models_dir = Path(__file__).resolve().parents[2] / "models"
+        _primary = _models_dir / "c3_xgb_classifier.pkl"
+        _archived = _models_dir / "archive" / "c3_xgb_classifier_BURSTGATED_20260828.pkl"
+        self._model_path = _primary if _primary.exists() else _archived
         self.reload()
 
     def reload(self) -> bool:
