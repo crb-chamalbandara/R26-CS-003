@@ -1,16 +1,28 @@
-"""Train XGBoost model for C1 static analysis."""
+"""
+C1 — train_model.py  |  Original Training Script
+--------------------------------------------------
+Purpose : Train the XGBoost classifier on a cleaned dataset CSV, evaluate
+          it with 5-fold cross-validation and a holdout test set, then save
+          the trained model and metadata.
+Role    : Run ONCE (or whenever you want to retrain from a specific CSV).
+          For the full automated pipeline that also builds the dataset from
+          new CRX files, use retrain_with_new_data.py instead.
+
+Run from project root:
+    python core/c1/scripts/train_model.py --input core/c1/data/dataset_clean_v4.csv
+"""
 from __future__ import annotations
 
 import argparse
 import json
 import os
 
-import joblib
+import joblib           # for saving the trained model to disk as a .pkl file
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
-    classification_report,
-    confusion_matrix,
+    classification_report,   # full precision/recall/F1 breakdown per class
+    confusion_matrix,        # TN/FP/FN/TP counts
     f1_score,
     precision_score,
     recall_score,
@@ -20,17 +32,20 @@ from xgboost import XGBClassifier
 
 
 def _build_model(scale_weight: float) -> XGBClassifier:
+    """Create an XGBoost classifier with fixed hyperparameters.
+    scale_pos_weight corrects class imbalance by making malicious misclassifications
+    more costly than benign ones (weight = n_benign / n_malicious)."""
     return XGBClassifier(
-        n_estimators=300,
-        max_depth=4,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        min_child_weight=2,
-        scale_pos_weight=scale_weight,
-        random_state=42,
-        eval_metric="logloss",
-        verbosity=0,
+        n_estimators=300,         # 300 decision trees in the ensemble
+        max_depth=4,              # shallow trees prevent overfitting on small datasets
+        learning_rate=0.05,       # small step size — each tree contributes a little
+        subsample=0.8,            # each tree trains on 80% of rows (random sampling)
+        colsample_bytree=0.8,     # each tree uses 80% of features (reduces correlation between trees)
+        min_child_weight=2,       # a leaf must have at least 2 samples — prevents tiny overfit splits
+        scale_pos_weight=scale_weight,  # upweights malicious class to correct imbalance
+        random_state=42,          # fixed seed for reproducibility
+        eval_metric="logloss",    # log loss is appropriate for binary probability output
+        verbosity=0,              # suppress verbose XGBoost training output
     )
 
 
@@ -38,7 +53,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train C1 XGBoost model.")
     parser.add_argument(
         "--input",
-        default=os.path.join("core", "c1", "data", "dataset_clean_v4.csv"),
+        default=os.path.join("core", "c1", "data", "dataset_clean_v4.csv"),   # v4 = final dataset with 322 malicious
     )
     parser.add_argument(
         "--model-out",
@@ -51,12 +66,12 @@ def main() -> None:
     if args.label_col not in df.columns:
         raise ValueError(f"Label column '{args.label_col}' not found.")
 
-    X = df.drop(columns=[args.label_col])
-    y = df[args.label_col]
+    X = df.drop(columns=[args.label_col])   # feature matrix — all columns except label
+    y = df[args.label_col]                  # target vector — 0=benign, 1=malicious
 
-    benign_count = int((y == 0).sum())
+    benign_count    = int((y == 0).sum())
     malicious_count = int((y == 1).sum())
-    scale_weight = benign_count / max(malicious_count, 1)
+    scale_weight    = benign_count / max(malicious_count, 1)   # e.g., 937/322 = 2.91
 
     print("=" * 55)
     print("COMPONENT 1 — ML MODEL TRAINING")
@@ -122,16 +137,27 @@ def main() -> None:
     print(f"  False negatives (malicious -> benign)  : {cm[1][0]}")
     print(f"  True positives  (malicious -> malicious): {cm[1][1]}")
 
-    # ── Feature importance ───────────────────────────────────────
-    importances = pd.Series(model.feature_importances_, index=X.columns).sort_values(ascending=False)
+    # ── Final production model: retrain on 100% of the data ───────
+    # The 80/20 split above exists purely to produce an honest, unseen-data
+    # holdout metric. The model actually saved and shipped is trained on
+    # every available row — matching retrain_with_new_data.py's behaviour.
+    # (A model saved straight from the 80% split was mistakenly shipped
+    # once before; it's measurably weaker than the full-data fit and should
+    # never be what ends up in models/extension_detector_model.pkl.)
+    print("\n[2b] Retraining final model on 100% of the data for production...")
+    final_model = _build_model(scale_weight)
+    final_model.fit(X, y)
+
+    # ── Feature importance (from the final, full-data model) ──────
+    importances = pd.Series(final_model.feature_importances_, index=X.columns).sort_values(ascending=False)
     print("\n[3] Top 10 most important features:")
     for feat, imp in importances.head(10).items():
         print(f"  {feat:<30} {imp:.4f}")
 
     # ── Save artefacts ───────────────────────────────────────────
     os.makedirs(os.path.dirname(args.model_out), exist_ok=True)
-    joblib.dump(model, args.model_out)
-    print(f"\nModel saved: {args.model_out}")
+    joblib.dump(final_model, args.model_out)
+    print(f"\nModel saved: {args.model_out}  (trained on full {len(X)}-row dataset)")
 
     imp_path = os.path.join(os.path.dirname(args.model_out), "feature_importance.csv")
     importances.to_csv(imp_path, header=["importance"])

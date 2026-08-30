@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:playwright.dev)",
+      "WebFetch(domain:railsware.com)",
+      "PowerShell(Get-ChildItem \"d:\\\\R26-CS-003\\\\R26-CS-003\\\\core\\\\c1\\\\data\\\\GoogleChromeExtension\\\\malware\\\\malware\\\\VirusShare_235c290c5b058a8736a6e2a89afb7064\" -Recurse -Force | Select-Object -First 10 | ForEach-Object { $_.FullName })"
+    ]
+  }
+}

@@ -1,4 +1,15 @@
-"""Build malicious ID hash database from merged lookup CSV."""
+"""
+C1 — build_hash_db.py  |  Blocklist Builder
+--------------------------------------------
+Purpose : Read a CSV of extension IDs with labels and extract all IDs
+          labelled 'malicious' into malicious_ids.json.
+Role    : Run ONCE during dataset preparation. The output JSON is used
+          by analyzer.py as the first check before ML — any extension
+          whose ID is in this list is instantly flagged MALICIOUS.
+
+Run from project root:
+    python core/c1/scripts/build_hash_db.py
+"""
 from __future__ import annotations
 
 import argparse
@@ -8,10 +19,12 @@ import os
 
 
 def _normalize_header(name: str) -> str:
-    return name.lower().strip().lstrip("\ufeff").strip('"').strip("'")
+    """Clean a CSV column header — strip whitespace, BOM characters, and quotes."""
+    return name.lower().strip().lstrip("﻿").strip('"').strip("'")
 
 
 def main() -> None:
+    # Accept command-line arguments so the input/output paths can be customised
     parser = argparse.ArgumentParser(description="Build malicious_ids.json for C1.")
     parser.add_argument(
         "--input",
@@ -34,21 +47,25 @@ def main() -> None:
         reader = csv.DictReader(handle)
         if not reader.fieldnames:
             raise ValueError("CSV has no headers.")
-        headers = { _normalize_header(h): h for h in reader.fieldnames }
-        id_key = headers.get("extension_id")
-        label_key = headers.get("label")
+
+        # Normalise all column headers so we can find them case-insensitively
+        headers   = { _normalize_header(h): h for h in reader.fieldnames }
+        id_key    = headers.get("extension_id")     # column that holds the 32-char extension ID
+        label_key = headers.get("label")            # column that holds the malicious/benign label
         if not id_key or not label_key:
             raise ValueError("CSV must include extension_id and label columns.")
 
         malicious_ids = set()
         for row in reader:
-            ext_id = str(row.get(id_key, "")).strip().lower()
-            label = str(row.get(label_key, "")).strip().lower()
+            ext_id = str(row.get(id_key,    "")).strip().lower()
+            label  = str(row.get(label_key, "")).strip().lower()
             if not ext_id:
-                continue
+                continue    # skip rows with no ID
+            # Keep only confirmed malicious IDs (optionally include 'mixed' label too)
             if label == "malicious" or (args.include_mixed and label == "mixed"):
                 malicious_ids.add(ext_id)
 
+    # Write sorted list to JSON — sorted for reproducibility and easy visual inspection
     output = {"malicious_extension_ids": sorted(malicious_ids)}
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as handle:

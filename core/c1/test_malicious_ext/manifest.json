@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "WebSentinel Sandbox Test (NOT real malware)",
+  "version": "2.0.0",
+  "description": "Synthetic extension for WebSentinel C1 verification. Safe to run — it only ever sends dummy constants to httpbin.org and reads nothing real.",
+  "permissions": [
+    "webRequest",
+    "declarativeNetRequest",
+    "tabs",
+    "cookies",
+    "history",
+    "storage",
+    "scripting",
+    "management",
+    "nativeMessaging",
+    "clipboardRead",
+    "downloads",
+    "webNavigation"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["page_hook.js"],
+      "world": "MAIN",
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["*.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

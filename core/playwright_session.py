@@ -347,7 +347,6 @@ class PlaywrightSession:
         self._page_ids:   dict = {}             # page -> stable tab id (for the dashboard)
         self._page_seq:   int  = 0
 
-    # ── Public properties ──────────────────────────────────────────
     @property
     def is_running(self) -> bool:
         return self._running and self._ctx is not None
@@ -467,8 +466,26 @@ class PlaywrightSession:
         for page in self._ctx.pages:
             self._attach_nav_listener(page)
 
+        # Expand the viewport to fill the maximised window.
+        # Playwright 1.59 doesn't auto-size the viewport from the OS window,
+        # so we query the available screen area from JS and apply it.
+        await self._sync_viewport(self._page)
+
         self._running = True
         return True
+
+    async def _sync_viewport(self, page) -> None:
+        """Set viewport = available screen dimensions so content fills the window."""
+        try:
+            dims = await page.evaluate(
+                "() => ({width: window.screen.availWidth, height: window.screen.availHeight})"
+            )
+            if dims and dims.get("width") and dims.get("height"):
+                await page.set_viewport_size(
+                    {"width": dims["width"], "height": dims["height"]}
+                )
+        except Exception:
+            pass
 
     async def stop(self) -> None:
         self._running = False
@@ -485,7 +502,8 @@ class PlaywrightSession:
         self._ctx  = None
         self._page = None
         self._pw   = None
-
+        # Persistent profile (_PROFILE_DIR) is intentionally kept on stop —
+        # it stores browser history and extension data for C4 forensics.
 
     # ── Extension management (C1) ──────────────────────────────────
     def register_extension(self, ext_path: str) -> None:
@@ -498,24 +516,9 @@ class PlaywrightSession:
     async def load_extension(self, ext_path: str, restore_url: str = "") -> bool:
         abs_path = os.path.abspath(ext_path)
 
-        # Try CDP-based hot-load first — no restart needed.
-        # Requires --enable-unsafe-extension-debugging (set in start()).
-        if self.is_running and self._page:
-            try:
-                cdp = await self._ctx.new_cdp_session(self._page)
-                result = await cdp.send("Extensions.loadUnpacked", {"path": abs_path})
-                await cdp.detach()
-                ext_cdp_id = result.get("id", "")
-                if ext_cdp_id:
-                    if abs_path not in self._extensions:
-                        self._extensions.append(abs_path)
-                    print(f"[PW] Extension hot-loaded (no restart): id={ext_cdp_id}")
-                    return True
-                print("[PW] CDP loadUnpacked returned no id — falling back to restart")
-            except Exception as cdp_err:
-                print(f"[PW] CDP hot-load unavailable ({cdp_err}) — restarting session")
-
-        # Fallback: must restart — save current page URL to restore after.
+        # Chromium requires extensions to be declared at launch via --load-extension.
+        # CDP hot-loading (Extensions.loadUnpacked) is experimental and unreliable
+        # in Playwright's bundled Chromium — skip it and go straight to restart.
         if abs_path not in self._extensions:
             self._extensions.append(abs_path)
 
@@ -880,6 +883,7 @@ class PlaywrightSession:
     async def _on_new_page(self, page) -> None:
         self._page = page
         self._attach_nav_listener(page)
+        await self._sync_viewport(page)
 
     def _on_browser_close(self, _=None) -> None:
         self._running = False

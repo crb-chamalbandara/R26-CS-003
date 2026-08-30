@@ -23,7 +23,10 @@ from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────
 REPO_ROOT   = Path(__file__).resolve().parent.parent
-DATASET_ZIP = REPO_ROOT / "Dataset" / "n96ncsr5g4-1.zip"
+DATASET_ZIP = REPO_ROOT / "Dataset" / "n96ncsr5g4-1.zip"   # inside project root
+# Fallback: look one level up (Code/Dataset/) if not found locally
+if not DATASET_ZIP.exists():
+    DATASET_ZIP = REPO_ROOT.parent / "Dataset" / "n96ncsr5g4-1.zip"
 MODEL_OUT   = REPO_ROOT / "models" / "url_classifier.pkl"
 CSV_OUT     = REPO_ROOT / "data"   / "urls_labeled.csv"
 

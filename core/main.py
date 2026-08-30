@@ -22,7 +22,12 @@ from pydantic import BaseModel
 # ── C1 — Malicious Browser Extension Analyzer ─────────────────────────────────
 from .c1.analyzer  import analyze_extension as analyze_extension_c1
 from .c1.analyzer  import sandbox_extension as sandbox_extension_c1
+from .c1.analyzer  import (
+    blocklist_probe, blocklist_coverage, blocklist_incomplete_ids,
+    document_blocklist_entry, reload_blocklist,
+)
 from .c1.db        import save_result as c1_db_save, get_history as c1_db_history
+from .c1.enrich    import sha256_of, store_from_url
 from .c1.crx_utils import (
     extract_ext_id_from_url, is_webstore_url,
     fetch_crx_from_store, parse_crx_bytes, parse_crx_file,
@@ -198,6 +203,11 @@ _SETTINGS_DEFAULTS: dict = {
     "whitelist": [],
     "gsb_key": "",
     "pw_home_url": "",
+    # C1 dynamic sandbox containment. "auto" picks the strongest backend the
+    # machine can actually provide; naming one forces it (and reports a
+    # downgrade in the result if it turns out to be unavailable).
+    "c1_isolation_backend": "auto",       # auto | windows_sandbox | inprocess
+    "c1_sandbox_network":   "unrestricted",  # unrestricted | disabled
     "warn_threshold": 30,            # risk_score >= this -> warning banner
     "block_threshold": 60,           # risk_score >= this -> blocking interstitial
     "interstitial_enabled": True,    # show in-browser warning/block overlays
@@ -227,6 +237,19 @@ def _save_settings(s: dict) -> None:
 
 settings: dict = _load_settings()
 
+
+def _apply_sandbox_settings() -> dict:
+    """Push the stored isolation choice into the C1 sandbox module."""
+    from .c1 import sandbox as c1_sandbox
+    backend = settings.get("c1_isolation_backend", "auto")
+    return c1_sandbox.configure(
+        backend="" if backend == "auto" else backend,
+        network_policy=settings.get("c1_sandbox_network", ""),
+    )
+
+
+_apply_sandbox_settings()
+
 # ── Request / response models ──────────────────────────────────────────────────
 class AnalyzeReq(BaseModel):
     url: str
@@ -239,6 +262,8 @@ class SettingsReq(BaseModel):
     whitelist: List[str] = []
     gsb_key: str = ""
     pw_home_url: str = ""
+    c1_isolation_backend: str = "auto"
+    c1_sandbox_network: str = "unrestricted"
     warn_threshold: int = 30
     block_threshold: int = 60
     interstitial_enabled: bool = True
@@ -265,6 +290,22 @@ class WebstoreLookupReq(BaseModel):
 
 class ApproveInstallReq(BaseModel):
     ext_id: str
+
+class BlocklistDocumentReq(BaseModel):
+    """Document one under-reported blocklist row on demand."""
+    ext_id: str
+    sandbox: bool = True
+
+class BlocklistBackfillReq(BaseModel):
+    """Sweep the sheet and document every row that still has gaps.
+
+    `sandbox` is off by default: a full sweep is thousands of extensions and
+    each sandbox run costs ~20 s of headed Chromium, so bulk passes stay on
+    the static stack. Live intercepts always run the sandbox.
+    """
+    limit: int = 25
+    sandbox: bool = False
+    concurrency: int = 4
 
 class C3CollectReq(BaseModel):
     label: int
@@ -384,6 +425,8 @@ async def get_alerts(limit: int = 50):
 async def save_settings(req: SettingsReq):
     settings.update({"layers": req.layers, "whitelist": req.whitelist,
                       "gsb_key": req.gsb_key, "pw_home_url": req.pw_home_url,
+                      "c1_isolation_backend": req.c1_isolation_backend,
+                      "c1_sandbox_network": req.c1_sandbox_network})
                       "warn_threshold": req.warn_threshold,
                       "block_threshold": req.block_threshold,
                       "interstitial_enabled": req.interstitial_enabled,
@@ -393,7 +436,8 @@ async def save_settings(req: SettingsReq):
     if req.weights:
         settings["weights"] = req.weights
     _save_settings(settings)
-    return {"status": "saved"}
+    applied = _apply_sandbox_settings()
+    return {"status": "saved", "sandbox": applied}
 
 
 @app.get("/settings")
@@ -453,7 +497,8 @@ async def extension_upload(file: UploadFile = File(...)):
     except Exception:
         pass
 
-    result = await analyze_extension_c1(manifest_str, source_code, ext_id, ext_path)
+    result = await analyze_extension_c1(manifest_str, source_code, ext_id, ext_path,
+                                        crx_sha256=sha256_of(crx_data), store_hint="Chrome")
     result["filename"] = file.filename
     return _store_c1_result(result, "upload")
 
@@ -481,7 +526,9 @@ async def extension_webstore(req: WebstoreLookupReq):
         ext_path = extract_crx_to_persistent_dir(crx_data, ext_id)
     except Exception:
         pass
-    result = await analyze_extension_c1(json.dumps(manifest_dict), source_code, ext_id, ext_path)
+    result = await analyze_extension_c1(json.dumps(manifest_dict), source_code, ext_id, ext_path,
+                                        webstore_url=webstore_url, crx_sha256=sha256_of(crx_data),
+                                        store_hint=store_from_url(webstore_url))
     result["webstore_url"] = webstore_url
     return _store_c1_result(result, "webstore", webstore_url)
 
@@ -489,6 +536,134 @@ async def extension_webstore(req: WebstoreLookupReq):
 @app.post("/extension/sandbox")
 async def extension_sandbox(req: SandboxReq):
     return await sandbox_extension_c1(req.extension_path)
+
+
+@app.get("/extension/sandbox/isolation")
+async def sandbox_isolation():
+    """Which containment backends this machine can provide, and which is active.
+
+    The dashboard shows this so an analyst can see at a glance whether a
+    dynamic verdict was produced inside a disposable VM or merely in a
+    throwaway browser profile on the host — and, when the VM is unavailable,
+    exactly what is missing.
+    """
+    from .c1.isolation import backend_status
+    from .c1.sandbox import current_configuration
+    status = await asyncio.to_thread(backend_status)
+    configured = current_configuration()
+    active = next((s["name"] for s in status if s["available"]), None)
+    if configured["backend"] != "auto":
+        forced = next((s for s in status if s["name"] == configured["backend"]), None)
+        active = configured["backend"] if forced and forced["available"] else active
+    return {
+        "configured": configured,
+        "active": active,
+        "backends": status,
+        "enable_hint": (
+            "Enable-WindowsOptionalFeature -Online "
+            "-FeatureName Containers-DisposableClientVM -All"
+        ),
+    }
+
+
+# ── Blocklist evidence coverage ───────────────────────────────────────────────
+# The finalized sheet merges a fully-evidenced source (malext_sentry) with an
+# ID-only dump (chrome-mal-ids). These endpoints expose how much of it is
+# actually documented, and let the analyst complete the rest — either one ID
+# at a time or as a sweep — using the same ML + sandbox stack a live intercept
+# would run.
+
+@app.get("/extension/blocklist/stats")
+async def blocklist_stats_endpoint():
+    """Documented-vs-undocumented counts for the finalized blocklist sheet."""
+    return await asyncio.to_thread(blocklist_coverage)
+
+
+@app.get("/extension/blocklist/incomplete")
+async def blocklist_incomplete(limit: int = 50):
+    """IDs whose sheet row still has at least one undocumented field."""
+    ids = await asyncio.to_thread(blocklist_incomplete_ids, limit)
+    return {"count": len(ids), "ext_ids": ids}
+
+
+@app.post("/extension/blocklist/reload")
+async def blocklist_reload():
+    """Re-read the sheet from disk — picks up an offline sweep's writes."""
+    return await asyncio.to_thread(reload_blocklist)
+
+
+@app.get("/extension/blocklist/{ext_id}")
+async def blocklist_entry_endpoint(ext_id: str):
+    """One blocklist row plus which of its fields are still undocumented."""
+    probe = await asyncio.to_thread(blocklist_probe, ext_id)
+    if not probe["match"]:
+        raise HTTPException(status_code=404, detail="Extension ID is not on the blocklist.")
+    return probe
+
+
+@app.post("/extension/blocklist/document")
+async def blocklist_document(req: BlocklistDocumentReq):
+    """Download this extension, run the detection stack, and write the
+    evidence it produces back into the finalized blocklist CSV."""
+    result = await document_blocklist_entry(req.ext_id, run_sandbox_layer=req.sandbox)
+    if result["status"] == "not_blocklisted":
+        raise HTTPException(status_code=404, detail="Extension ID is not on the blocklist.")
+    await _broadcast({"type": "c1_blocklist_documented", **{
+        k: v for k, v in result.items() if k != "entry"
+    }, "entry": result.get("entry")})
+    return result
+
+
+@app.post("/extension/blocklist/backfill")
+async def blocklist_backfill(req: BlocklistBackfillReq):
+    """Document a batch of under-reported rows in one pass.
+
+    Runs in the background and streams progress over the dashboard WebSocket
+    (`c1_blocklist_backfill`) — a full sweep is thousands of downloads, far
+    longer than any HTTP request should hold open.
+    """
+    ids = await asyncio.to_thread(blocklist_incomplete_ids, max(0, req.limit))
+    if not ids:
+        return {"status": "nothing_to_do", "queued": 0}
+    asyncio.create_task(_bg_blocklist_backfill(ids, req.sandbox, max(1, req.concurrency)))
+    return {"status": "running", "queued": len(ids), "sandbox": req.sandbox}
+
+
+async def _bg_blocklist_backfill(ext_ids: List[str], sandbox: bool, concurrency: int) -> None:
+    """Walk a batch of undocumented IDs, documenting each one it can reach.
+
+    Most undocumented IDs are undocumented *because* the store already pulled
+    them, so "unavailable" is a normal outcome here, not a failure — it is
+    counted separately and the row is left exactly as it was.
+    """
+    semaphore = asyncio.Semaphore(concurrency if not sandbox else 1)   # sandbox runs must not overlap
+    tally = {"documented": 0, "no_change": 0, "unavailable": 0,
+             "already_documented": 0, "not_blocklisted": 0}
+    done = 0
+
+    async def one(ext_id: str) -> None:
+        nonlocal done
+        async with semaphore:
+            try:
+                result = await document_blocklist_entry(ext_id, run_sandbox_layer=sandbox)
+            except Exception as exc:
+                print(f"[C1-BACKFILL] {ext_id} failed: {exc}")
+                result = {"status": "unavailable", "ext_id": ext_id, "error": str(exc)}
+            tally[result["status"]] = tally.get(result["status"], 0) + 1
+            done += 1
+            await _broadcast({
+                "type": "c1_blocklist_backfill", "state": "progress",
+                "ext_id": ext_id, "status": result["status"],
+                "filled": result.get("filled", []),
+                "reason": (result.get("entry") or {}).get("reason", ""),
+                "done": done, "total": len(ext_ids), "tally": dict(tally),
+            })
+
+    await asyncio.gather(*(one(ext_id) for ext_id in ext_ids))
+    print(f"[C1-BACKFILL] Finished {len(ext_ids)} IDs: {tally}")
+    await _broadcast({"type": "c1_blocklist_backfill", "state": "done",
+                      "total": len(ext_ids), "tally": tally,
+                      "coverage": await asyncio.to_thread(blocklist_coverage)})
 
 
 @app.get("/extension/history")
@@ -516,7 +691,8 @@ async def session_install_extension(req: InstallExtensionReq):
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not parse CRX: {exc}")
 
-    c1_result = await analyze_extension_c1(json.dumps(manifest_dict), source_code, ext_id)
+    c1_result = await analyze_extension_c1(json.dumps(manifest_dict), source_code, ext_id,
+                                           crx_sha256=sha256_of(crx_data), store_hint="Chrome")
     _store_c1_result(c1_result, "webstore_install")
 
     if c1_result["verdict"] == "MALICIOUS" and not req.force:
@@ -560,18 +736,38 @@ async def _on_extension_install_click(ext_id: str, webstore_url: str) -> None:
         manifest_dict, source_code, _ = parse_crx_bytes(crx_data, ext_id)
         ext_path = extract_crx_to_persistent_dir(crx_data, ext_id)
         manifest_str = json.dumps(manifest_dict)
+        crx_hash = sha256_of(crx_data)
+        store    = store_from_url(webstore_url)
 
-        static_result = await analyze_extension_c1(manifest_str, source_code, ext_id)
-        static_score_pct = static_result["static"]["score"] * 100
+        # Everything the analyzer needs to document a thinly-reported
+        # blocklist row from this intercept rather than from the sheet.
+        live_ctx = {"webstore_url": webstore_url, "crx_sha256": crx_hash, "store_hint": store}
 
-        if static_score_pct >= 50.0:
+        probe = blocklist_probe(ext_id)
+        if probe["needs_evidence"]:
+            # Known-bad ID, but the sheet has no evidence on record for it.
+            # Run the full stack (ML + sandbox) to establish what it does,
+            # instead of short-circuiting to a panel full of placeholders.
+            print(f"[C1] {ext_id} is blocklisted with {len(probe['gaps'])} undocumented "
+                  f"field(s) {probe['gaps']} — running ML + sandbox to establish evidence")
             await _broadcast({"type": "c1_install_intercepted", "ext_id": ext_id,
-                               "url": webstore_url, "state": "sandbox_running",
-                               "static_score": round(static_score_pct, 1)})
+                              "url": webstore_url, "state": "blocklist_evidence",
+                              "gaps": probe["gaps"]})
             c1_result = await analyze_extension_c1(manifest_str, source_code, ext_id,
-                                                    extension_path=ext_path)
+                                                  extension_path=ext_path, **live_ctx)
         else:
-            c1_result = static_result
+            static_result = await analyze_extension_c1(manifest_str, source_code, ext_id,
+                                                       **live_ctx)
+            static_score_pct = static_result["static"]["score"] * 100
+
+            if static_score_pct >= 50.0:
+                await _broadcast({"type": "c1_install_intercepted", "ext_id": ext_id,
+                                   "url": webstore_url, "state": "sandbox_running",
+                                   "static_score": round(static_score_pct, 1)})
+                c1_result = await analyze_extension_c1(manifest_str, source_code, ext_id,
+                                                        extension_path=ext_path, **live_ctx)
+            else:
+                c1_result = static_result
 
         _store_c1_result(c1_result, "webstore_intercept", webstore_url)
         _pending_installs[ext_id] = {"c1_result": c1_result, "ext_path": ext_path,
@@ -588,6 +784,37 @@ async def _on_extension_install_click(ext_id: str, webstore_url: str) -> None:
                            "url": webstore_url, "state": "error", "error": str(exc)})
 
 
+@app.get("/websentinel-trigger")
+async def websentinel_trigger_fallback(ext_id: str = "", url: str = ""):
+    """
+    Server-side fallback for the C1 'Add to Chrome' click hook.
+
+    This URL is normally never actually requested over the network — the
+    Playwright browser context intercepts it client-side via context.route()
+    in playwright_session.py and serves the analyzing page + fires the click
+    callback locally, without the request ever leaving the browser. This
+    endpoint is a safety net for the rare case where that client-side
+    interception is missed (e.g. a timing race between the pointerdown-
+    triggered navigation and the click hook's own state), so the browser
+    still gets a working analyzing page and the extension still gets
+    analyzed and broadcast to the dashboard — instead of surfacing a bare
+    404 to the user.
+    """
+    ext_id = ext_id.strip().lower()
+    if ext_id:
+        asyncio.create_task(_on_extension_install_click(ext_id, url))
+    html = _ANALYZING_HTML.format(ext_id=ext_id or "unknown")
+    if url:
+        # Return the browser to the original page after the card has been
+        # visible for a moment — mirrors PlaywrightSession._return_to_page's
+        # behaviour on the normal client-side-intercepted path.
+        html = html.replace(
+            "</body>",
+            f"<script>setTimeout(function(){{ window.location.replace({json.dumps(url)}); }}, 1500);</script></body>",
+        )
+    return HTMLResponse(html)
+
+
 @app.post("/session/approve_install")
 async def approve_install(req: ApproveInstallReq):
     pending = _pending_installs.get(req.ext_id)
@@ -601,14 +828,20 @@ async def approve_install(req: ApproveInstallReq):
     ext_path     = pending["ext_path"]
     webstore_url = pending.get("webstore_url", "")
     del _pending_installs[req.ext_id]
-    # Register the extension in the launch list without restarting the session.
-    # Chrome requires --load-extension at startup; hot-loading is not supported
-    # by this Chromium build. The extension will be active on the next session start.
-    pw_session.register_extension(ext_path)
-    await _broadcast({"type": "c1_install_approved", "ext_id": req.ext_id,
-                       "extension_path": ext_path, "webstore_url": webstore_url})
-    return {"status": "approved", "ext_id": req.ext_id,
-            "note": "Extension registered — will be active on next session start."}
+    # Fire the restart in the background — return immediately so the dashboard
+    # doesn't freeze during the ~5 s browser restart.
+    asyncio.create_task(_bg_install_extension(req.ext_id, ext_path, webstore_url))
+    return {"status": "installing", "ext_id": req.ext_id}
+
+
+async def _bg_install_extension(ext_id: str, ext_path: str, webstore_url: str) -> None:
+    try:
+        await pw_session.load_extension(ext_path, restore_url=webstore_url)
+        await _broadcast({"type": "c1_install_approved", "ext_id": ext_id,
+                          "extension_path": ext_path, "webstore_url": webstore_url})
+    except Exception as exc:
+        print(f"[C1] Extension install failed for {ext_id}: {exc}")
+        await _broadcast({"type": "c1_install_error", "ext_id": ext_id, "error": str(exc)})
 
 
 @app.post("/session/block_install")
@@ -700,22 +933,42 @@ def _run_test_component(label: str, script: str) -> dict:
 
 @app.post("/dev/run_tests")
 async def run_tests(component: str = "all"):
-    """Run unit test suites and return structured results."""
+    """Run unit test suites and return structured results.
+
+    A component may map to more than one script — C1's blocklist evidence
+    suite lives in its own file — in which case the runs are merged into a
+    single result so the dashboard still shows one row per component.
+    """
+    _test = lambda *parts: os.path.join(_REPO_ROOT, "test", *parts)
     components_map = {
-        "c1": ("C1 — Extension Analyzer",   os.path.join(_REPO_ROOT, "test", "C1", "test_c1_units.py")),
-        "c2": ("C2 — Phishing Detection",   os.path.join(_REPO_ROOT, "test", "C2", "test_c2_layers.py")),
-        "c3": ("C3 — Beacon Detector",      os.path.join(_REPO_ROOT, "test", "C3", "test_c3_units.py")),
-        "c4": ("C4 — Forensic Correlation", os.path.join(_REPO_ROOT, "test", "C4", "test_units.py")),
+        "c1": ("C1 — Extension Analyzer",   [_test("C1", "test_c1_units.py"),
+                                             _test("C1", "test_blocklist_evidence.py"),
+                                             _test("C1", "test_isolation.py"),
+                                             _test("C1", "test_report_ui.py")]),
+        "c2": ("C2 — Phishing Detection",   [_test("C2", "test_c2_layers.py")]),
+        "c3": ("C3 — Beacon Detector",      [_test("C3", "test_c3_units.py")]),
+        "c4": ("C4 — Forensic Correlation", [_test("C4", "test_correlation.py")]),
     }
     targets = list(components_map.items()) if component == "all" else \
               [(component, components_map[component])] if component in components_map else []
 
     loop = asyncio.get_event_loop()
     results = []
-    for cid, (label, script) in targets:
-        r = await loop.run_in_executor(None, _run_test_component, label, script)
-        r["id"] = cid
-        results.append(r)
+    for cid, (label, scripts) in targets:
+        merged = None
+        for script in scripts:
+            r = await loop.run_in_executor(None, _run_test_component, label, script)
+            if merged is None:
+                merged = r
+                continue
+            for key in ("passed", "failed", "total", "duration"):
+                merged[key] += r[key]
+            merged["tests"].extend(r["tests"])
+            merged["stdout"] += "\n" + r["stdout"]
+            merged["returncode"] = merged["returncode"] or r["returncode"]
+        merged["duration"] = round(merged["duration"], 2)
+        merged["id"] = cid
+        results.append(merged)
 
     total_passed = sum(r["passed"] for r in results)
     total_failed = sum(r["failed"] for r in results)
@@ -2049,11 +2302,20 @@ async def dev_simulate_click():
         raise HTTPException(status_code=404,
             detail="test_malicious_ext directory not found next to main.py")
     manifest_path = os.path.join(ext_dir, "manifest.json")
-    bg_path       = os.path.join(ext_dir, "background.js")
     with open(manifest_path, encoding="utf-8") as f:
         manifest_dict = json.load(f)
-    with open(bg_path, encoding="utf-8") as f:
-        source_code = f.read()
+    # Concatenate every .js file, exactly as parse_crx_bytes() does for a real
+    # downloaded extension. Reading only background.js used to hide anything a
+    # content script did (keystroke listeners live there, not in the worker),
+    # so the simulated click scored lower than the same extension would if it
+    # arrived from the Web Store.
+    source_parts = []
+    for root, _dirs, files in os.walk(ext_dir):
+        for name in sorted(files):
+            if name.lower().endswith(".js"):
+                with open(os.path.join(root, name), encoding="utf-8", errors="ignore") as f:
+                    source_parts.append(f.read())
+    source_code = "\n".join(source_parts)
     fake_ext_id  = "test_malicious_ext_simulate"
     fake_url     = "https://chromewebstore.google.com/detail/websentinel-test/simulate"
     asyncio.create_task(_simulate_click_task(

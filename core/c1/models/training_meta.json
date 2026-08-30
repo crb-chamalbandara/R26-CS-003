@@ -38,16 +38,16 @@
     "external_url_count"
   ],
   "n_malicious": 322,
-  "n_benign": 937,
-  "scale_pos_weight": 2.909937888198758,
+  "n_benign": 1457,
+  "scale_pos_weight": 2.0,
   "cv_folds": 5,
-  "cv_precision_mean": 0.7921467974375849,
-  "cv_precision_std": 0.035719795459355275,
-  "cv_recall_mean": 0.8352403846153844,
-  "cv_recall_std": 0.047165544335724646,
-  "cv_f1_mean": 0.8112203565359604,
-  "cv_f1_std": 0.012884910705842866,
-  "holdout_precision": 0.8870967741935484,
-  "holdout_recall": 0.859375,
-  "holdout_f1": 0.873015873015873
+  "cv_precision_mean": 0.7841774386070366,
+  "cv_precision_std": 0.02352061893604342,
+  "cv_recall_mean": 0.6985096153846154,
+  "cv_recall_std": 0.04281853955801924,
+  "cv_f1_mean": 0.7382200445228868,
+  "cv_f1_std": 0.029005741626997362,
+  "holdout_precision": 0.8888888888888888,
+  "holdout_recall": 0.75,
+  "holdout_f1": 0.8135593220338984
 }
