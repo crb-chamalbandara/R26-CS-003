@@ -3,7 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 // Prevent GPU process conflicts when Playwright launches its own Chromium window
-app.disableHardwareAcceleration();
+if (app) app.disableHardwareAcceleration();
 
 let mainWindow;
 let backendProcess;

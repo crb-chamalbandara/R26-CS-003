@@ -1,0 +1,18 @@
+{
+  "n_vectors": 604,
+  "baseline_weighted_auc": 0.8468,
+  "learned_auc": 0.9672,
+  "kept_learned_model": true,
+  "production_scorer": "learned meta-classifier (c2_fusion.pkl)",
+  "tuned_weights": {
+    "L1": 0.4166,
+    "L2": 0.4484,
+    "L3": 0.0198,
+    "L4": 0.1152,
+    "L5": 0.0,
+    "L6": 0.0
+  },
+  "verdict_suspicious": 1,
+  "verdict_phishing": 46,
+  "f1_at_phishing_threshold": 0.9359
+}

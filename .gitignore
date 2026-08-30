@@ -47,6 +47,7 @@ data/_ctu13_build_stats.csv
 
 # ── Dataset (large zip — store separately) ───────────────────
 Dataset/
+notebooks/
 
 # ── Playwright browser profile (user session data) ────────────
 .websentinel/

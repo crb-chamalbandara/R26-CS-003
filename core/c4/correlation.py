@@ -1,9 +1,13 @@
 """
 Stage 3 — Cross-artifact correlation engine
-2-minute sliding window with 3 algorithms:
+2-minute sliding window with 7 cross-table forensic signal detectors:
   A. Co-occurrence analysis
   B. Orphan detection
   C. Temporal anomaly detection
+  D. Ordered attack-chain detection
+  E. Domain risk clustering
+  F. Cross-domain credential reuse
+  G. Download -> exfiltration correlation
 """
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -31,6 +35,10 @@ def _event_domain(event):
         return _domain(detail.get("origin", ""))
     if atype == "download":
         return _domain(detail.get("source_url", ""))
+    if atype == "localstorage":
+        return detail.get("host", "") or _domain(detail.get("origin", ""))
+    if atype == "session":
+        return detail.get("host", "") or _domain(detail.get("url", ""))
     return ""
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -61,18 +69,12 @@ def run_cooccurrence(events):
         cluster = [e for e in candidates
                    if _ts(e["timestamp"]) and t0 <= _ts(e["timestamp"]) <= t1]
 
-        # Group by domain
+        # Group by domain. _event_domain covers every artifact type that carries
+        # one — including localStorage and restored session tabs, which are just
+        # as much "this domain touched the machine" evidence as a cookie is.
         domain_map = defaultdict(lambda: defaultdict(list))
         for e in cluster:
-            dom = ""
-            if e["artifact_type"] == "history":
-                dom = _domain(e["detail"].get("url",""))
-            elif e["artifact_type"] == "cookie":
-                dom = e["detail"].get("host","").lstrip(".").lower()
-            elif e["artifact_type"] == "credential":
-                dom = _domain(e["detail"].get("origin",""))
-            elif e["artifact_type"] == "download":
-                dom = _domain(e["detail"].get("source_url",""))
+            dom = _event_domain(e)
             if dom:
                 domain_map[dom][e["artifact_type"]].append(e)
 
@@ -110,7 +112,8 @@ def run_cooccurrence(events):
 # Normal: visit site → site sets cookie.
 # Orphan: cookie exists for domain NEVER visited → suspicious injection.
 # ═══════════════════════════════════════════════════════════════════════════
-ORPHAN_SCORES = {"cookie":40, "credential":60, "download":70, "extension":50}
+ORPHAN_SCORES = {"cookie":40, "credential":60, "download":70, "extension":50,
+                 "localstorage":45, "session":55}
 
 def run_orphan_detection(events):
     """
@@ -129,17 +132,8 @@ def run_orphan_detection(events):
         atype = e["artifact_type"]
         if atype not in ORPHAN_SCORES: continue
 
-        # Extract domain for this event
-        if atype == "cookie":
-            dom = e["detail"].get("host","").lstrip(".").lower()
-        elif atype == "credential":
-            dom = _domain(e["detail"].get("origin",""))
-        elif atype == "download":
-            dom = _domain(e["detail"].get("source_url",""))
-        elif atype == "extension":
-            dom = ""
-        else:
-            continue
+        # Extract domain for this event (extensions have none, so they never orphan)
+        dom = _event_domain(e)
 
         if not dom: continue
 
@@ -169,7 +163,8 @@ def run_orphan_detection(events):
 # Flag events that happen at hours when this user is NEVER normally active.
 # Personalised per user — not a generic "2am is suspicious" threshold.
 # ═══════════════════════════════════════════════════════════════════════════
-TEMPORAL_SCORES = {"credential":70, "download":50, "cookie":40, "history":30, "extension":35}
+TEMPORAL_SCORES = {"credential":70, "download":50, "cookie":40, "history":30,
+                   "extension":35, "session":45, "localstorage":30}
 
 def run_temporal_anomaly(events):
     """
@@ -335,12 +330,112 @@ def run_domain_risk_clustering(events):
     return findings
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# F. CROSS-DOMAIN CREDENTIAL REUSE   (cross-table: logins × logins)
+# The same saved username appears against two or more DIFFERENT origin domains.
+# One stolen password then unlocks several accounts — a blast-radius signal that
+# is invisible to any tool inspecting the login store one row at a time.
+# ═══════════════════════════════════════════════════════════════════════════
+def run_credential_reuse(events):
+    by_user     = defaultdict(set)     # username -> {origin domains}
+    user_events = defaultdict(list)
+    for e in events:
+        if e["artifact_type"] != "credential":
+            continue
+        user = (e["detail"].get("username") or "").strip().lower()
+        dom  = _domain(e["detail"].get("origin", ""))
+        if user and dom:
+            by_user[user].add(dom)
+            user_events[user].append(e)
+
+    findings = []
+    for user, domains in by_user.items():
+        if len(domains) < 2:
+            continue
+        score = min(100, 45 + (len(domains) - 1) * 20)
+        for e in user_events[user]:
+            e["risk_flag"] = True
+            e["anomaly_score"] += 20
+            e["anomaly_reasons"].append(
+                f"REUSE: credential reused across {len(domains)} domains")
+        findings.append({
+            "algorithm":      "credential_reuse",
+            "username":       user,
+            "domains":        sorted(domains),
+            "domain":         sorted(domains)[0],
+            "artifact_types": ["credential"],
+            "score":          score,
+            "description":    (f"Credential '{user}' saved across {len(domains)} "
+                               f"different domains — password reuse widens blast radius"),
+            "events":         user_events[user],
+        })
+    findings.sort(key=lambda x: x["score"], reverse=True)
+    return findings
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# G. DOWNLOAD -> EXFILTRATION CORRELATION   (cross-table: downloads × history)
+# A file download followed within the window by outbound navigation to a
+# DIFFERENT domain — the classic "drop tool, then call home / upload" step.
+# Bounded to the first follow-on navigation per download to control noise.
+# ═══════════════════════════════════════════════════════════════════════════
+def run_download_exfil(events):
+    history = sorted(
+        [e for e in events if e["artifact_type"] == "history" and _ts(e.get("timestamp"))],
+        key=lambda x: x["timestamp"])
+    downloads = [e for e in events
+                 if e["artifact_type"] == "download" and _ts(e.get("timestamp"))]
+
+    findings = []
+    for d in downloads:
+        t0 = _ts(d["timestamp"])
+        t1 = t0 + timedelta(seconds=WINDOW_SECONDS)
+        src_dom = _domain(d["detail"].get("source_url", ""))
+
+        follow = None
+        for h in history:
+            th = _ts(h["timestamp"])
+            if th is None or th < t0 or th > t1:
+                continue
+            dst = _domain(h["detail"].get("url", ""))
+            if dst and dst != src_dom:
+                follow = (dst, h)
+                break
+        if not follow:
+            continue
+
+        dst_dom, h = follow
+        risky_dl = bool(d.get("risk_flag"))
+        score    = 60 if risky_dl else 45
+        fname    = d["detail"].get("filename", "")
+        d["risk_flag"] = True
+        d["anomaly_score"] += 15
+        d["anomaly_reasons"].append(f"EXFIL: download '{fname}' then navigation to {dst_dom}")
+        findings.append({
+            "algorithm":      "download_exfil",
+            "domain":         dst_dom,
+            "source_domain":  src_dom,
+            "filename":       fname,
+            "artifact_types": ["download", "history"],
+            "score":          score,
+            "window_start":   d["timestamp"],
+            "window_end":     h["timestamp"],
+            "description":    (f"Download '{fname}' followed by navigation to '{dst_dom}' "
+                               f"within 2 minutes — possible tool drop then exfil/callback"),
+            "events":         [d, h],
+        })
+    findings.sort(key=lambda x: x["score"], reverse=True)
+    return findings
+
+
 def run_correlation(events):
     cooccurrence                      = run_cooccurrence(events)
     orphans                           = run_orphan_detection(events)
     temporal, baseline, day_hour_base = run_temporal_anomaly(events)
     attack_chains                     = run_attack_chain_detection(events)
     domain_clusters                   = run_domain_risk_clustering(events)
+    credential_reuse                  = run_credential_reuse(events)
+    download_exfil                    = run_download_exfil(events)
 
     return {
         "cooccurrence": cooccurrence,
@@ -348,6 +443,8 @@ def run_correlation(events):
         "temporal":     temporal,
         "attack_chains": attack_chains,
         "domain_clusters": domain_clusters,
+        "credential_reuse": credential_reuse,
+        "download_exfil":   download_exfil,
         "baseline":          dict(baseline),
         "day_hour_baseline": {f"{k[0]}_{k[1]}": v for k, v in day_hour_base.items()},
         "summary": {
@@ -356,9 +453,12 @@ def run_correlation(events):
             "temporal_count":     len(temporal),
             "attack_chain_count": len(attack_chains),
             "domain_cluster_count": len(domain_clusters),
+            "credential_reuse_count": len(credential_reuse),
+            "download_exfil_count":   len(download_exfil),
             "total_findings": (
                 len(cooccurrence) + len(orphans) + len(temporal) +
-                len(attack_chains) + len(domain_clusters)
+                len(attack_chains) + len(domain_clusters) +
+                len(credential_reuse) + len(download_exfil)
             ),
         }
     }

