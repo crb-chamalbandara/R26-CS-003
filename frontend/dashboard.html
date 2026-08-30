@@ -4017,16 +4017,6 @@ async function loadSettings() {
   } catch {}
 }
 
-// ── Global settings (Playwright + API keys + whitelist) ───────
-async function saveSettings() {
-  const payload = {
-    layers:        { l1: togVal('l1'), l2: togVal('l2'), l3: togVal('l3'), l4: togVal('l4'), l5: togVal('l5') },
-    gsb_key:       document.getElementById('gsb-key').value.trim(),
-    abuseipdb_key: document.getElementById('abuseipdb-key').value.trim(),
-    otx_key:       document.getElementById('otx-key').value.trim(),
-    // VirusTotal has no field on this panel (it lives in Detection Lab); re-send
-    // whatever the Lab field currently holds so a save here never wipes it.
-    virustotal_key: (document.getElementById('lab-virustotal-key')?.value || '').trim(),
 // Shared builder so global + C2 saves stay in sync.
 function buildSettingsPayload() {
   return {
@@ -4061,17 +4051,6 @@ async function saveSettings() {
 
 // ── C2 component settings (detection layer toggles) ───────────
 async function saveC2Settings() {
-  const payload = {
-    layers:        { l1: togVal('l1'), l2: togVal('l2'), l3: togVal('l3'), l4: togVal('l4'), l5: togVal('l5') },
-    gsb_key:       document.getElementById('gsb-key').value.trim(),
-    abuseipdb_key: document.getElementById('abuseipdb-key').value.trim(),
-    otx_key:       document.getElementById('otx-key').value.trim(),
-    // VirusTotal has no field on this panel (it lives in Detection Lab); re-send
-    // whatever the Lab field currently holds so a save here never wipes it.
-    virustotal_key: (document.getElementById('lab-virustotal-key')?.value || '').trim(),
-    whitelist:   document.getElementById('whitelist').value.split('\n').map(s => s.trim()).filter(Boolean),
-    pw_home_url: document.getElementById('pw-home-url').value.trim(),
-  };
   const payload = buildSettingsPayload();
   if (backendUp) {
     try { await fetch(API + '/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
