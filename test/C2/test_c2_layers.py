@@ -316,6 +316,70 @@ class TestLayerEvidenceContract(unittest.TestCase):
             json.dumps(run(coro)["evidence"])
 
 
+# ── L1 scoring hygiene ────────────────────────────────────────────────────────
+# Two defects these lock down, both found via the graded anomaly fixtures:
+#   1. the rules were substring searches over the raw DOM, so text inside a
+#      comment scored like live markup;
+#   2. the ML overlay was max(heuristic, ml_prob), letting a model trained on a
+#      generic-phishing corpus overrule the BitB rules outright.
+class TestLayer1ScoringHygiene(unittest.TestCase):
+
+    BENIGN = ("<html><head><title>Docs</title></head><body>"
+              "<p>Some ordinary page content.</p></body></html>")
+
+    def test_html_comments_do_not_score(self):
+        # A page that merely *documents* these patterns must not be charged for
+        # them. This is the exact shape of the graded fixtures' headers.
+        commented = (
+            "<html><head><title>Docs</title></head><body>"
+            "<!-- We do NOT use <iframe style=\"position:fixed\"> here, and there is "
+            "no ondragstart / onselectstart / user-select:none anywhere. "
+            "Rule 5 would need class=\"browser-bar\". -->"
+            "<p>Some ordinary page content.</p></body></html>")
+        self.assertEqual(run(check_bitb("https://ok.example/", commented))["heuristic"],
+                         run(check_bitb("https://ok.example/x", self.BENIGN))["heuristic"])
+
+    def test_css_block_comments_do_not_score(self):
+        # /* user-select: none */ styles nothing.
+        styled = ("<html><head><style>"
+                  "/* NOTE: no user-select:none anywhere in this stylesheet */"
+                  "body{color:#222}</style></head><body><p>Hi</p></body></html>")
+        self.assertEqual(run(check_bitb("https://ok.example/c", styled))["heuristic"], 0.0)
+
+    def test_live_markup_still_scores(self):
+        # The comment stripping must not blunt detection on real markup.
+        live = ('<html><body><iframe style="position:fixed;z-index:99999"></iframe>'
+                '</body></html>')
+        r = run(check_bitb("https://evil.example/", live))
+        self.assertGreater(r["heuristic"], 0.5)
+        self.assertIn("fixed-pos iframe", r["evidence"]["flags"])
+
+    def test_ml_cannot_override_the_heuristic(self):
+        # The model may adjust the rule score, never replace it. A page with no
+        # BitB markup must stay low even if the model is confident about it.
+        from core.c2.layer1_bitb import _ML_MAX_BOOST
+        r = run(check_bitb("https://ok.example/ml", self.BENIGN))
+        self.assertEqual(r["heuristic"], 0.0)
+        self.assertLessEqual(r["score"], _ML_MAX_BOOST + 1e-6)
+
+    def test_score_is_heuristic_plus_bounded_boost(self):
+        from core.c2.layer1_bitb import _ML_MAX_BOOST
+        for dom in (self.BENIGN,
+                    '<html><body><iframe style="position:fixed"></iframe></body></html>'):
+            r = run(check_bitb("https://b.example/" + str(len(dom)), dom))
+            ml = r["evidence"]["ml_prob"]
+            if ml is None:
+                continue
+            expected = min(1.0, r["heuristic"] + _ML_MAX_BOOST * ml)
+            self.assertAlmostEqual(r["score"], round(expected, 4), places=3)
+
+    def test_score_never_below_the_heuristic(self):
+        # The boost is additive, so a rule hit can only ever be reinforced.
+        live = '<html><body><iframe style="position:fixed;z-index:99999"></iframe></body></html>'
+        r = run(check_bitb("https://evil.example/floor", live))
+        self.assertGreaterEqual(r["score"], r["heuristic"] - 1e-9)
+
+
 if __name__ == "__main__":
     print("\n=== C2 Phishing Detection Unit Tests ===\n")
     unittest.main(verbosity=2)

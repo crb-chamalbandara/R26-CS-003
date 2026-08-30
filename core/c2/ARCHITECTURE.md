@@ -151,11 +151,47 @@ The SIEM envelope reuses C4's field names (`export_type`, `export_version`, `gen
 - 🔲 Populate `data/logo_hashes.json` with brand reference hashes
 - 🔲 Train URL classifier (`scripts/prepare_dataset.py` requires Mendeley dataset ZIP)
 - 🔲 Improve L1: add ML-based BitB classifier trained on BitB kit corpus
-- 🔲 Recalibrate the L1 model — on the shipped fixtures it scores `benign_login.html`
-  at 0.995 and misses both BiTB kits (0.06); today the heuristic carries BitB detection
-- 🔲 Realign `test/C2/bitb_anomaly_{50,75}.html` with the current rule set — the
-  heuristic now scores them 1.00 / 0.95 against expected bands of 0.45–0.65 / 0.70–0.90
+- ✅ L1 ignores HTML and CSS/JS block comments when scoring
+- ✅ L1 ML overlay bounded to a +0.15 adjustment instead of overriding the rules
+- 🔲 Retrain the L1 model on a BitB corpus (see "L1 scoring" below) — it is currently
+  trained on generic phishing data and contributes little
 - 🔲 Retention: nothing calls `alert_store.purge_older_than()` on a schedule yet
+
+---
+
+## L1 scoring — two things to know before touching it
+
+**Comments never score.** Every rule is a substring search over the DOM, so
+`_score_bitb()` strips `<!-- -->` and `/* */` first. Without that a page that merely
+*mentions* `ondragstart` or `<iframe style="position:fixed">` in a comment was charged for
+it — the graded fixtures document which rules they avoid, and those very comments tripped
+the rules they said were absent. A commented-out overlay renders nothing.
+
+**The ML overlay is a bounded adjustment, not the score.**
+`final = min(1.0, heuristic + _ML_MAX_BOOST * ml_prob)` with `_ML_MAX_BOOST = 0.15` — the
+headroom the graded fixtures already documented ("Heuristic 0.50; ML may boost up to ~0.65").
+
+It was `max(heuristic, ml_prob)`, which let the model set L1 on its own. That model is
+trained on the Mendeley **generic phishing** corpus (`scripts/prepare_html_dataset.py`),
+not a BitB corpus, and the two disagree about the defining signal — in that training data
+`has_fixed_iframe` is *twice as common in the benign class* (0.099 vs 0.047), because real
+sites embed ads and videos while generic phishing pages are plain login forms. What it
+actually learned is closer to "small page + password field + brand name":
+
+| fixture | truth | heuristic | ml_prob |
+|---------|-------|-----------|---------|
+| `pages/benign_login.html` | benign | 0.35 | **0.995** ← false positive |
+| `pages/bitb_kit_windows.html` | BitB | 0.95 | **0.062** ← false negative |
+| `bitb_samples/*` (CSS inlined) | BitB | 0.70 | 0.075–0.428 |
+
+Under `max()` those wrong answers won outright. Capping keeps whatever signal the model
+has without letting it overrule the rules that actually encode BitB — and because the
+boost is *additive*, real kits score slightly higher than before (0.711–0.764 vs 0.700),
+where `max()` discarded the model's contribution whenever the heuristic was larger.
+
+Retraining is the real fix, and it needs a BitB corpus rather than a phishing one. Until
+then the deterministic rules carry L1. `test/C2/test_c2_layers.py::TestLayer1ScoringHygiene`
+pins both behaviours.
 
 ---
 
