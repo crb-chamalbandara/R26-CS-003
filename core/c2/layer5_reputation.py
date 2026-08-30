@@ -1,11 +1,15 @@
 """
 C2 Layer 5 — Reputation check
-Queries PhishTank public API for real-time URL reputation.
-Falls back gracefully when network is unavailable.
-No API key required — PhishTank public endpoint.
+Queries Google Safe Browsing API v4 + PhishTank (public feed), concurrently, with a
+short-lived per-URL cache and a shared HTTP client so the network is not re-hit on every
+navigation.
 """
+import asyncio
+import time
+
 import httpx
 
+GSB_URL       = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 PHISHTANK_URL = "https://checkurl.phishtank.com/checkurl/"
 _TIMEOUT      = 3.0
 _CACHE_TTL    = 600.0   # seconds — repeat visits within this window skip the network
@@ -34,6 +38,29 @@ async def aclose() -> None:
     _client = None
 
 
+async def _check_gsb(url: str, api_key: str) -> tuple[bool, str]:
+    if not api_key:
+        return False, ""
+    payload = {
+        "client":     {"clientId": "websentinel", "clientVersion": "2.0"},
+        "threatInfo": {
+            "threatTypes":      ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE",
+                                 "POTENTIALLY_HARMFUL_APPLICATION"],
+            "platformTypes":    ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries":    [{"url": url}],
+        }
+    }
+    try:
+        r = await _get_client().post(f"{GSB_URL}?key={api_key}", json=payload)
+        matches = r.json().get("matches", [])
+        if matches:
+            return True, matches[0].get("threatType", "THREAT")
+    except Exception:
+        pass
+    return False, ""
+
+
 async def _check_phishtank(url: str) -> tuple[bool, str]:
     # httpx form-encodes the data dict for us — passing a pre-`quote()`d value
     # double-encodes the URL and PhishTank then never matches.
@@ -53,12 +80,20 @@ async def _check_phishtank(url: str) -> tuple[bool, str]:
     return False, ""
 
 
-async def check_reputation(url: str, gsb_key: str = "") -> dict:
-    """
-    Layer 5 reputation check using PhishTank.
-    gsb_key parameter is accepted but unused (kept for API compatibility).
-    """
-    pt_hit, pt_detail = await _check_phishtank(url)
+async def check_reputation(url: str, gsb_key: str = "", phishtank_enabled: bool = True) -> dict:
+    key = (url, bool(gsb_key), bool(phishtank_enabled))
+    hit = _cache.get(key)
+    now = time.monotonic()
+    if hit and hit[0] > now:
+        return hit[1]
+
+    # Run both lookups concurrently; PhishTank is gated and a no-op when disabled.
+    async def _pt():
+        return await _check_phishtank(url) if phishtank_enabled else (False, "")
+
+    (gsb_hit, gsb_type), (pt_hit, pt_detail) = await asyncio.gather(
+        _check_gsb(url, gsb_key), _pt()
+    )
 
     if gsb_hit:
         result = {"score": 0.85, "flagged": True, "source": "GSB",

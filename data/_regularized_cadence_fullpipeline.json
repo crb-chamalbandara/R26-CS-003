@@ -1,0 +1,108 @@
+{
+  "beacon_battery": [
+    {
+      "profile": "detection_lab_actual_5s_post",
+      "heuristic": 0.71,
+      "deployed_ml": 0.0009,
+      "deployed_fused": 0.4973,
+      "deployed_verdict": "SUSPICIOUS",
+      "candidate_ml": 0.2883,
+      "candidate_fused": 0.5835,
+      "candidate_verdict": "BEACON",
+      "candidate_ml_per_fold": {
+        "1": 0.4018,
+        "2": 0.0786,
+        "5": 0.5221,
+        "7": 0.2843,
+        "9": 0.07,
+        "13": 0.3731
+      }
+    },
+    {
+      "profile": "tc01_5s_hidden_idle",
+      "heuristic": 0.73,
+      "deployed_ml": 0.0,
+      "deployed_fused": 0.511,
+      "deployed_verdict": "SUSPICIOUS",
+      "candidate_ml": 0.0095,
+      "candidate_fused": 0.5139,
+      "candidate_verdict": "SUSPICIOUS",
+      "candidate_ml_per_fold": {
+        "1": 0.0083,
+        "2": 0.0058,
+        "5": 0.0212,
+        "7": 0.0074,
+        "9": 0.0108,
+        "13": 0.0035
+      }
+    },
+    {
+      "profile": "cs_10s_5pct_jitter",
+      "heuristic": 0.65,
+      "deployed_ml": 0.0,
+      "deployed_fused": 0.455,
+      "deployed_verdict": "SUSPICIOUS",
+      "candidate_ml": 0.0122,
+      "candidate_fused": 0.4587,
+      "candidate_verdict": "SUSPICIOUS",
+      "candidate_ml_per_fold": {
+        "1": 0.0097,
+        "2": 0.0055,
+        "5": 0.0285,
+        "7": 0.013,
+        "9": 0.0129,
+        "13": 0.0039
+      }
+    }
+  ],
+  "hard_negative_sweep": [
+    {
+      "profile": "active_human_browsing",
+      "n": 200,
+      "deployed_false_beacons": 0,
+      "deployed_max_fused": 0.0601,
+      "candidate_false_beacons": 0,
+      "candidate_max_fused": 0.2447
+    },
+    {
+      "profile": "spa_background_sync_same_site",
+      "n": 200,
+      "deployed_false_beacons": 0,
+      "deployed_max_fused": 0.3583,
+      "candidate_false_beacons": 1,
+      "candidate_max_fused": 0.5931
+    },
+    {
+      "profile": "third_party_analytics_beacon",
+      "n": 200,
+      "deployed_false_beacons": 0,
+      "deployed_max_fused": 0.0911,
+      "candidate_false_beacons": 0,
+      "candidate_max_fused": 0.228
+    },
+    {
+      "profile": "video_streaming_segments",
+      "n": 200,
+      "deployed_false_beacons": 0,
+      "deployed_max_fused": 0.2541,
+      "candidate_false_beacons": 0,
+      "candidate_max_fused": 0.2931
+    },
+    {
+      "profile": "extension_filter_list_update",
+      "n": 200,
+      "deployed_false_beacons": 0,
+      "deployed_max_fused": 0.4355,
+      "candidate_false_beacons": 1,
+      "candidate_max_fused": 0.6304
+    },
+    {
+      "profile": "push_keepalive_third_party",
+      "n": 200,
+      "deployed_false_beacons": 0,
+      "deployed_max_fused": 0.5113,
+      "candidate_false_beacons": 1,
+      "candidate_max_fused": 0.5969
+    }
+  ]
+}

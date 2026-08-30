@@ -9,20 +9,22 @@ if (app) app.disableHardwareAcceleration();
 let mainWindow;
 let backendProcess;
 
-const PYTHON = process.env.PYTHON_PATH || 'python';
-const BACKEND_DIR = path.join(__dirname, '..');   // project root — uvicorn runs from here
-const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
-const BACKEND_PORT = 8765;
-
-// Prefer the project's .venv Python so all installed packages are available;
-// fall back to system python if .venv doesn't exist.
+// Prefer an explicit PYTHON_PATH override, then the project's .venv so all
+// installed packages are available, then the platform's system interpreter.
+// C1 and C3 each added their own resolver here; they are folded into this one
+// so PYTHON is declared exactly once (two `const PYTHON` bindings in the same
+// scope is a SyntaxError and stopped the app booting).
 const PYTHON = (() => {
+  if (process.env.PYTHON_PATH) return process.env.PYTHON_PATH;
   const venvWin  = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
   const venvUnix = path.join(__dirname, '..', '.venv', 'bin', 'python');
   if (fs.existsSync(venvWin))  return venvWin;
   if (fs.existsSync(venvUnix)) return venvUnix;
   return process.platform === 'win32' ? 'python' : 'python3';
 })();
+const BACKEND_DIR = path.join(__dirname, '..');   // project root — uvicorn runs from here
+const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
+const BACKEND_PORT = 8765;
 
 // ── Start FastAPI backend ─────────────────────────────────────────────────────
 function startBackend() {
