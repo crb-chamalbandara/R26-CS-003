@@ -95,14 +95,28 @@ async def check_reputation(url: str, gsb_key: str = "", phishtank_enabled: bool 
         _check_gsb(url, gsb_key), _pt()
     )
 
+    # Both feeds' verdicts, not just the one that won. A stored alert that says
+    # only "PhishTank" cannot answer "did Safe Browsing also see this, or was it
+    # simply not configured?" — which changes how much weight to give the hit.
+    evidence = {
+        "gsb_queried":       bool(gsb_key),
+        "gsb_hit":           bool(gsb_hit),
+        "gsb_threat_type":   gsb_type or None,
+        "phishtank_queried": bool(phishtank_enabled),
+        "phishtank_hit":     bool(pt_hit),
+        "phishtank_detail":  pt_detail or None,
+    }
+
     if gsb_hit:
         result = {"score": 0.85, "flagged": True, "source": "GSB",
-                  "detail": f"Google Safe Browsing: {gsb_type}"}
+                  "detail": f"Google Safe Browsing: {gsb_type}", "evidence": evidence}
     elif pt_hit:
-        result = {"score": 0.90, "flagged": True, "source": "PhishTank", "detail": pt_detail}
+        result = {"score": 0.90, "flagged": True, "source": "PhishTank",
+                  "detail": pt_detail, "evidence": evidence}
     else:
         result = {"score": 0.0, "flagged": False, "source": "none",
-                  "detail": "Clean" if gsb_key else "GSB key not configured"}
+                  "detail": "Clean" if gsb_key else "GSB key not configured",
+                  "evidence": evidence}
 
     _cache[key] = (now + _CACHE_TTL, result)
     if len(_cache) > 2000:                 # bound memory

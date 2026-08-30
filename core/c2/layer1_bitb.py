@@ -192,24 +192,38 @@ def _score_bitb(url: str, dom: str) -> dict:
 
     heuristic_score = min(1.0, heuristic_score)
 
-    # ── ML model overlay ──────────────────────────────────────
-    if _bitb_model is not None and pd is not None:
+    # Feature vector for the evidence record. It used to be computed inside the
+    # ML branch below and discarded with that scope, so every alert kept a
+    # one-line detail string and none of the 17 measurements behind it. The
+    # alert store, detail modal and exported reports all render these, so it is
+    # extracted once here and reused by the overlay rather than recomputed.
+    try:
+        feats = _extract_html_features(dom, dom_lo, url)
+    except Exception:
+        feats = {}
+
+    # Built here, inside the value check_bitb() memoizes — attaching it after
+    # the cache lookup would leave every cache hit with no evidence.
+    evidence = {"features": feats, "flags": list(flags), "ml_prob": None}
+
+    # ── ML model overlay ────────────────────────────────
+    if _bitb_model is not None and pd is not None and feats:
         try:
-            feats = _extract_html_features(dom, dom_lo, url)
             X = pd.DataFrame([feats])[_FEATURE_COLS]
             ml_prob = float(_bitb_model.predict_proba(X)[0][1])
             final_score = max(heuristic_score, ml_prob)
             detail_parts = [f"ML:{ml_prob:.2f}"]
             if flags:
                 detail_parts.append(", ".join(flags))
+            evidence["ml_prob"] = round(ml_prob, 4)
             return {"score": round(final_score, 4), "detail": " | ".join(detail_parts),
-                    "heuristic": round(heuristic_score, 4)}
+                    "heuristic": round(heuristic_score, 4), "evidence": evidence}
         except Exception:
             pass  # fall through to heuristic result
 
     detail = ", ".join(flags) if flags else "No BitB indicators"
     return {"score": round(heuristic_score, 4), "detail": detail,
-            "heuristic": round(heuristic_score, 4)}
+            "heuristic": round(heuristic_score, 4), "evidence": evidence}
 
 
 async def check_bitb(url: str, dom: str) -> dict:

@@ -619,6 +619,100 @@ input,textarea,select{font-family:inherit}
 .c3-modal-time{font-size:10.5px;color:var(--t3);font-family:monospace}
 .c3-modal-loading{font-size:11px;color:var(--t3);font-style:italic;margin-bottom:10px}
 
+/* ── C2: alert history, exports and detail modal ─────────────
+   One contiguous block. C1 and C3 also edit this file, so keeping C2's rules
+   together (rather than threading them into their sections) keeps the next
+   three-way merge readable. The modal deliberately mirrors the C3 detail modal
+   above so the two components' popups behave identically. */
+.c2h-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;flex-shrink:0;
+  background:var(--bg1);border-bottom:1px solid var(--b1)}
+.c2h-select{background:var(--bg0);border:1px solid var(--b2);border-radius:var(--radius);
+  color:var(--t0);font-size:11.5px;padding:6px 9px;outline:none;transition:border-color .2s}
+.c2h-select:focus{border-color:var(--c2)}
+.c2h-count{font-size:10.5px;color:var(--t3);letter-spacing:.04em}
+.c2h-exports{display:flex;align-items:center;gap:5px;margin-left:auto}
+.c2h-xlabel{font-size:9.5px;color:var(--t3);text-transform:uppercase;
+  letter-spacing:.07em;font-weight:700;margin-right:2px}
+.c2h-xbtn{background:var(--bg3);border:1px solid var(--b2);border-radius:5px;
+  color:var(--t1);font-size:10px;font-weight:700;padding:4px 10px;cursor:pointer;
+  letter-spacing:.03em;transition:all .18s}
+.c2h-xbtn:hover{background:var(--c2b);color:var(--c2);border-color:rgba(77,142,248,.4)}
+.c2h-list{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.c2h-row{display:flex;align-items:center;gap:10px;background:var(--bg2);
+  border:1px solid var(--b1);border-left-width:3px;border-radius:var(--radius);
+  padding:9px 12px;cursor:pointer;transition:border-color .18s,background .18s;text-align:left;
+  width:100%;font:inherit;color:inherit}
+.c2h-row:hover{background:var(--bg3);border-color:var(--b2)}
+.c2h-row.phishing{border-left-color:var(--danger)}
+.c2h-row.suspicious{border-left-color:var(--warn)}
+.c2h-row.safe{border-left-color:var(--safe)}
+.c2h-row.verified{border-left-color:var(--c2)}
+.c2h-id{font-size:9.5px;color:var(--t3);font-family:'Cascadia Code',Consolas,monospace;flex-shrink:0}
+.c2h-url{flex:1;min-width:0;font-size:11.5px;color:var(--t0);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c2h-score{font-size:12px;font-weight:800;flex-shrink:0;min-width:38px;text-align:right}
+.c2h-time{font-size:9.5px;color:var(--t3);flex-shrink:0;min-width:96px;text-align:right}
+
+#c2-detail-modal-overlay{position:fixed;inset:0;z-index:9600;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,0);pointer-events:none;transition:background .2s ease}
+#c2-detail-modal-overlay.open{background:rgba(0,0,0,.66);pointer-events:all}
+#c2-detail-modal{width:80vw;height:80vh;max-width:1400px;
+  background:linear-gradient(160deg,#0d1420 0%,#0a0f1a 100%);
+  border:1px solid rgba(126,166,224,.16);border-radius:16px;
+  box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.03) inset;
+  display:flex;flex-direction:column;overflow:hidden;
+  transform:scale(.94) translateY(10px);opacity:0;
+  transition:transform .22s cubic-bezier(.34,1.2,.64,1),opacity .2s ease}
+#c2-detail-modal-overlay.open #c2-detail-modal{transform:scale(1) translateY(0);opacity:1}
+#c2-detail-modal-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 18px;border-bottom:1px solid rgba(126,166,224,.13);flex-shrink:0;
+  background:rgba(255,255,255,.02)}
+#c2-detail-modal-hdr-main{display:flex;align-items:center;gap:10px;min-width:0}
+#c2-detail-modal-url{font-family:'Cascadia Code',Consolas,monospace;font-size:13px;
+  font-weight:600;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#c2-detail-modal-close{background:rgba(255,255,255,.06);border:1px solid var(--b2);
+  color:var(--t2);width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+#c2-detail-modal-close:hover{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#ff9d9d}
+#c2-detail-modal-body{flex:1;overflow-y:auto;padding:16px 18px 22px}
+.c2ev-top{display:flex;align-items:center;gap:18px;background:rgba(255,255,255,.03);
+  border:1px solid var(--b1);border-radius:12px;padding:13px 17px;margin-bottom:14px}
+.c2ev-score{font-size:36px;font-weight:900;line-height:1;flex-shrink:0;
+  font-family:'Cascadia Code',Consolas,monospace}
+.c2ev-meta{flex:1;min-width:0;font-size:11px;color:var(--t2);line-height:1.6}
+.c2ev-sec{font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;
+  color:var(--t3);margin:16px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--b1)}
+.c2ev-layer{background:var(--bg2);border:1px solid var(--b1);border-radius:var(--radius);
+  padding:10px 13px;margin-bottom:7px}
+.c2ev-lhead{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.c2ev-lid{font-size:9.5px;font-weight:800;background:var(--bg0);color:var(--t1);
+  padding:2px 7px;border-radius:4px;border:1px solid var(--b2)}
+.c2ev-lname{font-size:11.5px;font-weight:600;color:var(--t0);flex:1}
+.c2ev-lscore{font-size:12px;font-weight:800}
+.c2ev-bar{height:5px;background:var(--bg0);border-radius:3px;overflow:hidden;margin-bottom:7px}
+.c2ev-fill{height:100%;transition:width .3s}
+.c2ev-detail{font-size:10.5px;color:var(--t2);line-height:1.5;margin-bottom:7px}
+.c2ev-sub{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);
+  font-weight:700;margin:9px 0 4px}
+.c2ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:4px}
+.c2ev-kv{display:flex;justify-content:space-between;gap:8px;background:var(--bg0);
+  border:1px solid var(--b1);border-radius:5px;padding:4px 8px;font-size:10px}
+.c2ev-k{color:var(--t3);font-family:'Cascadia Code',Consolas,monospace;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c2ev-v{color:var(--t0);font-weight:700;flex-shrink:0}
+.c2ev-kv.on .c2ev-v{color:var(--warn)}
+/* Object/array values (layer_scores, weights_applied, thresholds) are far wider
+   than a grid cell — span the row so the key stays readable and the JSON wraps
+   instead of being ellipsed away. */
+.c2ev-kv.wide{grid-column:1/-1}
+.c2ev-kv.wide .c2ev-v{font-family:'Cascadia Code',Consolas,monospace;font-weight:600;
+  white-space:normal;word-break:break-word;text-align:right;max-width:78%}
+.c2ev-chips{display:flex;flex-wrap:wrap;gap:4px}
+.c2ev-chip{background:var(--danger-bg);border:1px solid rgba(240,71,71,.28);color:#ff9d9d;
+  padding:2px 9px;border-radius:999px;font-size:9.5px;font-weight:600}
+.c2ev-none{font-size:10px;color:var(--t3);font-style:italic}
+
 .c3-row-btn{background:none;border:none;color:var(--c3);font:inherit;text-align:left;padding:0;cursor:pointer;font-weight:600}
 .c3-row-btn:hover{text-decoration:underline}
 .c3-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -2140,6 +2234,7 @@ input,textarea,select{font-family:inherit}
   <div id="tabs">
     <button class="tab active" data-tab="live"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Live Analysis</button>
     <button class="tab" data-tab="alerts"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Alerts</button>
+    <button class="tab" data-tab="history" onclick="loadC2History()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><polyline points="12 7 12 12 15 14"/></svg> History</button>
     <button class="tab" data-tab="timeline"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Timeline</button>
     <button class="tab" data-tab="c2settings"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
   </div>
@@ -2160,6 +2255,36 @@ input,textarea,select{font-family:inherit}
       <div class="empty" id="empty-alerts">
         <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
         <div class="emsg">No alerts yet &mdash; results will appear here</div>
+      </div>
+    </div>
+
+    <!-- HISTORY — persisted alert log (survives restart, unlike Alerts) -->
+    <div class="pane" id="pane-history">
+      <div class="c2h-bar">
+        <select class="c2h-select" id="c2h-verdict" onchange="loadC2History()">
+          <option value="">All verdicts</option>
+          <option value="PHISHING">Phishing</option>
+          <option value="SUSPICIOUS">Suspicious</option>
+          <option value="SAFE">Safe</option>
+          <option value="VERIFIED">Verified</option>
+        </select>
+        <select class="c2h-select" id="c2h-limit" onchange="loadC2History()">
+          <option value="50">Last 50</option>
+          <option value="200">Last 200</option>
+          <option value="500">Last 500</option>
+        </select>
+        <span class="c2h-count" id="c2h-count">&mdash;</span>
+        <span class="c2h-exports">
+          <span class="c2h-xlabel">Export</span>
+          <button class="c2h-xbtn" onclick="c2ExportLog('json')">JSON</button>
+          <button class="c2h-xbtn" onclick="c2ExportLog('csv')">CSV</button>
+          <button class="c2h-xbtn" onclick="c2ExportLog('siem')">SIEM</button>
+        </span>
+      </div>
+      <div class="c2h-list" id="c2h-list"></div>
+      <div class="empty" id="empty-history">
+        <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><polyline points="12 7 12 12 15 14"/></svg></div>
+        <div class="emsg">No stored alerts yet &mdash; analysed pages are saved here</div>
       </div>
     </div>
 
@@ -3072,6 +3197,27 @@ input,textarea,select{font-family:inherit}
   </div>
 </div>
 
+<!-- C2 alert detail — same shell as the C3 modal above (it reuses that CSS),
+     with its own ids so the two can be open independently. -->
+<div id="c2-detail-modal-overlay" onclick="if(event.target===this) closeC2AlertModal()">
+  <div id="c2-detail-modal" role="dialog" aria-modal="true">
+    <div id="c2-detail-modal-hdr">
+      <div id="c2-detail-modal-hdr-main">
+        <span class="vbadge" id="c2-detail-modal-verdict">SAFE</span>
+        <span id="c2-detail-modal-url">—</span>
+      </div>
+      <div class="c2h-exports" style="flex-shrink:0">
+        <button class="c2h-xbtn" id="c2-detail-html" onclick="c2ExportAlert('html')">HTML</button>
+        <button class="c2h-xbtn" id="c2-detail-json" onclick="c2ExportAlert('json')">JSON</button>
+        <button type="button" id="c2-detail-modal-close" onclick="closeC2AlertModal()" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="c2-detail-modal-body"></div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="pw-toast">
   <span class="toast-dot">&#9679;</span>
@@ -3640,7 +3786,7 @@ function closeC3DetailModal() {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeC3DetailModal();
+  if (e.key === 'Escape') { closeC3DetailModal(); closeC2AlertModal(); }
 });
 
 // Single render path shared by both entry points above — builds the full
@@ -4587,6 +4733,7 @@ function makeAlertCard(a) {
     <div class="ahdr">
       <span class="vbadge ${vc}">${esc(a.verdict)}</span>
       <span class="aurl" title="${esc(a.url)}">${esc(a.url)}</span>
+      ${a.id != null ? `<button class="c2h-xbtn c2-detail-btn" data-alert-id="${esc(a.id)}">Details</button>` : ''}
       <span class="atime">${esc(fmtTime(a.timestamp))}</span>
     </div>
     <div class="rbar-row">
@@ -4596,6 +4743,15 @@ function makeAlertCard(a) {
     </div>
     <div class="layers">${(a.layers || []).map(layerHTML).join('')}</div>`;
   card.querySelector('.ahdr').addEventListener('click', () => card.classList.toggle('open'));
+  // The Details button lives inside .ahdr, whose click toggles the card. Without
+  // stopPropagation the modal would open and the card would expand behind it.
+  const detailBtn = card.querySelector('.c2-detail-btn');
+  if (detailBtn) {
+    detailBtn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      openC2AlertModal(detailBtn.dataset.alertId);
+    });
+  }
   return card;
 }
 
@@ -4608,6 +4764,176 @@ function layerHTML(l) {
     <span class="lval" style="color:${col}">${p}%</span>
   </div>
   <div class="ldet">${esc(l.detail || '')}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  C2 alert log — persisted history, detail modal, exports
+//  /alerts is the in-memory list (lost on restart); /alerts/history reads the
+//  SQLite store. The list payload carries no per-layer evidence — that would
+//  dominate a 500-row response — so the modal fetches /alerts/{id} on open.
+// ══════════════════════════════════════════════════════════════
+let _c2DetailId = null;
+
+function c2VerdictColour(v) {
+  const u = String(v || '').toUpperCase();
+  return u === 'PHISHING' ? 'var(--danger)'
+       : u === 'SUSPICIOUS' ? 'var(--warn)'
+       : u === 'VERIFIED' ? 'var(--c2)' : 'var(--safe)';
+}
+
+async function loadC2History() {
+  const list = document.getElementById('c2h-list');
+  const empty = document.getElementById('c2h-count');
+  if (!list) return;
+  const verdict = (document.getElementById('c2h-verdict') || {}).value || '';
+  const limit   = (document.getElementById('c2h-limit')   || {}).value || '50';
+  if (!backendUp) { if (empty) empty.textContent = 'backend offline'; return; }
+
+  let rows = [];
+  try {
+    const qs = new URLSearchParams({ limit, ...(verdict ? { verdict } : {}) });
+    rows = await (await fetch(API + '/alerts/history?' + qs)).json();
+  } catch (_) {
+    if (empty) empty.textContent = 'could not load';
+    return;
+  }
+  if (!Array.isArray(rows)) rows = [];
+
+  document.getElementById('empty-history').style.display = rows.length ? 'none' : 'flex';
+  if (empty) empty.textContent = rows.length + (rows.length === 1 ? ' alert' : ' alerts');
+  list.innerHTML = rows.map(a => {
+    const vc  = String(a.verdict || '').toLowerCase();
+    const col = c2VerdictColour(a.verdict);
+    return `<button type="button" class="c2h-row ${esc(vc)}" onclick="openC2AlertModal(${esc(a.id)})">
+      <span class="c2h-id">#${esc(a.id)}</span>
+      <span class="vbadge ${esc(vc)}">${esc(a.verdict)}</span>
+      <span class="c2h-url" title="${esc(a.url)}">${esc(a.url)}</span>
+      <span class="c2h-score" style="color:${col}">${Math.round(a.risk_score)}</span>
+      <span class="c2h-time">${esc(fmtTime(a.timestamp))}</span>
+    </button>`;
+  }).join('');
+}
+
+function c2EvidenceHTML(ev) {
+  if (!ev || typeof ev !== 'object' || !Object.keys(ev).length) {
+    return '<div class="c2ev-none">No evidence recorded for this layer.</div>';
+  }
+  let out = '';
+  const feats = ev.features;
+  if (feats && typeof feats === 'object' && Object.keys(feats).length) {
+    out += '<div class="c2ev-sub">Feature vector</div><div class="c2ev-grid">' +
+      Object.keys(feats).sort().map(k => {
+        const v = feats[k];
+        const on = v !== 0 && v !== false && v !== '' && v != null;
+        return `<div class="c2ev-kv ${on ? 'on' : ''}"><span class="c2ev-k" title="${esc(k)}">${esc(k)}</span><span class="c2ev-v">${esc(c2FmtVal(v))}</span></div>`;
+      }).join('') + '</div>';
+  }
+  const flags = ev.flags;
+  if (Array.isArray(flags) && flags.length) {
+    out += '<div class="c2ev-sub">Signals tripped</div><div class="c2ev-chips">' +
+      flags.map(f => `<span class="c2ev-chip">${esc(f)}</span>`).join('') + '</div>';
+  }
+  const rest = Object.keys(ev).filter(k => k !== 'features' && k !== 'flags').sort();
+  if (rest.length) {
+    out += '<div class="c2ev-sub">Measurements</div><div class="c2ev-grid">' +
+      rest.map(k => c2KvHTML(k, ev[k])).join('') + '</div>';
+  }
+  return out || '<div class="c2ev-none">No evidence recorded for this layer.</div>';
+}
+
+// One key/value cell. Values that are objects, arrays or simply long get the
+// full row so the key is not ellipsed down to "off_domai…".
+function c2KvHTML(k, v) {
+  const text = c2FmtVal(v);
+  const wide = (v && typeof v === 'object') || text.length > 22;
+  return `<div class="c2ev-kv ${wide ? 'wide' : ''}">` +
+         `<span class="c2ev-k" title="${esc(k)}">${esc(k)}</span>` +
+         `<span class="c2ev-v">${esc(text)}</span></div>`;
+}
+
+function c2FmtVal(v) {
+  if (v === true) return 'yes';
+  if (v === false) return 'no';
+  if (v === null || v === undefined || v === '') return '—';
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
+  if (typeof v === 'object') return JSON.stringify(v);
+  if (typeof v === 'number' && !Number.isInteger(v)) return String(Math.round(v * 10000) / 10000);
+  return String(v);
+}
+
+async function openC2AlertModal(alertId) {
+  const overlay = document.getElementById('c2-detail-modal-overlay');
+  const body    = document.getElementById('c2-detail-modal-body');
+  if (!overlay || !body) return;
+  _c2DetailId = alertId;
+  overlay.classList.add('open');
+  body.innerHTML = '<div class="c2ev-none">Loading alert detail…</div>';
+
+  let a = null;
+  try { a = await (await fetch(API + '/alerts/' + encodeURIComponent(alertId))).json(); }
+  catch (_) { a = null; }
+  if (!a || a.detail) {
+    body.innerHTML = '<div class="c2ev-none">Could not load alert #' + esc(alertId) + '.</div>';
+    return;
+  }
+
+  const col = c2VerdictColour(a.verdict);
+  const vb  = document.getElementById('c2-detail-modal-verdict');
+  vb.textContent = a.verdict || '';
+  vb.className = 'vbadge ' + String(a.verdict || '').toLowerCase();
+  document.getElementById('c2-detail-modal-url').textContent = a.url || '';
+
+  const order = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'];
+  const layers = (a.layers || []).slice().sort(
+    (x, y) => order.indexOf(x.id) - order.indexOf(y.id));
+
+  const fusion = a.fusion || {};
+  const fusionRows = Object.keys(fusion).sort().map(k => c2KvHTML(k, fusion[k])).join('');
+
+  body.innerHTML = `
+    <div class="c2ev-top">
+      <div class="c2ev-score" style="color:${col}">${Math.round(a.risk_score)}</div>
+      <div class="c2ev-meta">
+        <div>Alert <strong>#${esc(a.id)}</strong> &middot; analysed ${esc(fmtTime(a.timestamp))}</div>
+        <div>${a.verified ? 'Domain was on the verified allow-list' : 'Domain not on the verified allow-list'}</div>
+      </div>
+    </div>
+    <div class="c2ev-sec">Detection layers</div>
+    ${layers.length ? layers.map(l => {
+      const p = Math.round((l.score || 0) * 100);
+      const lc = p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)';
+      return `<div class="c2ev-layer">
+        <div class="c2ev-lhead">
+          <span class="c2ev-lid">${esc(l.id)}</span>
+          <span class="c2ev-lname">${esc(l.name || '')}</span>
+          <span class="c2ev-lscore" style="color:${lc}">${p}%</span>
+        </div>
+        <div class="c2ev-bar"><div class="c2ev-fill" style="width:${p}%;background:${lc}"></div></div>
+        <div class="c2ev-detail">${esc(l.detail || '')}</div>
+        ${c2EvidenceHTML(l.evidence)}
+      </div>`;
+    }).join('') : '<div class="c2ev-none">No layers ran for this alert.</div>'}
+    <div class="c2ev-sec">Score fusion</div>
+    ${fusionRows ? `<div class="c2ev-grid">${fusionRows}</div>`
+                 : '<div class="c2ev-none">No fusion breakdown recorded.</div>'}`;
+}
+
+function closeC2AlertModal() {
+  const overlay = document.getElementById('c2-detail-modal-overlay');
+  if (overlay) overlay.classList.remove('open');
+  _c2DetailId = null;
+}
+
+function c2ExportAlert(kind) {
+  if (_c2DetailId == null) return;
+  window.open(API + '/alerts/' + encodeURIComponent(_c2DetailId) + '/report.' + kind, '_blank');
+}
+
+function c2ExportLog(kind) {
+  const verdict = (document.getElementById('c2h-verdict') || {}).value || '';
+  const limit   = (document.getElementById('c2h-limit')   || {}).value || '50';
+  const qs = new URLSearchParams({ limit, ...(verdict ? { verdict } : {}) });
+  window.open(API + '/alerts/export.' + kind + '?' + qs, '_blank');
 }
 
 // ══════════════════════════════════════════════════════════════

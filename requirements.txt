@@ -6,6 +6,8 @@ playwright
 httpx
 Pillow
 imagehash
+beautifulsoup4
+lxml
 cryptography
 pandas
 numpy

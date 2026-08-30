@@ -26,7 +26,8 @@ def _host_etld1(host: str) -> str:
 
 async def check_runtime(url: str, runtime: Optional[dict]) -> dict:
     if not runtime:
-        return {"score": 0.0, "detail": "No runtime data"}
+        return {"score": 0.0, "detail": "No runtime data",
+                "evidence": {"reason": "no runtime probe data"}}
 
     score = 0.0
     flags = []
@@ -71,4 +72,18 @@ async def check_runtime(url: str, runtime: Optional[dict]) -> dict:
 
     score = min(1.0, score)
     detail = ", ".join(flags) if flags else "No runtime anomalies"
-    return {"score": round(score, 4), "detail": detail}
+    # The detail line truncates the exfil host list to three; the evidence keeps
+    # every observed destination plus the raw probe counters behind each flag.
+    evidence = {
+        "kb_listeners":         kb_listeners,
+        "kb_on_password":       kb_password,
+        "clipboard_listeners":  clip_listen,
+        "clipboard_api":        clip_api,
+        "drag_block":           drag_block,
+        "page_host":            page_host,
+        "exfil_hosts":          list(exfil_hosts),
+        "off_origin_exfil_hosts": off,
+        "form_submit_external": form_external,
+        "flags":                list(flags),
+    }
+    return {"score": round(score, 4), "detail": detail, "evidence": evidence}

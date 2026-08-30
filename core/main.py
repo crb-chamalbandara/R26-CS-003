@@ -42,6 +42,11 @@ from .c2.layer4_form       import check_form
 from .c2.layer5_reputation import check_reputation, aclose as _reputation_aclose
 from .c2.layer6_runtime    import check_runtime
 from .c2.verified_domains  import is_verified
+from .c2.alert_store       import c2_alert_store
+from .c2.reporter          import (generate_html_report as _c2_generate_html_report,
+                                   generate_csv         as _c2_generate_csv,
+                                   generate_siem_export as _c2_generate_siem,
+                                   report_filename      as _c2_report_filename)
 
 # ── C2 fusion: configurable weights + optional learned meta-classifier ─────────
 _FUSION_ORDER    = ["L1", "L2", "L3", "L4", "L5", "L6"]
@@ -58,26 +63,40 @@ except FileNotFoundError:
 
 
 def _fuse_score(layer_results: list, weights: dict,
-                t_susp: float = 30, t_phish: float = 60) -> float:
+                t_susp: float = 30, t_phish: float = 60,
+                breakdown: Optional[dict] = None) -> float:
     """Fused risk 0–100. Uses the learned meta-classifier when present and all six
     layers ran; otherwise a configurable weighted sum over whatever layers ran.
 
     Decisive-signal floor: a near-certain BitB DOM (L1 *heuristic* sub-score, not the
     ML overlay) can never be washed out by the weighted sum — a confirmed
-    browser-in-the-browser kit IS credential phishing on its own."""
+    browser-in-the-browser kit IS credential phishing on its own.
+
+    Pass `breakdown` to have the reasoning recorded into it: which path produced the
+    number, the weights actually applied, and whether the L1 floor raised it. The
+    return value is unchanged, so existing callers are unaffected. Without this an
+    alert stores a bare risk score and there is no way to answer "why 72?" after
+    the fact — which is the whole point of the stored-alert detail view."""
     scores = {lr["id"]: float(lr["score"]) for lr in layer_results}
     risk = 0.0
+    method = "weighted_sum"
     if _fusion_model is not None and all(k in scores for k in _FUSION_ORDER):
         try:
             import pandas as pd
             X = pd.DataFrame([[scores[k] for k in _FUSION_ORDER]], columns=_FUSION_ORDER)
             risk = float(_fusion_model.predict_proba(X)[0][1]) * 100
+            method = "meta_classifier"
         except Exception:
             risk = 0.0
+            method = "weighted_sum"
     if risk == 0.0:
+        method = "weighted_sum"
         risk = sum(s * weights.get(lid, 0.0) for lid, s in scores.items()) * 100
 
+    pre_floor = risk
+    floor_applied = None
     l1 = scores.get("L1")
+    l1_h = None
     if l1 is not None:
         l1_row = next((lr for lr in layer_results if lr["id"] == "L1"), {})
         # heuristic sub-score when available (ML overlay can FP on out-of-distribution
@@ -85,8 +104,25 @@ def _fuse_score(layer_results: list, weights: dict,
         l1_h = float(l1_row.get("heuristic", l1))
         if l1_h >= 0.9:
             risk = max(risk, t_phish)   # definitive BitB kit DOM → PHISHING
+            if risk > pre_floor:
+                floor_applied = "phishing"
         elif l1_h >= 0.7:
             risk = max(risk, t_susp)    # strong multi-rule hit → at least SUSPICIOUS
+            if risk > pre_floor:
+                floor_applied = "suspicious"
+
+    if breakdown is not None:
+        breakdown.update({
+            "method":            method,
+            "layer_scores":      {k: round(v, 4) for k, v in scores.items()},
+            "weights_applied":   ({k: weights.get(k, 0.0) for k in scores}
+                                  if method == "weighted_sum" else None),
+            "pre_floor_risk":    round(pre_floor, 1),
+            "l1_heuristic":      l1_h,
+            "floor_applied":     floor_applied,
+            "thresholds":        {"suspicious": t_susp, "phishing": t_phish},
+            "final_risk":        round(risk, 1),
+        })
     return risk
 
 # ── C3 — Browser Execution-Aware C2 Beacon Detector ───────────────────────────
@@ -198,6 +234,21 @@ _ANALYZING_HTML = """\
 alerts: list = []
 c1_history: list = []
 _pending_installs: dict = {}
+
+
+def _store_c2_alert(record: dict) -> dict:
+    """Write one C2 analysis through to the persistent store.
+
+    Analysis must never fail because persistence did — a read-only home
+    directory or a locked DB should cost the alert log, not the detection. On
+    failure the caller simply gets no id back and the alert stays in-memory
+    exactly as it behaved before the store existed.
+    """
+    try:
+        return c2_alert_store.add_alert(record)
+    except Exception as exc:
+        print(f"[C2] Could not persist alert: {exc}")
+        return {}
 
 _SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 
@@ -368,18 +419,36 @@ async def analyze(req: AnalyzeReq):
                                          settings.get("phishtank_enabled", True))
         else:
             rep = {"score": 0.0, "flagged": False, "detail": "L5 disabled"}
+        timestamp = datetime.now().isoformat()
         if rep.get("flagged"):
             risk_score = round(min(100.0, float(rep["score"]) * 100), 1)
+            l5_row = {"id": "L5", "name": "Reputation Check",
+                      "score": round(float(rep["score"]), 4),
+                      "detail": rep.get("detail", "")}
+            if isinstance(rep.get("evidence"), dict):
+                l5_row["evidence"] = rep["evidence"]
             result = {"url": url, "verdict": "PHISHING", "risk_score": risk_score,
-                      "layers": [{"id": "L5", "name": "Reputation Check",
-                                  "score": round(float(rep["score"]), 4),
-                                  "detail": rep.get("detail", "")}],
+                      "layers": [{k: v for k, v in l5_row.items() if k != "evidence"}],
                       "verified": True,
-                      "timestamp": datetime.now().isoformat()}
+                      "timestamp": timestamp}
+            stored_layers = [l5_row]
         else:
             result = {"url": url, "verdict": "VERIFIED", "risk_score": 0.0,
                       "layers": [], "verified": True,
-                      "timestamp": datetime.now().isoformat()}
+                      "timestamp": timestamp}
+            stored_layers = []
+
+        # Verified-domain outcomes are persisted too — "this domain was on the
+        # allow-list and we let it through" is exactly the decision an audit of a
+        # missed phish needs to see.
+        stored = _store_c2_alert({"url": url, "verdict": result["verdict"],
+                                  "risk_score": result["risk_score"],
+                                  "layers": stored_layers,
+                                  "fusion": {"method": "verified_domain_gate"},
+                                  "verified": True, "timestamp": timestamp})
+        if stored.get("id") is not None:
+            result["id"] = stored["id"]
+
         alerts.insert(0, result)
         if len(alerts) > 500:
             alerts.pop()
@@ -402,7 +471,10 @@ async def analyze(req: AnalyzeReq):
     outcomes = await asyncio.gather(*(coro for _, _, coro in layer_jobs), return_exceptions=True)
     for (lid, lname, _), res in zip(layer_jobs, outcomes):
         if isinstance(res, Exception):
-            layer_results.append({"id": lid, "name": lname, "score": 0.0, "detail": f"Error: {res}"})
+            layer_results.append({"id": lid, "name": lname, "score": 0.0,
+                                  "detail": f"Error: {res}",
+                                  "evidence": {"error": str(res),
+                                               "error_type": type(res).__name__}})
         else:
             row = {"id": lid, "name": lname,
                    "score": round(float(res["score"]), 4),
@@ -410,18 +482,40 @@ async def analyze(req: AnalyzeReq):
             # L1's deterministic heuristic sub-score feeds the fusion floor (§ _fuse_score)
             if lid == "L1" and "heuristic" in res:
                 row["heuristic"] = res["heuristic"]
+            # Per-layer measurements behind the score (feature vectors, matched
+            # hosts, feed verdicts). Carried on the internal row only — it is
+            # stripped from the live payload below and reaches the UI through
+            # the stored alert, so /alerts stays small.
+            if isinstance(res.get("evidence"), dict):
+                row["evidence"] = res["evidence"]
             layer_results.append(row)
 
     t_phish = settings.get("verdict_phishing", 60)
     t_susp  = settings.get("verdict_suspicious", 30)
+    fusion_breakdown: dict = {}
     risk_score = round(min(100.0, max(0.0, _fuse_score(layer_results, weights,
-                                                       t_susp, t_phish))), 1)
+                                                       t_susp, t_phish,
+                                                       breakdown=fusion_breakdown))), 1)
     verdict = "PHISHING" if risk_score >= t_phish else "SUSPICIOUS" if risk_score >= t_susp else "SAFE"
 
-    # strip the internal heuristic sub-score from the public payload
-    public_layers = [{k: v for k, v in lr.items() if k != "heuristic"} for lr in layer_results]
+    # strip the internal heuristic sub-score and the per-layer evidence from the
+    # public payload — /alerts returns up to 50 of these and the evidence would
+    # dominate the response. The detail view fetches it from /alerts/{id}.
+    public_layers = [{k: v for k, v in lr.items() if k not in ("heuristic", "evidence")}
+                     for lr in layer_results]
+    timestamp = datetime.now().isoformat()
     result = {"url": url, "verdict": verdict, "risk_score": risk_score,
-              "layers": public_layers, "timestamp": datetime.now().isoformat()}
+              "layers": public_layers, "timestamp": timestamp}
+
+    # Persist the full record (evidence + fusion reasoning) so it survives a
+    # restart and can be opened, reported on and exported later. The in-memory
+    # list stays as the hot cache the live pane already reads.
+    stored = _store_c2_alert({"url": url, "verdict": verdict, "risk_score": risk_score,
+                              "layers": layer_results, "fusion": fusion_breakdown,
+                              "verified": False, "timestamp": timestamp})
+    if stored.get("id") is not None:
+        result["id"] = stored["id"]
+
     alerts.insert(0, result)
     if len(alerts) > 500:
         alerts.pop()
@@ -431,6 +525,91 @@ async def analyze(req: AnalyzeReq):
 @app.get("/alerts")
 async def get_alerts(limit: int = 50):
     return alerts[:limit]
+
+
+# ── C2 alert log, detail and exports ──────────────────────────────────────────
+# Route order matters: every literal path below must be registered BEFORE
+# /alerts/{alert_id}, or FastAPI matches "history" and "export.csv" as an id.
+
+@app.get("/alerts/history")
+async def alerts_history(limit: int = 50, verdict: str = "", since: str = ""):
+    """Persisted C2 alert log. Unlike /alerts (in-memory, lost on restart) this
+    reads the store, so it survives a restart and can be filtered."""
+    return await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
+
+
+@app.get("/alerts/stats")
+async def alerts_stats():
+    recent = await asyncio.to_thread(c2_alert_store.list_alerts, 500, "", "")
+    by_verdict: dict = {}
+    for a in recent:
+        by_verdict[a["verdict"]] = by_verdict.get(a["verdict"], 0) + 1
+    return {"total_stored": await asyncio.to_thread(c2_alert_store.count),
+            "in_memory": len(alerts),
+            "by_verdict": by_verdict,
+            "db_path": c2_alert_store.path}
+
+
+@app.get("/alerts/export.csv")
+async def alerts_export_csv(limit: int = 500, verdict: str = "", since: str = ""):
+    rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
+    return Response(_c2_generate_csv(rows), media_type="text/csv",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename('alerts')}.csv"})
+
+
+@app.get("/alerts/export.siem")
+async def alerts_export_siem(limit: int = 500, verdict: str = "", since: str = ""):
+    rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
+    payload = json.dumps(_c2_generate_siem(rows), indent=2, default=str)
+    return Response(payload, media_type="application/json",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename('siem')}.json"})
+
+
+@app.get("/alerts/export.json")
+async def alerts_export_json(limit: int = 500, verdict: str = "", since: str = ""):
+    rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
+    payload = json.dumps({"export_type": "C2_Alert_Log",
+                          "generated_at": datetime.now().isoformat(),
+                          "total_alerts": len(rows),
+                          "alerts": rows}, indent=2, default=str)
+    return Response(payload, media_type="application/json",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename('alerts')}.json"})
+
+
+def _get_c2_alert_or_404(alert_id: int) -> dict:
+    alert = c2_alert_store.get_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail=f"No C2 alert with id {alert_id}")
+    return alert
+
+
+@app.get("/alerts/{alert_id}")
+async def get_alert_detail(alert_id: int):
+    """One alert with the full per-layer evidence and fusion breakdown. /alerts
+    strips both to keep the list payload small, so this is what the detail modal
+    and the report endpoints read."""
+    return await asyncio.to_thread(_get_c2_alert_or_404, alert_id)
+
+
+@app.get("/alerts/{alert_id}/report.html")
+async def get_alert_report_html(alert_id: int):
+    alert = await asyncio.to_thread(_get_c2_alert_or_404, alert_id)
+    html = await asyncio.to_thread(_c2_generate_html_report, alert)
+    return Response(html, media_type="text/html",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename(f'report_{alert_id}')}.html"})
+
+
+@app.get("/alerts/{alert_id}/report.json")
+async def get_alert_report_json(alert_id: int):
+    alert = await asyncio.to_thread(_get_c2_alert_or_404, alert_id)
+    return Response(json.dumps(alert, indent=2, default=str),
+        media_type="application/json",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename(f'report_{alert_id}')}.json"})
 
 
 @app.post("/settings")
