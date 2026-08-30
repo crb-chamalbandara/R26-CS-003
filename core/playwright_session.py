@@ -1,48 +1,22 @@
 """
 WebSentinel — Shared Playwright Session Manager
 
-<<<<<<< HEAD
-Detection design
-----------------
-Detection triggers ONLY when the user clicks "Add to Chrome" — never on
-page navigation. The click hook is injected via add_init_script and runs
-silently with no visual change in the browser.
-
-When the button is clicked the hook makes a same-origin fetch to
-  /websentinel-trigger?ext_id=<id>&url=<page_url>
-Playwright intercepts this via context.route() and calls the registered
-click callbacks. All feedback is shown in the WebSentinel Dashboard only.
-
-There is NO notification bar or visual overlay injected into the browser.
-=======
 Combines:
 - C4's persistent profile directory (PROFILE_DIR) and download prefs
 - C1's extension loading, silent "Add to Chrome" click interception hook
 
 Every main-frame navigation across all tabs fires registered nav callbacks.
 "Add to Chrome" clicks fire registered click callbacks with no visual change.
->>>>>>> main
 """
 import asyncio
 import base64
 import os
-<<<<<<< HEAD
-import shutil
-import tempfile
-=======
->>>>>>> main
 from typing import Callable, List, Optional
 from urllib.parse import urlparse, parse_qs
 
 _SKIP_PREFIXES = ("about:", "chrome:", "devtools:", "data:", "blob:")
 _WS_INTERNAL   = ("websentinel-trigger", "websentinel-analyzing")
 
-<<<<<<< HEAD
-# ── Silent click hook ─────────────────────────────────────────────────────────
-# Intercepts "Add to Chrome" button clicks (any tag, handles cr-button and
-# shadow DOM wrappers), prevents the click, and signals the backend via a
-# same-origin fetch that Playwright intercepts.  No visual changes in the browser.
-=======
 # ── Analyzing page — shown in the Playwright tab after intercepting install ───
 _ANALYZING_HTML = """\
 <!DOCTYPE html>
@@ -90,52 +64,10 @@ PROFILE_DIR = _PROFILE_DIR
 # via window.location.replace(). Playwright intercepts the navigation as a route
 # and serves the analyzing page HTML directly, so the browser never reaches
 # Chrome's native extension-install API that causes STATUS_BREAKPOINT.
->>>>>>> main
 _CLICK_HOOK = r"""
 (function () {
   if (window.__ws_hooked) return;
   window.__ws_hooked = true;
-<<<<<<< HEAD
-
-  function getExtId() {
-    var m = window.location.pathname.match(/\/([a-p]{32})(?:\/|$)/i);
-    return m ? m[1].toLowerCase() : null;
-  }
-
-  function isInstallBtn(el) {
-    if (!el) return false;
-    var txt  = (el.textContent  || '').trim().toLowerCase();
-    var aria = (el.getAttribute('aria-label') || '').toLowerCase();
-    return txt  === 'add to chrome'          ||
-           txt.includes('add to chrome')     ||
-           aria.includes('add to chrome')    ||
-           aria.includes('add extension');
-  }
-
-  document.addEventListener('click', function (e) {
-    var el = e.target;
-    for (var i = 0; i < 10; i++) {
-      if (!el) break;
-      if (isInstallBtn(el)) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        var extId = getExtId();
-        if (extId) {
-          /* Same-origin fetch — Playwright intercepts it, no CORS needed */
-          fetch(
-            '/websentinel-trigger'
-            + '?ext_id=' + encodeURIComponent(extId)
-            + '&url='    + encodeURIComponent(window.location.href)
-          ).catch(function () {});
-        }
-        return false;
-      }
-      el = el.parentElement
-           || (el.getRootNode && el.getRootNode().host)
-           || null;
-    }
-  }, true);
-=======
   try { console.log('[WebSentinel] click hook installed on', location.href); } catch(_) {}
   var _ws_intercepted = false;
 
@@ -197,24 +129,12 @@ _CLICK_HOOK = r"""
   // pointerdown fires before click — navigate on the earliest possible event.
   document.addEventListener('pointerdown', handle, true);
   document.addEventListener('click',       handle, true);
->>>>>>> main
 })();
 """
 
 
 class PlaywrightSession:
     def __init__(self) -> None:
-<<<<<<< HEAD
-        self._pw         = None
-        self._ctx        = None
-        self._page       = None
-        self._running    = False
-        self._last_url   = ""
-        self._callbacks: List[Callable] = []       # nav callbacks
-        self._click_cbs:  List[Callable] = []       # click callbacks
-        self._extensions: List[str] = []
-        self._session_dir: Optional[str] = None
-=======
         self._pw          = None
         self._ctx         = None
         self._page        = None
@@ -223,18 +143,12 @@ class PlaywrightSession:
         self._callbacks:  List[Callable] = []   # nav callbacks
         self._click_cbs:  List[Callable] = []   # C1 click callbacks
         self._extensions: List[str]      = []   # loaded extension paths
->>>>>>> main
 
     @property
     def is_running(self) -> bool:
         return self._running and self._ctx is not None
 
     @property
-<<<<<<< HEAD
-    def loaded_extensions(self) -> List[str]:
-        return list(self._extensions)
-
-=======
     def context(self):
         """Expose the BrowserContext so C3 can attach its interceptors."""
         return self._ctx
@@ -266,28 +180,17 @@ class PlaywrightSession:
         except Exception:
             pass
 
->>>>>>> main
     # ── Lifecycle ──────────────────────────────────────────────────
     async def start(self) -> bool:
         if self.is_running:
             return True
 
-<<<<<<< HEAD
-        self._session_dir = tempfile.mkdtemp(prefix="websentinel_")
-=======
         os.makedirs(_PROFILE_DIR, exist_ok=True)
         self._configure_download_prefs()
->>>>>>> main
 
         from playwright.async_api import async_playwright
         self._pw = await async_playwright().start()
 
-<<<<<<< HEAD
-        args = [
-            "--start-maximized",
-            "--no-first-run",
-            "--no-default-browser-check",
-=======
         # --start-maximized + viewport=None crashes Windows Explorer (shell restart)
         # on Windows 11 due to a DWM window-creation race. Use a fixed size instead.
         # --disable-gpu / --in-process-gpu prevent the GPU compositor subprocess from
@@ -301,7 +204,6 @@ class PlaywrightSession:
             "--in-process-gpu",
             "--disable-software-rasterizer",
             "--enable-unsafe-extension-debugging",  # enables Extensions CDP domain for hot-load
->>>>>>> main
         ]
         if self._extensions:
             paths = ",".join(self._extensions)
@@ -312,22 +214,12 @@ class PlaywrightSession:
                 "--disable-component-extensions-with-background-pages",
             ]
         else:
-<<<<<<< HEAD
-            ignore_args = [
-                "--disable-component-extensions-with-background-pages",
-            ]
-=======
             ignore_args = ["--disable-component-extensions-with-background-pages"]
->>>>>>> main
 
         self._ctx = await self._pw.chromium.launch_persistent_context(
-            self._session_dir,
+            _PROFILE_DIR,
             headless=False,
-<<<<<<< HEAD
-            viewport=None,          # disable viewport emulation → content fills the full window
-=======
             viewport={"width": 1400, "height": 900},
->>>>>>> main
             ignore_default_args=ignore_args,
             args=args,
             user_agent=(
@@ -339,13 +231,6 @@ class PlaywrightSession:
             accept_downloads=True,
         )
 
-<<<<<<< HEAD
-        # Silent click hook — no visual changes in browser
-        await self._ctx.add_init_script(script=_CLICK_HOOK)
-
-        # Intercept the signal sent by the click hook
-        await self._ctx.route("**websentinel-trigger*", self._on_install_click)
-=======
         # C1 click hook — silent, no visual changes
         await self._ctx.add_init_script(script=_CLICK_HOOK)
         # Use a regex so the route fires regardless of URL scheme or the exact
@@ -356,7 +241,6 @@ class PlaywrightSession:
             _re.compile(r"/websentinel-trigger(\?|$)"),
             self._on_install_click,
         )
->>>>>>> main
 
         self._ctx.on("close", self._on_browser_close)
         self._ctx.on("page", lambda p: asyncio.ensure_future(self._on_new_page(p)))
@@ -408,74 +292,8 @@ class PlaywrightSession:
         self._ctx  = None
         self._page = None
         self._pw   = None
-        if self._session_dir and os.path.isdir(self._session_dir):
-            shutil.rmtree(self._session_dir, ignore_errors=True)
-            self._session_dir = None
-
-    # ── Extension management ───────────────────────────────────────
-    async def load_extension(self, ext_path: str) -> bool:
-        abs_path = os.path.abspath(ext_path)
-        if abs_path not in self._extensions:
-            self._extensions.append(abs_path)
-        saved_nav   = list(self._callbacks)
-        saved_click = list(self._click_cbs)
-        if self.is_running:
-            await self.stop()
-        self._callbacks  = saved_nav
-        self._click_cbs  = saved_click
-        return await self.start()
-
-    async def unload_extension(self, ext_path: str) -> bool:
-        abs_path = os.path.abspath(ext_path)
-        if abs_path in self._extensions:
-            self._extensions.remove(abs_path)
-        saved_nav   = list(self._callbacks)
-        saved_click = list(self._click_cbs)
-        if self.is_running:
-            await self.stop()
-        self._callbacks  = saved_nav
-        self._click_cbs  = saved_click
-        return await self.start()
-
-    # ── Route handler — click hook signal ─────────────────────────
-    async def _on_install_click(self, route, request) -> None:
-        """
-        Called by Playwright when the click hook fetches /websentinel-trigger.
-        Fulfills the request immediately, then fires the click callbacks.
-        """
-        await route.fulfill(status=200, body=b"ok", content_type="text/plain")
-        try:
-            params  = parse_qs(urlparse(request.url).query)
-            ext_id  = (params.get("ext_id", [""])[0] or "").strip().lower()
-            page_url = (params.get("url",    [""])[0] or "").strip()
-            print(f"[PW] Install click intercepted: ext_id={ext_id}")
-            for cb in list(self._click_cbs):
-                asyncio.create_task(self._safe_click_call(cb, ext_id, page_url))
-        except Exception as exc:
-            print(f"[PW] install click error: {exc}")
-
-    @staticmethod
-    async def _safe_click_call(cb: Callable, ext_id: str, url: str) -> None:
-        try:
-            await cb(ext_id, url)
-        except Exception as exc:
-            import traceback
-            print(f"[PW] click callback error: {exc}")
-            traceback.print_exc()
-
-    # ── Callback registration ──────────────────────────────────────
-    def add_nav_callback(self, cb: Callable) -> None:
-        if cb not in self._callbacks:
-            self._callbacks.append(cb)
-
-    def add_click_callback(self, cb: Callable) -> None:
-        if cb not in self._click_cbs:
-            self._click_cbs.append(cb)
-
-    def clear_callbacks(self) -> None:
-        self._callbacks.clear()
-        self._click_cbs.clear()
-
+        # Persistent profile (_PROFILE_DIR) is intentionally kept on stop —
+        # it stores browser history and extension data for C4 forensics.
 
     # ── Extension management (C1) ──────────────────────────────────
     def register_extension(self, ext_path: str) -> None:
@@ -488,24 +306,9 @@ class PlaywrightSession:
     async def load_extension(self, ext_path: str, restore_url: str = "") -> bool:
         abs_path = os.path.abspath(ext_path)
 
-        # Try CDP-based hot-load first — no restart needed.
-        # Requires --enable-unsafe-extension-debugging (set in start()).
-        if self.is_running and self._page:
-            try:
-                cdp = await self._ctx.new_cdp_session(self._page)
-                result = await cdp.send("Extensions.loadUnpacked", {"path": abs_path})
-                await cdp.detach()
-                ext_cdp_id = result.get("id", "")
-                if ext_cdp_id:
-                    if abs_path not in self._extensions:
-                        self._extensions.append(abs_path)
-                    print(f"[PW] Extension hot-loaded (no restart): id={ext_cdp_id}")
-                    return True
-                print("[PW] CDP loadUnpacked returned no id — falling back to restart")
-            except Exception as cdp_err:
-                print(f"[PW] CDP hot-load unavailable ({cdp_err}) — restarting session")
-
-        # Fallback: must restart — save current page URL to restore after.
+        # Chromium requires extensions to be declared at launch via --load-extension.
+        # CDP hot-loading (Extensions.loadUnpacked) is experimental and unreliable
+        # in Playwright's bundled Chromium — skip it and go straight to restart.
         if abs_path not in self._extensions:
             self._extensions.append(abs_path)
 

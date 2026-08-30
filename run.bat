@@ -1,41 +1,4 @@
 @echo off
-<<<<<<< HEAD
-title WebSentinel
-set "ROOT_DIR=%~dp0"
-set "ELECTRON_DIR=%ROOT_DIR%electron"
-
-echo ============================================
-echo  WebSentinel - Starting...
-echo ============================================
-echo.
-
-if not exist "%ELECTRON_DIR%\package.json" (
-    echo Electron project folder was not found:
-    echo %ELECTRON_DIR%
-    exit /b 1
-)
-
-cd /d "%ELECTRON_DIR%"
-
-if not exist "node_modules\.bin\electron.cmd" (
-    echo Electron dependencies are missing. Run this first:
-    echo cd /d "%ELECTRON_DIR%" ^&^& npm install
-    exit /b 1
-)
-
-:: Kill any leftover backend on port 8001
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8001 " 2^>nul') do (
-    taskkill /PID %%a /F >nul 2>&1
-)
-
-set ELECTRON_RUN_AS_NODE=
-set PYTHONUTF8=1
-
-node_modules\.bin\electron.cmd .
-
-echo.
-echo WebSentinel closed.
-=======
 title WebSentinel — All Components (C1+C2+C3+C4)
 cd /d "%~dp0"
 
@@ -91,7 +54,9 @@ if not exist "electron\node_modules\electron" (
 )
 
 :: ── Free port 8765 if already occupied ────────────────────────
-python -c "import subprocess,os,signal; r=subprocess.run('netstat -ano',shell=True,capture_output=True,text=True); [os.kill(int(l.split()[-1]),signal.SIGTERM) for l in r.stdout.splitlines() if ':8765' in l and 'LISTENING' in l and l.split()[-1]!='0']" >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8765 " 2^>nul') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
 
 echo  [OK] Launching WebSentinel...
 echo  [OK] Backend  ->  http://127.0.0.1:8765
@@ -108,4 +73,3 @@ if errorlevel 1 (
     cd ..
     pause
 )
->>>>>>> main

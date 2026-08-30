@@ -1,0 +1,121 @@
+extension_id,name,reason,source
+aaiolimgbncdaldgbbjkidiijidchhjo,Shoppercom,Policy Violation,MalExt Sentry Database
+acdfdofofabmipgcolilkfhnpoclgpdd,VDP: Best Video Downloader,Malware,https://github.com/mallorybowes/chrome-mal-ids
+acmfnomgphggonodopogfbmkneepfgnh,Bookmark Favicon Changer,In store but Suspicious,https://blog.pulsedive.com/compromised-browser-extensions-a-growing-threat-vector/
+agepkkdokhlaoiaenedmjbfnblfdiboc,One-click reading image (OCR),Removal reason Unknown,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+almalgbpmcfpdaopimbdchdliminoign,Urban Browser Guard,In store but Suspicious,https://www.koi.ai/blog/urban-vpn-browser-extension-ai-conversations-data-collection
+anflghppebdhjipndogapfagemgnlblh,Cute Cursors - Custom Cursor for Chrome™,Adware/click-fraud ,https://palant.info/2023/06/08/another-cluster-of-potentially-malicious-chrome-extensions/
+anlhakiodmebohjmkbciohpglnjifjaa,Speed Dial | Bookmarks | New Tab Page | Quick Access | Custom Search,Malware,MalExt Sentry Database
+aoeacblfmdamdejeiaepojbhohhkmkjh,RadioGaGa,Malware,https://github.com/mallorybowes/chrome-mal-ids
+bhfoemlllidnfefgkeaeocnageepbael,App Phone for Instagram,Malware-infected extension ,https://press.avast.com/third-party-browser-extensions-from-instagram-facebook-vimeo-and-others-infected-with-malware
+bibjcjfmgapbfoljiojpipaooddpkpai,VPN-free.pro - Free Unlimited VPN,Malware,MalExt Sentry Database
+bpconcjcammlapcogcnnelfmaeghhagj,Nimble capture,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+cahhjpmdnfhfkgldefihhcgkaalllbld,Fast Delete Messages,Bundling Unwanted Software,MalExt Sentry Database
+ceibjdigmfbbgcpkkdpmjokkokklodmc,VK Styles - Themes for vk.com,Removal reason Unknown,https://thehackernews.com/2026/02/malicious-chrome-extensions-caught.html
+ceoldlgkhdbnnmojajjgfapagjccblib,VK UnBlock. Works fast.,Manipulated users' browsing ,https://www.kolide.com/blog/recently-discovered-evil-chrome-extensions
+cgmllohkcppmnkfpijpngkplpdbikhlf,Safe Surf,Policy Violation,MalExt Sentry Database
+cgpbghdbejagejmciefmekcklikpoeel,Vimeo™ Video Downloader,Privacy-invasive extension collecting user data ,https://www.kolide.com/blog/recently-discovered-evil-chrome-extensions
+chlpbdodahbpifpjbcoocpfadoffdbpb,Slope Unblocked Game,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+clabdidkhcmbhkjnggoeecpldlegflmk,Rainbow Wallpapers HD New Tab,Malware,MalExt Sentry Database
+cmedhionkhpnakcndndgjdbohmhepckk,Adblock for Youtube™,Malware,https://www.island.io/blog/badblocker-11-million-users-one-server-call-away-from-compromise
+codgofkgobbmgglciccjabipdlgefnch,Btools,In store but Suspicious,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+condlopdddofpgcdjfnoepbdkcgckmgb,Translator,Malware,MalExt Sentry Database
+dafaeffkjlknkjdcdalddcjggdngomih,Sexy Tab,Search Hijacking,https://malext.io/reports/SearchJack/
+dbfmnekepjoapopniengjbcpnbljalfg,Infinity New Tab,In store but Suspicious,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+deljjimclpnhngmikaiiodgggdniaooh,Themes for Chrome and YouTube™ Picture in Picture,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+dijcdmefkmlhnbkcejcmepheakikgpdg,Wondertab,Removal reason Unknown,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+djkddblnfgendjoklmfmocaboelkmdkm,Zoomcoder Extension,Policy Violation,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+dkbpkjhegfanacodkmfjeackckmehkfp,Open a new tab on the righ,Removal reason Unknown,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+dpkijnoebmekoiafbkledpjhkpgllkfe,Reddit Nav,Policy Violation,MalExt Sentry Database
+dpmdoefacegagjoifomgchhhppgdkaco,Copy - paste orders From ebay to aliexpress,Policy Violation,MalExt Sentry Database
+eagiakjmjnblliacokhcalebgnhellfi,WeTab,Removal reason Unknown,https://www.malwarebytes.com/blog/news/2025/12/sleeper-browser-extensions-woke-up-as-spyware-on-4-million-devices
+edkmbojkflfanganifkkajmldejmhlec,Gocashback Deals Rebates,Policy Violation,MalExt Sentry Database
+eeiiknnphladbapfamiamfimnnnodife,Search for a Cause,Search Hijacking,https://malext.io/reports/SearchJack/
+egmlbimojingfmchokcniklnhnecdecf,Unseen - Chat Privacy,Malware,MalExt Sentry Database
+ehpgcagmhpndkmglombjndkdmggkgnge,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+eikbfklcjampfnmclhjeifbmfkpkfpbn,Universal Video Downloader,compromised extension in the CacheFlow campaign ,https://www.gendigital.com/blog/insights/research/backdoored-browser-extensions-hid-malicious-traffic-in-analytics-requests
+ejkiikneibegknkgimmihdpcbcedgmpo,Volume Booster,Bundling Unwanted Software,https://malext.io/reports/QuietBoost/
+eliokoocofjemjjohafbmhmgjmedomko,Threat Analytics Search,Policy Violation,MalExt Sentry Database
+emeokgokialpjadjaoeiplmnkjoaegng,Web Paint,adware redirects,https://gist.github.com/FelixWolf/066fd5ca2672f15089e7712827140bd9
+eoeoincjhpflnpdaiemgbboknhkblome,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+eppiocemhmnlbhjplcgkofciiegomcon,Urban VPN Proxy,In store but Suspicious,https://www.koi.ai/blog/urban-vpn-browser-extension-ai-conversations-data-collection
+faenbbkpfnklhncjianlfllkfekgghih,GitHub Jira Integration,Policy Violation,MalExt Sentry Database
+famklkiljmbebjohjekddkmpicoepojf,??????? - ????? ????? ??????,Search Hijacking,https://malext.io/reports/SearchJack/
+fbcgkphadgmbalmlklhbdagcicajenei,Emoji keyboard emojis for chrome,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+fdpohaocaechififmbbbbbknoalclacl,Gofullpage Full Page Scre,Policy Violation,MalExt Sentry Database
+fedimamkpgiemhacbdhkkaihgofncola,WAToolkit,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+feflcgofneboehfdeebcfglbodaceghj,Urban AdBlocker,In store but Suspicious,https://www.koi.ai/blog/urban-vpn-browser-extension-ai-conversations-data-collection
+fefodpegbocmidnfphgggnjcicipaibk,Notepad Online,Policy Violation,MalExt Sentry Database
+fgaapohcdolaiaijobecfleiohcfhdfb,DM for Instagram,Malware ,https://chrome-stats.com/d/fgaapohcdolaiaijobecfleiohcfhdfb
+fmgaogkbodhdhhbgkphhbokciiecllno,Download Manager Pro,Removal reason Unknown,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+fmiefmaepcnjahoajkfckenfngfehhma,Translate Man Plus,Removal reason Unknown,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+foiopecknacmiihiocgdjgbjokkpkohc,VPN Professional - Free Secure and Unlimited VPN Proxy Chrome Extension,Malware,MalExt Sentry Database
+gabbbocakeomblphkmmnoamkioajlkfo,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+gabfmnliflodkdafenbcpjdlppllnemd,Save Image As Type,Malware,MalExt Sentry Database
+gaoflciahikhligngeccdecgfjngejlh,Emojis - Emoji Keyboard,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+gbnahglfafmhaehbdmjedfhdmimjcbed,"AutoBuy Flash Sales, Deals, and Coupons",Malware,https://thehackernews.com/2022/08/experts-find-malicious-cookie-stuffing.html
+gdocgbfmddcfnlnpmnghmjicjognhonm,KProxy,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+gefiaaeadjbmhjndnhedfccdjjlgjhho,Enhanced Image Viewer,Malware,MalExt Sentry Database
+ggkbabbeajcoacmcgobollpffemnkkll,Homr Home Bookmark Zillow,Policy Violation,MalExt Sentry Database
+ggolfgbegefeeoocgjbmkembbncoadlb,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+gidejehfgombmkfflghejpncblgfkagj,Cuponomia - Cupom e Cashback,In store but Suspicious,https://secureannex.com/blog/searching-for-something-unknow/
+gihpjdkaalndncchppfeoeeelkdemfim,Kung Fu Panda 3,Policy Violation,MalExt Sentry Database
+giolfdhelhkknfnplanblpbjeaiojikm,Recordbro Screen Recorder,Policy Violation,MalExt Sentry Database
+goiffchdhlcehhgdpdbocefkohlhmlom,??????,In store but Suspicious,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+golbngjhpfdobdopaebpdofbmhghfkpm,Urban Dictionary Now,Policy Violation,MalExt Sentry Database
+gooogiookckojjoinofnjfogcfocfkbn,YouTube Music Web Player Search,Search Hijacking,https://malext.io/reports/SearchJack/
+hblfamjdifnhiioifbfamlnkjfenhfed,Ai Powered Dealdazzle Sea,Policy Violation,MalExt Sentry Database
+hdbipekpdpggjaipompnomhccfemaljm,friGate3 proxy helper,Malware,https://securelist.com/threat-in-your-browser-extensions/107181/
+hegneaniplmfjcmohoclabblbahcbjoe,Video Ad Blocker Plus For,Policy Violation,MalExt Sentry Database
+hjfdehobejconpkfgoldlpiidddkmbkm,Dideo,Policy Violation,MalExt Sentry Database
+hmooaemjmediafeacjplpbpenjnpcneg,Page Refresh,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+ibibeegnncapfdcgpdnnbjbbojglhlmk,OKmusic - ??????? ?????? ? ????? ????????????? | OK.ru Music Downloader,Malware,MalExt Sentry Database
+ibiejjpajlfljcgjndbonclhcbdcamai,Speedtest Pro-Free Online Internet Speed Test,Malware,https://www.koi.ai/blog/4-million-browsers-infected-inside-shadypanda-7-year-malware-campaign
+idgpnmonknjnojddfkpgkljpfnnfcklj,Modheader Modify Http Headers,Malware,MalExt Sentry Database
+ihbiedpeaicgipncdnnkikeehnjiddck,Weather,Malware,https://www.malwarebytes.com/blog/news/2025/07/millions-of-people-spied-on-by-malicious-browser-extensions-in-chrome-and-edge
+iibnodnghffmdcebaglfgnfkgemcbchf,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+imkngaibigegepnlckfcbecjoilcjbhf,Stream Video Downloader,Malware,MalExt Sentry Database
+inpoelmimmiplkcldmdljiboidfkcfbh,Presearch.com Search With Us,Search Hijacking,https://malext.io/reports/SearchJack
+ipijpioemaopkhpjhihdibldodmdpfjl,Smoji - Emoji and Sound Messaging,Policy Violation,MalExt Sentry Database
+jbnopeoocgbmnochaadfnhiiimfpbpmf,Address bar search engine switcher,Removal reason Unknown,https://www.koi.ai/blog/4-million-browsers-infected-inside-shadypanda-7-year-malware-campaign
+jdjldbengpgdcfkljfdmakdgmfpneldd,Video Effects for YouTube And Audio Enhancer,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+jkmakgpojigahjdalffbkimpnpabelio,Netflix Picture in Picture now for Prime & D+ [QVI],Bundling Unwanted Software,MalExt Sentry Database
+kacljcbejojnapnmiifgckbafkojcncf,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+kekdpkbijjffmohdaonbpeeaiknhbkhj,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+kfokdmfpdnokpmpbjhjbcabgligoelgp,Chrome Audio Capture,Policy Violation,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+kihfdgpnhlkopkiadeopobhbpeplffam,All Friends Remover,Malware,MalExt Sentry Database
+kkodiihpgodmdankclfibbiphjkfdenh,ParrotTalks???,In store but Suspicious,https://blog.pulsedive.com/compromised-browser-extensions-a-growing-threat-vector/
+klbibkeccnjlkjkiokjodocebajanakg,The Great Suspender,Malware,https://github.com/mallorybowes/chrome-mal-ids
+kpbdaaemjmcpnacfkdjiohoifagldhml,Launch Extension,Search Hijacking,https://malext.io/reports/SearchJack/
+lagdcjmbchphhndlbpfajelapcodekll,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+lefcpjbffalgdcdgidjdnmabfenecjdf,Github Code Folding,Policy Violation,MalExt Sentry Database
+lepdjbhbkpfenckechpdfohdmkhogojf,OneTab Plus:Tab Manage & Productivity,Removal reason Unknown,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+lgdhgkhhglmhiacjecigalebiffjklec,Github Markdown Writer,Policy Violation,MalExt Sentry Database
+lgjogljbnbfjcaigalbhiagkboajmkkj,Backdoored Browser Extension (Avast),Bundling Unwanted Software,https://github.com/mallorybowes/chrome-mal-ids
+llimhhconnjiflfimocjggfjdlmlhblm,Reader Mode,In store but Suspicious,https://www.esentire.com/security-advisories/update-malicious-chrome-extension-campaign
+lmhbkinmjbfihpkihjdhcagnigpklinh,Github File Diff,Policy Violation,MalExt Sentry Database
+lmhnpgogldejgkbmmenhhkfanfhbdogo,Gitlab Dark Theme,Policy Violation,MalExt Sentry Database
+mbacbcfdfaapbcnlnbmciiaakomhkbkb,friGate CDN - smooth access to websites,Malware,https://github.com/mallorybowes/chrome-mal-ids
+mbindhfolmpijhodmgkloeeppmkhpmhc,Email Hunter,In store but Suspicious,https://www.esentire.com/security-advisories/update-malicious-chrome-extension-campaign
+mdaboflcmhejfihjcbmdiebgfchigjcf,Blipshot: one click full page screenshots,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+mdnmhbnbebabimcjggckeoibchhckemm,friGate Light,Malware,https://github.com/mallorybowes/chrome-mal-ids
+mdpgppkombninhkfhaggckdmencplhmg,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+meffljleomgifbbcffejnmhjagncfpbd,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+meobjhkdifjealkiaanikkpajiaalcad,Otaku! - ??????,Removal reason Unknown,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+micbejknmlmdembjamkhplmdnfccfihk,Izza Bot,Malware,https://malext.io/reports/WaSteal/
+mmpfmolbdhdfoblfggigchncdgmdnjha,One-click generate QR code,Removal reason Unknown,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+mnafnfdagggclnaggnjajohakfbppaih,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+ngahaphlngmdfhbhkplbglnfhehnpgdb,Ads Blocker,Malware,MalExt Sentry Database
+nlgphodeccebbcnkgmokeegopgpnjfkc,Super dark mode,Malware,https://gitlab-com.gitlab.io/gl-security/security-tech-notes/threat-intelligence-tech-notes/malicious-browser-extensions-feb-2025/
+nngjdplpkehilhcinpccdbkjaknkkifl,Newsit: Hacker News and Reddit Links,Policy Violation,MalExt Sentry Database
+nnnkddnnlpamobajfibfdgfnbcnkgngh,Infinity New Tab (Pro),Malware,https://www.koi.ai/blog/darkspectre-unmasking-the-threat-actor-behind-7-8-million-infected-browsers
+nnpnnpemnckcfdebeekibpiijlicmpom,VPNCity - Fast &amp; Unlimited VPN | Unblocker,In store but Suspicious,https://www.esentire.com/security-advisories/update-malicious-chrome-extension-campaign
+ogbhbgkiojdollpjbhbamafmedkeockb,Earny,Removal reason Unknown,https://www.esentire.com/security-advisories/update-malicious-chrome-extension-campaign
+oknpgmaeedlbdichgaghebhiknmghffa,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+olkpikmlhoaojbbmmpejnimiglejmboe,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+omdkehkdnojcndhhilglklegbakenkgb,Best Homepage Ever: Custom New Tab Launcher,Search Hijacking,https://malext.io/reports/SearchJack/
+pbdgglfabhmhpbfgakckfhdbhjiedmnm,Garfield The Movie,Policy Violation,MalExt Sentry Database
+pfnmibjifkhhblmdmaocfohebdpfppkf,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+pgabmkcldlelbhcookaealohoeknnapn,???????? Top Page,Policy Violation,MalExt Sentry Database
+pjbgfifennfhnbkhoidkdchbflppjncb,Not Found,Not yet confirmed,"""chrome-mal-ids"" Dataset"
+pookachmhghnpgjhebhilcidgdphdlhi,NewTab. Search,Search Hijacking,https://malext.io/reports/SearchJack/

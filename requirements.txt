@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 pydantic
+python-multipart
 playwright
 httpx
 Pillow
