@@ -54,11 +54,19 @@ _RE_ZINDEX_HIGH  = re.compile(r'z-index\s*:\s*(99[0-9]{2,}|[1-9]\d{4,})')
 _RE_WIDTH_FULL   = re.compile(r'width\s*:\s*100(vw|%)')
 _RE_HEIGHT_FULL  = re.compile(r'height\s*:\s*100(vh|%)')
 _RE_DRAG         = re.compile(r'(ondragstart|onselectstart|user-select\s*:\s*none)')
-_RE_FAKE_BAR     = re.compile(r'(fake.*address|address.*bar|browser.*bar)')
+_RE_FAKE_BAR     = re.compile(r'(?:id|class)\s*=\s*["\'][^"\']*(?:fake[-\w]*address|address[-\w]*bar|browser[-\w]*bar)')
 _RE_ZINDEX_NUM   = re.compile(r'z-index\s*:\s*(\d+)')
 _RE_POS_FIXED    = re.compile(r'position\s*:\s*fixed')
 _RE_OVERLAY      = re.compile(r'\b(overlay|modal)\b')
 _RE_WINDOW_LOC   = re.compile(r'window\.location')
+
+# ── Real-kit signatures (mrd0x-style BitB) ────────────────────
+# Real BitB kits draw a fake OS/browser window: a title bar + a spoofed URL bar
+# (ids/classes like "url-bar"/"title-bar") plus a fake SSL padlock, and make the
+# fake window draggable in JS to sell the illusion.
+_RE_WINDOW_CHROME = re.compile(r'(?:id|class)\s*=\s*["\'][^"\']*(?:url-bar|title-bar|fake-address|browser-bar)')
+_RE_LOCK_MOTIF    = re.compile(r'(?:src|href)\s*=\s*["\'][^"\']*(?:ssl|padlock|lock)[^"\']*\.(?:svg|png|ico)|🔒|&#128274;')
+_RE_DRAG_WINDOW   = re.compile(r'mousedown[\s\S]{0,500}mousemove|addclass\(\s*["\']drag|classlist\.add\(\s*["\']drag')
 
 # ── Result cache — L1 is a pure function of (url, dom); memoize to skip re-parsing the
 # same page (reloads, SPA re-fires, multiple tabs on the same site). ──
@@ -169,6 +177,19 @@ def _score_bitb(url: str, dom: str) -> dict:
         heuristic_score += 0.3
         flags.append("fake address-bar element")
 
+    # R6 — fake browser window chrome: spoofed URL/title bar + lock motif.
+    # Requires BOTH signals so legitimate sites with a "title-bar" UI don't trip it.
+    chrome_hit = bool(_RE_WINDOW_CHROME.search(dom_lo)) and bool(_RE_LOCK_MOTIF.search(dom_lo))
+    if chrome_hit:
+        heuristic_score += 0.35
+        flags.append("fake browser window chrome")
+
+    # R7 — simulated draggable window: JS drag loop that moves a fake window.
+    # Only counts alongside R6 (drag code alone is common in benign sliders/carousels).
+    if chrome_hit and _RE_DRAG_WINDOW.search(dom_lo):
+        heuristic_score += 0.25
+        flags.append("simulated draggable window")
+
     heuristic_score = min(1.0, heuristic_score)
 
     # ── ML model overlay ──────────────────────────────────────
@@ -181,12 +202,14 @@ def _score_bitb(url: str, dom: str) -> dict:
             detail_parts = [f"ML:{ml_prob:.2f}"]
             if flags:
                 detail_parts.append(", ".join(flags))
-            return {"score": round(final_score, 4), "detail": " | ".join(detail_parts)}
+            return {"score": round(final_score, 4), "detail": " | ".join(detail_parts),
+                    "heuristic": round(heuristic_score, 4)}
         except Exception:
             pass  # fall through to heuristic result
 
     detail = ", ".join(flags) if flags else "No BitB indicators"
-    return {"score": round(heuristic_score, 4), "detail": detail}
+    return {"score": round(heuristic_score, 4), "detail": detail,
+            "heuristic": round(heuristic_score, 4)}
 
 
 async def check_bitb(url: str, dom: str) -> dict:

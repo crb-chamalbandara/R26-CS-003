@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!--
+  Realistic LEGITIMATE login page — designed to carry the false-positive traps
+  L1 heuristics look for, while being completely benign:
+  - fixed header with high z-index        (R1/R2 territory)
+  - user-select: none on the nav          (R4 territory)
+  - full-viewport cookie-consent modal    (R3 territory)
+  - same-origin password form             (must NOT fire L4)
+  - security-tips text mentioning the address bar (narrative text — must NOT fire R5)
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sign in - Acme Bank</title>
+<link rel="icon" href="https://www.acmebank.com/favicon.ico"/>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: #f7f7f8; }
+  header { position: fixed; top: 0; left: 0; width: 100%; height: 64px; z-index: 1030;
+           background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.1); user-select: none;
+           display: flex; align-items: center; padding: 0 24px; }
+  header nav a { margin-right: 18px; color: #143b66; text-decoration: none; font-size: 14px; }
+  main { margin: 104px auto 0; max-width: 420px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 28px; }
+  label { display: block; font-size: 13px; margin-top: 14px; }
+  input { width: 100%; padding: 9px; margin-top: 4px; border: 1px solid #bbb; border-radius: 4px; }
+  button.submit { width: 100%; margin-top: 18px; padding: 11px; background: #143b66;
+                  color: #fff; border: 0; border-radius: 4px; font-size: 15px; cursor: pointer; }
+  .modal-veil { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1080;
+                background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+  .modal-box { background: #fff; border-radius: 8px; padding: 24px; max-width: 360px; }
+  footer { margin: 64px auto 32px; max-width: 420px; color: #777; font-size: 12px; }
+</style>
+</head>
+<body>
+  <header>
+    <b style="margin-right:24px">Acme Bank</b>
+    <nav>
+      <a href="/accounts">Accounts</a>
+      <a href="/cards">Cards</a>
+      <a href="/support">Support</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="card">
+      <h1 style="font-size:20px">Sign in to online banking</h1>
+      <form action="/auth/login" method="POST">
+        <label>Username
+          <input type="text" name="user" autocomplete="username"/></label>
+        <label>Password
+          <input type="password" name="pass" autocomplete="current-password"/></label>
+        <button class="submit" type="submit">Sign in</button>
+      </form>
+      <p style="font-size:13px"><a href="/auth/forgot">Forgot password?</a> ·
+         <a href="/enroll">Enroll in online banking</a></p>
+    </div>
+
+    <section style="margin-top:28px;font-size:13px;color:#444">
+      <h2 style="font-size:15px">Security tips</h2>
+      <p>We will never ask for your password by email or phone.</p>
+      <p>Before signing in, check that your browser's address bar shows
+         <b>www.acmebank.com</b>.</p>
+      <p>Enable two-factor authentication for extra protection.</p>
+    </section>
+  </main>
+
+  <div class="modal-veil" id="cookie-modal">
+    <div class="modal-box">
+      <h3 style="margin-top:0">Your privacy</h3>
+      <p style="font-size:13px">We use cookies to keep you signed in and improve your
+         experience. See our <a href="/privacy">privacy notice</a>.</p>
+      <button class="submit" onclick="document.getElementById('cookie-modal').remove()">
+        Accept and continue</button>
+    </div>
+  </div>
+
+  <footer>© 2026 Acme Bank. Member FDIC. Equal Housing Lender.</footer>
+  <script src="https://cdn.acmebank.com/app.js"></script>
+  <script src="https://cdn.acmebank.com/analytics.js"></script>
+</body>
+</html>
