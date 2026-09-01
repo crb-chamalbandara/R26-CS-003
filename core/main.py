@@ -22,7 +22,12 @@ from pydantic import BaseModel
 # ── C1 — Malicious Browser Extension Analyzer ─────────────────────────────────
 from .c1.analyzer  import analyze_extension as analyze_extension_c1
 from .c1.analyzer  import sandbox_extension as sandbox_extension_c1
+from .c1.analyzer  import (
+    blocklist_probe, blocklist_coverage, blocklist_incomplete_ids,
+    document_blocklist_entry, reload_blocklist,
+)
 from .c1.db        import save_result as c1_db_save, get_history as c1_db_history
+from .c1.enrich    import sha256_of, store_from_url
 from .c1.crx_utils import (
     extract_ext_id_from_url, is_webstore_url,
     fetch_crx_from_store, parse_crx_bytes, parse_crx_file,
@@ -37,6 +42,11 @@ from .c2.layer4_form       import check_form
 from .c2.layer5_reputation import check_reputation, aclose as _reputation_aclose
 from .c2.layer6_runtime    import check_runtime
 from .c2.verified_domains  import is_verified
+from .c2.alert_store       import c2_alert_store
+from .c2.reporter          import (generate_html_report as _c2_generate_html_report,
+                                   generate_csv         as _c2_generate_csv,
+                                   generate_siem_export as _c2_generate_siem,
+                                   report_filename      as _c2_report_filename)
 
 # ── C2 fusion: configurable weights + optional learned meta-classifier ─────────
 _FUSION_ORDER    = ["L1", "L2", "L3", "L4", "L5", "L6"]
@@ -53,26 +63,40 @@ except FileNotFoundError:
 
 
 def _fuse_score(layer_results: list, weights: dict,
-                t_susp: float = 30, t_phish: float = 60) -> float:
+                t_susp: float = 30, t_phish: float = 60,
+                breakdown: Optional[dict] = None) -> float:
     """Fused risk 0–100. Uses the learned meta-classifier when present and all six
     layers ran; otherwise a configurable weighted sum over whatever layers ran.
 
     Decisive-signal floor: a near-certain BitB DOM (L1 *heuristic* sub-score, not the
     ML overlay) can never be washed out by the weighted sum — a confirmed
-    browser-in-the-browser kit IS credential phishing on its own."""
+    browser-in-the-browser kit IS credential phishing on its own.
+
+    Pass `breakdown` to have the reasoning recorded into it: which path produced the
+    number, the weights actually applied, and whether the L1 floor raised it. The
+    return value is unchanged, so existing callers are unaffected. Without this an
+    alert stores a bare risk score and there is no way to answer "why 72?" after
+    the fact — which is the whole point of the stored-alert detail view."""
     scores = {lr["id"]: float(lr["score"]) for lr in layer_results}
     risk = 0.0
+    method = "weighted_sum"
     if _fusion_model is not None and all(k in scores for k in _FUSION_ORDER):
         try:
             import pandas as pd
             X = pd.DataFrame([[scores[k] for k in _FUSION_ORDER]], columns=_FUSION_ORDER)
             risk = float(_fusion_model.predict_proba(X)[0][1]) * 100
+            method = "meta_classifier"
         except Exception:
             risk = 0.0
+            method = "weighted_sum"
     if risk == 0.0:
+        method = "weighted_sum"
         risk = sum(s * weights.get(lid, 0.0) for lid, s in scores.items()) * 100
 
+    pre_floor = risk
+    floor_applied = None
     l1 = scores.get("L1")
+    l1_h = None
     if l1 is not None:
         l1_row = next((lr for lr in layer_results if lr["id"] == "L1"), {})
         # heuristic sub-score when available (ML overlay can FP on out-of-distribution
@@ -80,15 +104,35 @@ def _fuse_score(layer_results: list, weights: dict,
         l1_h = float(l1_row.get("heuristic", l1))
         if l1_h >= 0.9:
             risk = max(risk, t_phish)   # definitive BitB kit DOM → PHISHING
+            if risk > pre_floor:
+                floor_applied = "phishing"
         elif l1_h >= 0.7:
             risk = max(risk, t_susp)    # strong multi-rule hit → at least SUSPICIOUS
+            if risk > pre_floor:
+                floor_applied = "suspicious"
+
+    if breakdown is not None:
+        breakdown.update({
+            "method":            method,
+            "layer_scores":      {k: round(v, 4) for k, v in scores.items()},
+            "weights_applied":   ({k: weights.get(k, 0.0) for k in scores}
+                                  if method == "weighted_sum" else None),
+            "pre_floor_risk":    round(pre_floor, 1),
+            "l1_heuristic":      l1_h,
+            "floor_applied":     floor_applied,
+            "thresholds":        {"suspicious": t_susp, "phishing": t_phish},
+            "final_risk":        round(risk, 1),
+        })
     return risk
 
 # ── C3 — Browser Execution-Aware C2 Beacon Detector ───────────────────────────
-from .c3.context_tagger import c3_tagger
-from .c3.interceptor    import c3_interceptor
-from .c3.analyzer       import c3_analyzer
-from .c3.alert_store    import c3_alert_store
+from .c3.context_tagger  import c3_tagger
+from .c3.interceptor     import c3_interceptor
+from .c3.analyzer        import c3_analyzer
+from .c3.alert_store     import c3_alert_store
+from .c3.reputation_engine import set_virustotal_key as _c3_set_virustotal_key
+from .c3.reputation_engine import set_abuseipdb_key as _c3_set_abuseipdb_key
+from .c3.reputation_engine import set_otx_key as _c3_set_otx_key
 
 # ── C4 — Browser Artifact Forensic Correlation Engine ─────────────────────────
 from .c4 import (
@@ -191,13 +235,36 @@ alerts: list = []
 c1_history: list = []
 _pending_installs: dict = {}
 
+
+def _store_c2_alert(record: dict) -> dict:
+    """Write one C2 analysis through to the persistent store.
+
+    Analysis must never fail because persistence did — a read-only home
+    directory or a locked DB should cost the alert log, not the detection. On
+    failure the caller simply gets no id back and the alert stays in-memory
+    exactly as it behaved before the store existed.
+    """
+    try:
+        return c2_alert_store.add_alert(record)
+    except Exception as exc:
+        print(f"[C2] Could not persist alert: {exc}")
+        return {}
+
 _SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 
 _SETTINGS_DEFAULTS: dict = {
     "layers": {"l1": True, "l2": True, "l3": True, "l4": True, "l5": True, "l6": True},
     "whitelist": [],
-    "gsb_key": "",
+    "gsb_key": "",           # C2 Layer-5 phishing check (Google Safe Browsing)
+    "abuseipdb_key": "",     # C3 reputation engine
+    "otx_key": "",           # C3 reputation engine
+    "virustotal_key": "",    # C3 reputation engine (replaced GSB here 2026-08-29)
     "pw_home_url": "",
+    # C1 dynamic sandbox containment. "auto" picks the strongest backend the
+    # machine can actually provide; naming one forces it (and reports a
+    # downgrade in the result if it turns out to be unavailable).
+    "c1_isolation_backend": "auto",       # auto | windows_sandbox | inprocess
+    "c1_sandbox_network":   "unrestricted",  # unrestricted | disabled
     "warn_threshold": 30,            # risk_score >= this -> warning banner
     "block_threshold": 60,           # risk_score >= this -> blocking interstitial
     "interstitial_enabled": True,    # show in-browser warning/block overlays
@@ -226,6 +293,22 @@ def _save_settings(s: dict) -> None:
         pass
 
 settings: dict = _load_settings()
+_c3_set_virustotal_key(settings.get("virustotal_key", ""))
+_c3_set_abuseipdb_key(settings.get("abuseipdb_key", ""))
+_c3_set_otx_key(settings.get("otx_key", ""))
+
+
+def _apply_sandbox_settings() -> dict:
+    """Push the stored isolation choice into the C1 sandbox module."""
+    from .c1 import sandbox as c1_sandbox
+    backend = settings.get("c1_isolation_backend", "auto")
+    return c1_sandbox.configure(
+        backend="" if backend == "auto" else backend,
+        network_policy=settings.get("c1_sandbox_network", ""),
+    )
+
+
+_apply_sandbox_settings()
 
 # ── Request / response models ──────────────────────────────────────────────────
 class AnalyzeReq(BaseModel):
@@ -237,8 +320,13 @@ class AnalyzeReq(BaseModel):
 class SettingsReq(BaseModel):
     layers: dict
     whitelist: List[str] = []
-    gsb_key: str = ""
+    gsb_key: str = ""            # C2 Layer-5 phishing check
+    abuseipdb_key: str = ""      # C3 reputation engine
+    otx_key: str = ""            # C3 reputation engine
+    virustotal_key: str = ""     # C3 reputation engine
     pw_home_url: str = ""
+    c1_isolation_backend: str = "auto"
+    c1_sandbox_network: str = "unrestricted"
     warn_threshold: int = 30
     block_threshold: int = 60
     interstitial_enabled: bool = True
@@ -265,6 +353,22 @@ class WebstoreLookupReq(BaseModel):
 
 class ApproveInstallReq(BaseModel):
     ext_id: str
+
+class BlocklistDocumentReq(BaseModel):
+    """Document one under-reported blocklist row on demand."""
+    ext_id: str
+    sandbox: bool = True
+
+class BlocklistBackfillReq(BaseModel):
+    """Sweep the sheet and document every row that still has gaps.
+
+    `sandbox` is off by default: a full sweep is thousands of extensions and
+    each sandbox run costs ~20 s of headed Chromium, so bulk passes stay on
+    the static stack. Live intercepts always run the sandbox.
+    """
+    limit: int = 25
+    sandbox: bool = False
+    concurrency: int = 4
 
 class C3CollectReq(BaseModel):
     label: int
@@ -315,18 +419,36 @@ async def analyze(req: AnalyzeReq):
                                          settings.get("phishtank_enabled", True))
         else:
             rep = {"score": 0.0, "flagged": False, "detail": "L5 disabled"}
+        timestamp = datetime.now().isoformat()
         if rep.get("flagged"):
             risk_score = round(min(100.0, float(rep["score"]) * 100), 1)
+            l5_row = {"id": "L5", "name": "Reputation Check",
+                      "score": round(float(rep["score"]), 4),
+                      "detail": rep.get("detail", "")}
+            if isinstance(rep.get("evidence"), dict):
+                l5_row["evidence"] = rep["evidence"]
             result = {"url": url, "verdict": "PHISHING", "risk_score": risk_score,
-                      "layers": [{"id": "L5", "name": "Reputation Check",
-                                  "score": round(float(rep["score"]), 4),
-                                  "detail": rep.get("detail", "")}],
+                      "layers": [{k: v for k, v in l5_row.items() if k != "evidence"}],
                       "verified": True,
-                      "timestamp": datetime.now().isoformat()}
+                      "timestamp": timestamp}
+            stored_layers = [l5_row]
         else:
             result = {"url": url, "verdict": "VERIFIED", "risk_score": 0.0,
                       "layers": [], "verified": True,
-                      "timestamp": datetime.now().isoformat()}
+                      "timestamp": timestamp}
+            stored_layers = []
+
+        # Verified-domain outcomes are persisted too — "this domain was on the
+        # allow-list and we let it through" is exactly the decision an audit of a
+        # missed phish needs to see.
+        stored = _store_c2_alert({"url": url, "verdict": result["verdict"],
+                                  "risk_score": result["risk_score"],
+                                  "layers": stored_layers,
+                                  "fusion": {"method": "verified_domain_gate"},
+                                  "verified": True, "timestamp": timestamp})
+        if stored.get("id") is not None:
+            result["id"] = stored["id"]
+
         alerts.insert(0, result)
         if len(alerts) > 500:
             alerts.pop()
@@ -349,7 +471,10 @@ async def analyze(req: AnalyzeReq):
     outcomes = await asyncio.gather(*(coro for _, _, coro in layer_jobs), return_exceptions=True)
     for (lid, lname, _), res in zip(layer_jobs, outcomes):
         if isinstance(res, Exception):
-            layer_results.append({"id": lid, "name": lname, "score": 0.0, "detail": f"Error: {res}"})
+            layer_results.append({"id": lid, "name": lname, "score": 0.0,
+                                  "detail": f"Error: {res}",
+                                  "evidence": {"error": str(res),
+                                               "error_type": type(res).__name__}})
         else:
             row = {"id": lid, "name": lname,
                    "score": round(float(res["score"]), 4),
@@ -357,18 +482,40 @@ async def analyze(req: AnalyzeReq):
             # L1's deterministic heuristic sub-score feeds the fusion floor (§ _fuse_score)
             if lid == "L1" and "heuristic" in res:
                 row["heuristic"] = res["heuristic"]
+            # Per-layer measurements behind the score (feature vectors, matched
+            # hosts, feed verdicts). Carried on the internal row only — it is
+            # stripped from the live payload below and reaches the UI through
+            # the stored alert, so /alerts stays small.
+            if isinstance(res.get("evidence"), dict):
+                row["evidence"] = res["evidence"]
             layer_results.append(row)
 
     t_phish = settings.get("verdict_phishing", 60)
     t_susp  = settings.get("verdict_suspicious", 30)
+    fusion_breakdown: dict = {}
     risk_score = round(min(100.0, max(0.0, _fuse_score(layer_results, weights,
-                                                       t_susp, t_phish))), 1)
+                                                       t_susp, t_phish,
+                                                       breakdown=fusion_breakdown))), 1)
     verdict = "PHISHING" if risk_score >= t_phish else "SUSPICIOUS" if risk_score >= t_susp else "SAFE"
 
-    # strip the internal heuristic sub-score from the public payload
-    public_layers = [{k: v for k, v in lr.items() if k != "heuristic"} for lr in layer_results]
+    # strip the internal heuristic sub-score and the per-layer evidence from the
+    # public payload — /alerts returns up to 50 of these and the evidence would
+    # dominate the response. The detail view fetches it from /alerts/{id}.
+    public_layers = [{k: v for k, v in lr.items() if k not in ("heuristic", "evidence")}
+                     for lr in layer_results]
+    timestamp = datetime.now().isoformat()
     result = {"url": url, "verdict": verdict, "risk_score": risk_score,
-              "layers": public_layers, "timestamp": datetime.now().isoformat()}
+              "layers": public_layers, "timestamp": timestamp}
+
+    # Persist the full record (evidence + fusion reasoning) so it survives a
+    # restart and can be opened, reported on and exported later. The in-memory
+    # list stays as the hot cache the live pane already reads.
+    stored = _store_c2_alert({"url": url, "verdict": verdict, "risk_score": risk_score,
+                              "layers": layer_results, "fusion": fusion_breakdown,
+                              "verified": False, "timestamp": timestamp})
+    if stored.get("id") is not None:
+        result["id"] = stored["id"]
+
     alerts.insert(0, result)
     if len(alerts) > 500:
         alerts.pop()
@@ -380,20 +527,113 @@ async def get_alerts(limit: int = 50):
     return alerts[:limit]
 
 
+# ── C2 alert log, detail and exports ──────────────────────────────────────────
+# Route order matters: every literal path below must be registered BEFORE
+# /alerts/{alert_id}, or FastAPI matches "history" and "export.csv" as an id.
+
+@app.get("/alerts/history")
+async def alerts_history(limit: int = 50, verdict: str = "", since: str = ""):
+    """Persisted C2 alert log. Unlike /alerts (in-memory, lost on restart) this
+    reads the store, so it survives a restart and can be filtered."""
+    return await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
+
+
+@app.get("/alerts/stats")
+async def alerts_stats():
+    recent = await asyncio.to_thread(c2_alert_store.list_alerts, 500, "", "")
+    by_verdict: dict = {}
+    for a in recent:
+        by_verdict[a["verdict"]] = by_verdict.get(a["verdict"], 0) + 1
+    return {"total_stored": await asyncio.to_thread(c2_alert_store.count),
+            "in_memory": len(alerts),
+            "by_verdict": by_verdict,
+            "db_path": c2_alert_store.path}
+
+
+@app.get("/alerts/export.csv")
+async def alerts_export_csv(limit: int = 500, verdict: str = "", since: str = ""):
+    rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
+    return Response(_c2_generate_csv(rows), media_type="text/csv",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename('alerts')}.csv"})
+
+
+@app.get("/alerts/export.siem")
+async def alerts_export_siem(limit: int = 500, verdict: str = "", since: str = ""):
+    rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
+    payload = json.dumps(_c2_generate_siem(rows), indent=2, default=str)
+    return Response(payload, media_type="application/json",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename('siem')}.json"})
+
+
+@app.get("/alerts/export.json")
+async def alerts_export_json(limit: int = 500, verdict: str = "", since: str = ""):
+    rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
+    payload = json.dumps({"export_type": "C2_Alert_Log",
+                          "generated_at": datetime.now().isoformat(),
+                          "total_alerts": len(rows),
+                          "alerts": rows}, indent=2, default=str)
+    return Response(payload, media_type="application/json",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename('alerts')}.json"})
+
+
+def _get_c2_alert_or_404(alert_id: int) -> dict:
+    alert = c2_alert_store.get_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail=f"No C2 alert with id {alert_id}")
+    return alert
+
+
+@app.get("/alerts/{alert_id}")
+async def get_alert_detail(alert_id: int):
+    """One alert with the full per-layer evidence and fusion breakdown. /alerts
+    strips both to keep the list payload small, so this is what the detail modal
+    and the report endpoints read."""
+    return await asyncio.to_thread(_get_c2_alert_or_404, alert_id)
+
+
+@app.get("/alerts/{alert_id}/report.html")
+async def get_alert_report_html(alert_id: int):
+    alert = await asyncio.to_thread(_get_c2_alert_or_404, alert_id)
+    html = await asyncio.to_thread(_c2_generate_html_report, alert)
+    return Response(html, media_type="text/html",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename(f'report_{alert_id}')}.html"})
+
+
+@app.get("/alerts/{alert_id}/report.json")
+async def get_alert_report_json(alert_id: int):
+    alert = await asyncio.to_thread(_get_c2_alert_or_404, alert_id)
+    return Response(json.dumps(alert, indent=2, default=str),
+        media_type="application/json",
+        headers={"Content-Disposition":
+                 f"attachment; filename={_c2_report_filename(f'report_{alert_id}')}.json"})
+
+
 @app.post("/settings")
 async def save_settings(req: SettingsReq):
     settings.update({"layers": req.layers, "whitelist": req.whitelist,
-                      "gsb_key": req.gsb_key, "pw_home_url": req.pw_home_url,
-                      "warn_threshold": req.warn_threshold,
-                      "block_threshold": req.block_threshold,
-                      "interstitial_enabled": req.interstitial_enabled,
-                      "verdict_suspicious": req.verdict_suspicious,
-                      "verdict_phishing": req.verdict_phishing,
-                      "runtime_active_probe": req.runtime_active_probe})
+                     "gsb_key": req.gsb_key, "pw_home_url": req.pw_home_url,
+                     "c1_isolation_backend": req.c1_isolation_backend,
+                     "c1_sandbox_network": req.c1_sandbox_network,
+                     "warn_threshold": req.warn_threshold,
+                     "block_threshold": req.block_threshold,
+                     "interstitial_enabled": req.interstitial_enabled,
+                     "verdict_suspicious": req.verdict_suspicious,
+                     "verdict_phishing": req.verdict_phishing,
+                     "runtime_active_probe": req.runtime_active_probe})
     if req.weights:
         settings["weights"] = req.weights
     _save_settings(settings)
-    return {"status": "saved"}
+    # C3 threat-intel keys are held in the C3 modules, not the settings dict.
+    _c3_set_virustotal_key(req.virustotal_key)
+    _c3_set_abuseipdb_key(req.abuseipdb_key)
+    _c3_set_otx_key(req.otx_key)
+    # C1 re-applies its isolation backend / sandbox networking on every save.
+    applied = _apply_sandbox_settings()
+    return {"status": "saved", "sandbox": applied}
 
 
 @app.get("/settings")
@@ -453,7 +693,8 @@ async def extension_upload(file: UploadFile = File(...)):
     except Exception:
         pass
 
-    result = await analyze_extension_c1(manifest_str, source_code, ext_id, ext_path)
+    result = await analyze_extension_c1(manifest_str, source_code, ext_id, ext_path,
+                                        crx_sha256=sha256_of(crx_data), store_hint="Chrome")
     result["filename"] = file.filename
     return _store_c1_result(result, "upload")
 
@@ -481,7 +722,9 @@ async def extension_webstore(req: WebstoreLookupReq):
         ext_path = extract_crx_to_persistent_dir(crx_data, ext_id)
     except Exception:
         pass
-    result = await analyze_extension_c1(json.dumps(manifest_dict), source_code, ext_id, ext_path)
+    result = await analyze_extension_c1(json.dumps(manifest_dict), source_code, ext_id, ext_path,
+                                        webstore_url=webstore_url, crx_sha256=sha256_of(crx_data),
+                                        store_hint=store_from_url(webstore_url))
     result["webstore_url"] = webstore_url
     return _store_c1_result(result, "webstore", webstore_url)
 
@@ -489,6 +732,134 @@ async def extension_webstore(req: WebstoreLookupReq):
 @app.post("/extension/sandbox")
 async def extension_sandbox(req: SandboxReq):
     return await sandbox_extension_c1(req.extension_path)
+
+
+@app.get("/extension/sandbox/isolation")
+async def sandbox_isolation():
+    """Which containment backends this machine can provide, and which is active.
+
+    The dashboard shows this so an analyst can see at a glance whether a
+    dynamic verdict was produced inside a disposable VM or merely in a
+    throwaway browser profile on the host — and, when the VM is unavailable,
+    exactly what is missing.
+    """
+    from .c1.isolation import backend_status
+    from .c1.sandbox import current_configuration
+    status = await asyncio.to_thread(backend_status)
+    configured = current_configuration()
+    active = next((s["name"] for s in status if s["available"]), None)
+    if configured["backend"] != "auto":
+        forced = next((s for s in status if s["name"] == configured["backend"]), None)
+        active = configured["backend"] if forced and forced["available"] else active
+    return {
+        "configured": configured,
+        "active": active,
+        "backends": status,
+        "enable_hint": (
+            "Enable-WindowsOptionalFeature -Online "
+            "-FeatureName Containers-DisposableClientVM -All"
+        ),
+    }
+
+
+# ── Blocklist evidence coverage ───────────────────────────────────────────────
+# The finalized sheet merges a fully-evidenced source (malext_sentry) with an
+# ID-only dump (chrome-mal-ids). These endpoints expose how much of it is
+# actually documented, and let the analyst complete the rest — either one ID
+# at a time or as a sweep — using the same ML + sandbox stack a live intercept
+# would run.
+
+@app.get("/extension/blocklist/stats")
+async def blocklist_stats_endpoint():
+    """Documented-vs-undocumented counts for the finalized blocklist sheet."""
+    return await asyncio.to_thread(blocklist_coverage)
+
+
+@app.get("/extension/blocklist/incomplete")
+async def blocklist_incomplete(limit: int = 50):
+    """IDs whose sheet row still has at least one undocumented field."""
+    ids = await asyncio.to_thread(blocklist_incomplete_ids, limit)
+    return {"count": len(ids), "ext_ids": ids}
+
+
+@app.post("/extension/blocklist/reload")
+async def blocklist_reload():
+    """Re-read the sheet from disk — picks up an offline sweep's writes."""
+    return await asyncio.to_thread(reload_blocklist)
+
+
+@app.get("/extension/blocklist/{ext_id}")
+async def blocklist_entry_endpoint(ext_id: str):
+    """One blocklist row plus which of its fields are still undocumented."""
+    probe = await asyncio.to_thread(blocklist_probe, ext_id)
+    if not probe["match"]:
+        raise HTTPException(status_code=404, detail="Extension ID is not on the blocklist.")
+    return probe
+
+
+@app.post("/extension/blocklist/document")
+async def blocklist_document(req: BlocklistDocumentReq):
+    """Download this extension, run the detection stack, and write the
+    evidence it produces back into the finalized blocklist CSV."""
+    result = await document_blocklist_entry(req.ext_id, run_sandbox_layer=req.sandbox)
+    if result["status"] == "not_blocklisted":
+        raise HTTPException(status_code=404, detail="Extension ID is not on the blocklist.")
+    await _broadcast({"type": "c1_blocklist_documented", **{
+        k: v for k, v in result.items() if k != "entry"
+    }, "entry": result.get("entry")})
+    return result
+
+
+@app.post("/extension/blocklist/backfill")
+async def blocklist_backfill(req: BlocklistBackfillReq):
+    """Document a batch of under-reported rows in one pass.
+
+    Runs in the background and streams progress over the dashboard WebSocket
+    (`c1_blocklist_backfill`) — a full sweep is thousands of downloads, far
+    longer than any HTTP request should hold open.
+    """
+    ids = await asyncio.to_thread(blocklist_incomplete_ids, max(0, req.limit))
+    if not ids:
+        return {"status": "nothing_to_do", "queued": 0}
+    asyncio.create_task(_bg_blocklist_backfill(ids, req.sandbox, max(1, req.concurrency)))
+    return {"status": "running", "queued": len(ids), "sandbox": req.sandbox}
+
+
+async def _bg_blocklist_backfill(ext_ids: List[str], sandbox: bool, concurrency: int) -> None:
+    """Walk a batch of undocumented IDs, documenting each one it can reach.
+
+    Most undocumented IDs are undocumented *because* the store already pulled
+    them, so "unavailable" is a normal outcome here, not a failure — it is
+    counted separately and the row is left exactly as it was.
+    """
+    semaphore = asyncio.Semaphore(concurrency if not sandbox else 1)   # sandbox runs must not overlap
+    tally = {"documented": 0, "no_change": 0, "unavailable": 0,
+             "already_documented": 0, "not_blocklisted": 0}
+    done = 0
+
+    async def one(ext_id: str) -> None:
+        nonlocal done
+        async with semaphore:
+            try:
+                result = await document_blocklist_entry(ext_id, run_sandbox_layer=sandbox)
+            except Exception as exc:
+                print(f"[C1-BACKFILL] {ext_id} failed: {exc}")
+                result = {"status": "unavailable", "ext_id": ext_id, "error": str(exc)}
+            tally[result["status"]] = tally.get(result["status"], 0) + 1
+            done += 1
+            await _broadcast({
+                "type": "c1_blocklist_backfill", "state": "progress",
+                "ext_id": ext_id, "status": result["status"],
+                "filled": result.get("filled", []),
+                "reason": (result.get("entry") or {}).get("reason", ""),
+                "done": done, "total": len(ext_ids), "tally": dict(tally),
+            })
+
+    await asyncio.gather(*(one(ext_id) for ext_id in ext_ids))
+    print(f"[C1-BACKFILL] Finished {len(ext_ids)} IDs: {tally}")
+    await _broadcast({"type": "c1_blocklist_backfill", "state": "done",
+                      "total": len(ext_ids), "tally": tally,
+                      "coverage": await asyncio.to_thread(blocklist_coverage)})
 
 
 @app.get("/extension/history")
@@ -516,7 +887,8 @@ async def session_install_extension(req: InstallExtensionReq):
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Could not parse CRX: {exc}")
 
-    c1_result = await analyze_extension_c1(json.dumps(manifest_dict), source_code, ext_id)
+    c1_result = await analyze_extension_c1(json.dumps(manifest_dict), source_code, ext_id,
+                                           crx_sha256=sha256_of(crx_data), store_hint="Chrome")
     _store_c1_result(c1_result, "webstore_install")
 
     if c1_result["verdict"] == "MALICIOUS" and not req.force:
@@ -560,18 +932,38 @@ async def _on_extension_install_click(ext_id: str, webstore_url: str) -> None:
         manifest_dict, source_code, _ = parse_crx_bytes(crx_data, ext_id)
         ext_path = extract_crx_to_persistent_dir(crx_data, ext_id)
         manifest_str = json.dumps(manifest_dict)
+        crx_hash = sha256_of(crx_data)
+        store    = store_from_url(webstore_url)
 
-        static_result = await analyze_extension_c1(manifest_str, source_code, ext_id)
-        static_score_pct = static_result["static"]["score"] * 100
+        # Everything the analyzer needs to document a thinly-reported
+        # blocklist row from this intercept rather than from the sheet.
+        live_ctx = {"webstore_url": webstore_url, "crx_sha256": crx_hash, "store_hint": store}
 
-        if static_score_pct >= 50.0:
+        probe = blocklist_probe(ext_id)
+        if probe["needs_evidence"]:
+            # Known-bad ID, but the sheet has no evidence on record for it.
+            # Run the full stack (ML + sandbox) to establish what it does,
+            # instead of short-circuiting to a panel full of placeholders.
+            print(f"[C1] {ext_id} is blocklisted with {len(probe['gaps'])} undocumented "
+                  f"field(s) {probe['gaps']} — running ML + sandbox to establish evidence")
             await _broadcast({"type": "c1_install_intercepted", "ext_id": ext_id,
-                               "url": webstore_url, "state": "sandbox_running",
-                               "static_score": round(static_score_pct, 1)})
+                              "url": webstore_url, "state": "blocklist_evidence",
+                              "gaps": probe["gaps"]})
             c1_result = await analyze_extension_c1(manifest_str, source_code, ext_id,
-                                                    extension_path=ext_path)
+                                                  extension_path=ext_path, **live_ctx)
         else:
-            c1_result = static_result
+            static_result = await analyze_extension_c1(manifest_str, source_code, ext_id,
+                                                       **live_ctx)
+            static_score_pct = static_result["static"]["score"] * 100
+
+            if static_score_pct >= 50.0:
+                await _broadcast({"type": "c1_install_intercepted", "ext_id": ext_id,
+                                   "url": webstore_url, "state": "sandbox_running",
+                                   "static_score": round(static_score_pct, 1)})
+                c1_result = await analyze_extension_c1(manifest_str, source_code, ext_id,
+                                                        extension_path=ext_path, **live_ctx)
+            else:
+                c1_result = static_result
 
         _store_c1_result(c1_result, "webstore_intercept", webstore_url)
         _pending_installs[ext_id] = {"c1_result": c1_result, "ext_path": ext_path,
@@ -588,6 +980,37 @@ async def _on_extension_install_click(ext_id: str, webstore_url: str) -> None:
                            "url": webstore_url, "state": "error", "error": str(exc)})
 
 
+@app.get("/websentinel-trigger")
+async def websentinel_trigger_fallback(ext_id: str = "", url: str = ""):
+    """
+    Server-side fallback for the C1 'Add to Chrome' click hook.
+
+    This URL is normally never actually requested over the network — the
+    Playwright browser context intercepts it client-side via context.route()
+    in playwright_session.py and serves the analyzing page + fires the click
+    callback locally, without the request ever leaving the browser. This
+    endpoint is a safety net for the rare case where that client-side
+    interception is missed (e.g. a timing race between the pointerdown-
+    triggered navigation and the click hook's own state), so the browser
+    still gets a working analyzing page and the extension still gets
+    analyzed and broadcast to the dashboard — instead of surfacing a bare
+    404 to the user.
+    """
+    ext_id = ext_id.strip().lower()
+    if ext_id:
+        asyncio.create_task(_on_extension_install_click(ext_id, url))
+    html = _ANALYZING_HTML.format(ext_id=ext_id or "unknown")
+    if url:
+        # Return the browser to the original page after the card has been
+        # visible for a moment — mirrors PlaywrightSession._return_to_page's
+        # behaviour on the normal client-side-intercepted path.
+        html = html.replace(
+            "</body>",
+            f"<script>setTimeout(function(){{ window.location.replace({json.dumps(url)}); }}, 1500);</script></body>",
+        )
+    return HTMLResponse(html)
+
+
 @app.post("/session/approve_install")
 async def approve_install(req: ApproveInstallReq):
     pending = _pending_installs.get(req.ext_id)
@@ -601,14 +1024,20 @@ async def approve_install(req: ApproveInstallReq):
     ext_path     = pending["ext_path"]
     webstore_url = pending.get("webstore_url", "")
     del _pending_installs[req.ext_id]
-    # Register the extension in the launch list without restarting the session.
-    # Chrome requires --load-extension at startup; hot-loading is not supported
-    # by this Chromium build. The extension will be active on the next session start.
-    pw_session.register_extension(ext_path)
-    await _broadcast({"type": "c1_install_approved", "ext_id": req.ext_id,
-                       "extension_path": ext_path, "webstore_url": webstore_url})
-    return {"status": "approved", "ext_id": req.ext_id,
-            "note": "Extension registered — will be active on next session start."}
+    # Fire the restart in the background — return immediately so the dashboard
+    # doesn't freeze during the ~5 s browser restart.
+    asyncio.create_task(_bg_install_extension(req.ext_id, ext_path, webstore_url))
+    return {"status": "installing", "ext_id": req.ext_id}
+
+
+async def _bg_install_extension(ext_id: str, ext_path: str, webstore_url: str) -> None:
+    try:
+        await pw_session.load_extension(ext_path, restore_url=webstore_url)
+        await _broadcast({"type": "c1_install_approved", "ext_id": ext_id,
+                          "extension_path": ext_path, "webstore_url": webstore_url})
+    except Exception as exc:
+        print(f"[C1] Extension install failed for {ext_id}: {exc}")
+        await _broadcast({"type": "c1_install_error", "ext_id": ext_id, "error": str(exc)})
 
 
 @app.post("/session/block_install")
@@ -700,22 +1129,42 @@ def _run_test_component(label: str, script: str) -> dict:
 
 @app.post("/dev/run_tests")
 async def run_tests(component: str = "all"):
-    """Run unit test suites and return structured results."""
+    """Run unit test suites and return structured results.
+
+    A component may map to more than one script — C1's blocklist evidence
+    suite lives in its own file — in which case the runs are merged into a
+    single result so the dashboard still shows one row per component.
+    """
+    _test = lambda *parts: os.path.join(_REPO_ROOT, "test", *parts)
     components_map = {
-        "c1": ("C1 — Extension Analyzer",   os.path.join(_REPO_ROOT, "test", "C1", "test_c1_units.py")),
-        "c2": ("C2 — Phishing Detection",   os.path.join(_REPO_ROOT, "test", "C2", "test_c2_layers.py")),
-        "c3": ("C3 — Beacon Detector",      os.path.join(_REPO_ROOT, "test", "C3", "test_c3_units.py")),
-        "c4": ("C4 — Forensic Correlation", os.path.join(_REPO_ROOT, "test", "C4", "test_units.py")),
+        "c1": ("C1 — Extension Analyzer",   [_test("C1", "test_c1_units.py"),
+                                             _test("C1", "test_blocklist_evidence.py"),
+                                             _test("C1", "test_isolation.py"),
+                                             _test("C1", "test_report_ui.py")]),
+        "c2": ("C2 — Phishing Detection",   [_test("C2", "test_c2_layers.py")]),
+        "c3": ("C3 — Beacon Detector",      [_test("C3", "test_c3_units.py")]),
+        "c4": ("C4 — Forensic Correlation", [_test("C4", "test_correlation.py")]),
     }
     targets = list(components_map.items()) if component == "all" else \
               [(component, components_map[component])] if component in components_map else []
 
     loop = asyncio.get_event_loop()
     results = []
-    for cid, (label, script) in targets:
-        r = await loop.run_in_executor(None, _run_test_component, label, script)
-        r["id"] = cid
-        results.append(r)
+    for cid, (label, scripts) in targets:
+        merged = None
+        for script in scripts:
+            r = await loop.run_in_executor(None, _run_test_component, label, script)
+            if merged is None:
+                merged = r
+                continue
+            for key in ("passed", "failed", "total", "duration"):
+                merged[key] += r[key]
+            merged["tests"].extend(r["tests"])
+            merged["stdout"] += "\n" + r["stdout"]
+            merged["returncode"] = merged["returncode"] or r["returncode"]
+        merged["duration"] = round(merged["duration"], 2)
+        merged["id"] = cid
+        results.append(merged)
 
     total_passed = sum(r["passed"] for r in results)
     total_failed = sum(r["failed"] for r in results)
@@ -1203,15 +1652,15 @@ async def _tc_c3_human_iat():
 async def _tc_c3_fusion_beacon():
     from .c3.risk_fusion import C3RiskFusion
     fusion = C3RiskFusion()
-    result = fusion.fuse(anomaly=0.8, reputation=0.9, heuristic=0.7)
+    result = fusion.fuse(rf=0.8, reputation=0.9, heuristic=0.7)
     assert result["verdict"] == "BEACON", f"Expected BEACON, got {result['verdict']}"
     assert result["score"] >= 0.6
-    return {"detail": f"anomaly=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
+    return {"detail": f"rf=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
 
 async def _tc_c3_fusion_safe():
     from .c3.risk_fusion import C3RiskFusion
     fusion = C3RiskFusion()
-    result = fusion.fuse(anomaly=0.0, reputation=0.0, heuristic=0.0)
+    result = fusion.fuse(rf=0.0, reputation=0.0, heuristic=0.0)
     assert result["verdict"] == "SAFE", f"Expected SAFE, got {result['verdict']}"
     return {"detail": f"all signals=0 → verdict={result['verdict']} score={result['score']:.2f}"}
 
@@ -2049,11 +2498,20 @@ async def dev_simulate_click():
         raise HTTPException(status_code=404,
             detail="test_malicious_ext directory not found next to main.py")
     manifest_path = os.path.join(ext_dir, "manifest.json")
-    bg_path       = os.path.join(ext_dir, "background.js")
     with open(manifest_path, encoding="utf-8") as f:
         manifest_dict = json.load(f)
-    with open(bg_path, encoding="utf-8") as f:
-        source_code = f.read()
+    # Concatenate every .js file, exactly as parse_crx_bytes() does for a real
+    # downloaded extension. Reading only background.js used to hide anything a
+    # content script did (keystroke listeners live there, not in the worker),
+    # so the simulated click scored lower than the same extension would if it
+    # arrived from the Web Store.
+    source_parts = []
+    for root, _dirs, files in os.walk(ext_dir):
+        for name in sorted(files):
+            if name.lower().endswith(".js"):
+                with open(os.path.join(root, name), encoding="utf-8", errors="ignore") as f:
+                    source_parts.append(f.read())
+    source_code = "\n".join(source_parts)
     fake_ext_id  = "test_malicious_ext_simulate"
     fake_url     = "https://chromewebstore.google.com/detail/websentinel-test/simulate"
     asyncio.create_task(_simulate_click_task(
@@ -2135,6 +2593,32 @@ async def c3_unblock_host(host: str):
     return c3_analyzer.status()
 
 
+# NOTE ON ROUTE ORDER: this must stay registered *after* /unblock above.
+# {host:path} matches slashes, so "/c3/hosts/example.com/unblock" would also
+# satisfy this pattern with host="example.com/un".  Starlette matches routes in
+# registration order, so /unblock claims that URL first and this route only ever
+# sees a genuine .../block.  Do not move this above the unblock route.
+@app.post("/c3/hosts/{host:path}/block")
+async def c3_block_host(host: str):
+    """Manually block a host (the 'Block Host' quick action on a C3 alert card).
+
+    Calls the same interceptor path the opt-in auto-block uses, so a manual
+    block and an automatic block are the same operation.
+    """
+    await c3_interceptor.block_host(host, reason="manual block via dashboard")
+    return c3_analyzer.status()
+
+
+@app.post("/c3/auto-block/enable")
+async def c3_auto_block_enable():
+    return c3_analyzer.enable_auto_block()
+
+
+@app.post("/c3/auto-block/disable")
+async def c3_auto_block_disable():
+    return c3_analyzer.disable_auto_block()
+
+
 @app.post("/c3/collect/start")
 async def c3_collect_start(req: C3CollectReq):
     return c3_analyzer.start_collection(req.label)
@@ -2187,7 +2671,15 @@ async def c3_test_beacon_page(interval: int = 30000, method: str = "GET"):
     const log = document.getElementById('log');
     async function tick() {{
       try {{
-        const res = await fetch('/c3/test/beacon-target?ts=' + Date.now(), {{
+        // Fixed URL (no cache-busting query string) -- `cache: 'no-store'`
+        // already prevents caching. A query string that changes every
+        // request (e.g. `?ts=...`) would make this test beacon hit a
+        // different "path" on every check-in, which is NOT how real C2
+        // beacons behave (they poll one fixed URI) and defeats both the
+        // heuristic's "same endpoint" rule and the ML model's URL-diversity
+        // feature -- i.e. it would make this demo LESS representative of a
+        // real beacon, not more realistic.
+        const res = await fetch('/c3/test/beacon-target', {{
           method: '{method}',
           headers: {headers},
           body: {body},
@@ -2203,6 +2695,54 @@ async def c3_test_beacon_page(interval: int = 30000, method: str = "GET"):
   </script>
 </body>
 </html>"""
+
+
+# The Detection Lab "Run Test" button used to just navigate the live browser to
+# the toy /c3/test/beacon-page above. It now runs the real scenario instead:
+# test_c3_real_world_beacon.bat deploys a genuine, publicly-reachable C2 mimicry
+# beacon over an ngrok tunnel, drives the already-running Playwright session to
+# it, and waits for C3's ML + heuristic engines to confirm BEACON (the batch
+# owns ngrok, the mimicry server, and its own cleanup). It runs in its own
+# console window so its live progress and final PASS/FAIL validation stay on
+# screen next to the dashboard.
+_C3_REALWORLD_BAT = os.path.join(_REPO_ROOT, "test_c3_real_world_beacon.bat")
+_c3_realworld_proc: Optional[subprocess.Popen] = None
+
+
+@app.post("/c3/test/real-world-beacon")
+async def c3_test_real_world_beacon():
+    global _c3_realworld_proc
+    if sys.platform != "win32":
+        raise HTTPException(
+            status_code=400,
+            detail="The real-world beacon test is Windows-only "
+                   "(test_c3_real_world_beacon.bat).",
+        )
+    if not os.path.isfile(_C3_REALWORLD_BAT):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Batch script not found: {_C3_REALWORLD_BAT}",
+        )
+    if _c3_realworld_proc is not None and _c3_realworld_proc.poll() is None:
+        return {"status": "already_running", "pid": _c3_realworld_proc.pid,
+                "detail": "A real-world beacon test is already running in its "
+                          "console window."}
+    try:
+        _c3_realworld_proc = subprocess.Popen(
+            ["cmd", "/c", _C3_REALWORLD_BAT],
+            cwd=_REPO_ROOT,
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500,
+                            detail=f"Could not launch the test: {exc}")
+    return {
+        "status": "launched",
+        "pid": _c3_realworld_proc.pid,
+        "detail": "Real-world C2 beacon test launched in a new console window. "
+                  "It deploys an ngrok-tunnelled mimicry beacon and drives the "
+                  "live browser to it -- watch the C3 dashboard for detection.",
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2341,6 +2881,12 @@ def _needs_full_capture(url: str) -> bool:
 
 
 async def _pw_nav_handler(url: str, page=None) -> None:
+    """C2 phishing analysis on every navigation. C1 runs on click, not navigation."""
+    c3_tagger.record_navigation(url)
+    dom        = await pw_session.get_dom()
+    screenshot = await pw_session.get_screenshot_b64()
+    title      = await pw_session.get_title()
+    req        = AnalyzeReq(url=url, dom=dom, screenshot=screenshot)
     """C2 phishing analysis on every navigation. C1 runs on click, not navigation.
     Reads from the specific `page` that navigated so each tab is analyzed independently."""
     # Skip the expensive captures for URLs analyze() will short-circuit (skip/whitelist/

@@ -54,7 +54,9 @@ if not exist "electron\node_modules\electron" (
 )
 
 :: ── Free port 8765 if already occupied ────────────────────────
-python -c "import subprocess,os,signal; r=subprocess.run('netstat -ano',shell=True,capture_output=True,text=True); [os.kill(int(l.split()[-1]),signal.SIGTERM) for l in r.stdout.splitlines() if ':8765' in l and 'LISTENING' in l and l.split()[-1]!='0']" >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8765 " 2^>nul') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
 
 echo  [OK] Launching WebSentinel...
 echo  [OK] Backend  ->  http://127.0.0.1:8765

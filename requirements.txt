@@ -6,9 +6,12 @@ playwright
 httpx
 Pillow
 imagehash
+beautifulsoup4
+lxml
 cryptography
 pandas
 numpy
 scikit-learn
 xgboost
 tldextract
+imbalanced-learn

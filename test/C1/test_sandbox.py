@@ -26,7 +26,11 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-_EXT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_malicious_ext")
+# Canonical fixture lives under core/c1/ — the same copy /dev/simulate_click and
+# the unit tests use. A second copy used to sit beside this file and silently
+# drifted out of date, so this script reported a stale score (41) for an
+# extension the real pipeline scored at 74. One fixture, one source of truth.
+_EXT_DIR = os.path.join(_ROOT, "core", "c1", "test_malicious_ext")
 
 
 def _sep(title: str) -> None:
@@ -42,12 +46,20 @@ async def main() -> None:
         sys.exit(1)
 
     manifest_path = os.path.join(_EXT_DIR, "manifest.json")
-    bg_path = os.path.join(_EXT_DIR, "background.js")
 
     with open(manifest_path, encoding="utf-8") as f:
         manifest = json.load(f)
-    with open(bg_path, encoding="utf-8") as f:
-        source_code = f.read()
+
+    # Concatenate every .js file, matching parse_crx_bytes() and /dev/simulate_click.
+    # Reading background.js alone under-reports any extension whose content script
+    # carries the interesting behaviour.
+    _parts = []
+    for _root, _dirs, _files in os.walk(_EXT_DIR):
+        for _name in sorted(_files):
+            if _name.lower().endswith(".js"):
+                with open(os.path.join(_root, _name), encoding="utf-8", errors="ignore") as f:
+                    _parts.append(f.read())
+    source_code = "\n".join(_parts)
 
     manifest_str = json.dumps(manifest)
 

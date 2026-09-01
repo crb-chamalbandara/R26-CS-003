@@ -187,7 +187,14 @@ def main() -> None:
     # Include benign complex extensions if collected.
     # These cover underrepresented features: has_scripting=1, high host_permission_count,
     # has_all_urls=1 — teaching the model these are not inherently malicious.
-    for extra_csv_name in ("benign_power_extensions.csv", "benign_complex_extensions.csv"):
+    # benign_modern_mv3_extensions.csv supplies modern MV3 benign samples. Without
+    # them the benign corpus is ~90% Manifest V2, which turns MV3-only permissions
+    # (scripting, declarativeNetRequest) into accidental proxies for "malicious" —
+    # that is what made Google Input Tools score 89.5%. Among collected MV3 benign
+    # extensions, has_scripting occurs at 20.5% vs 21.4% in malicious samples, i.e.
+    # it carries essentially no signal once the corpus is balanced.
+    for extra_csv_name in ("benign_power_extensions.csv", "benign_complex_extensions.csv",
+                           "benign_modern_mv3_extensions.csv"):
         extra_csv = DATA_DIR / extra_csv_name
         if extra_csv.exists():
             df_extra = pd.read_csv(extra_csv)
@@ -210,9 +217,21 @@ def main() -> None:
     X = df_combined[feature_cols].values
     y = df_combined["label"].values
 
-    scale_weight = n_benign_new / n_mal_new
+    # scale_pos_weight up-weights the malicious class to compensate for imbalance.
+    # The natural ratio (n_benign / n_malicious) is far too aggressive here: measured
+    # against 103,632 real Chrome Web Store extensions, the flagged-MALICIOUS rate is
+    #
+    #     spw=1.0 -> 0.10%   spw=2.0 -> 0.38%   spw=3.0 -> 2.77%   spw=4.52 -> 14.51%
+    #
+    # while holdout F1 peaks around spw=2-3 (0.814 / 0.816). Every benign sample we add
+    # raises the natural ratio and therefore makes the model *more* trigger-happy, which
+    # is the opposite of what adding benign data should achieve. So the ratio is capped:
+    # 2.0 keeps the best F1 while holding real-world false positives near zero.
+    SCALE_POS_WEIGHT_CAP = 2.0
+    natural_weight = n_benign_new / n_mal_new
+    scale_weight = min(natural_weight, SCALE_POS_WEIGHT_CAP)
     print(f"\nscale_pos_weight : {scale_weight:.2f}  "
-          f"(was 41.9 before new data)")
+          f"(natural ratio {natural_weight:.2f}, capped at {SCALE_POS_WEIGHT_CAP})")
 
     # ── 5-fold stratified cross-validation ───────────────────────────────────
     print("\nRunning 5-fold stratified CV", end="", flush=True)

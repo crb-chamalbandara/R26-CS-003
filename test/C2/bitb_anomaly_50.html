@@ -11,6 +11,13 @@
     Rule 1 — overlay is a <div>, NOT <iframe style="...position:fixed">
     Rule 3 — background uses min-height/min-width in px; no 100vw+100vh pair
     Rule 4 — no ondragstart/onselectstart/user-select:none anywhere
+    Rule 6 — needs a chrome class AND a lock motif. The address pill carries no
+             padlock glyph or lock image, so R6 stays silent and this page
+             remains the 0.50 rung of the 50/75/100 ladder. R6 (+0.35) was added
+             after this fixture; leaving the padlock in placed it at 0.85, above
+             the 0.75 specimen, which collapsed the gradient the suite exists to
+             demonstrate. bitb_anomaly_100.html carries the padlock and does
+             trigger R6.
 -->
 <html lang="en">
 <head>
@@ -220,7 +227,9 @@
         <span class="tl-dot tl-green"></span>
       </div>
       <div class="address-pill">
-        <span class="lock-icon">&#128274;</span>
+        <!-- Deliberately not a padlock: a lock motif here would pair with the
+             browser-bar class and trigger Rule 6 (see header). -->
+        <span class="lock-icon">&#9679;</span>
         <!-- RULE 5 TRIGGER: class="browser-bar" matches regex "browser.*bar" -->
         <span class="browser-bar">https://accounts.google.com/o/oauth2/v2/auth</span>
       </div>

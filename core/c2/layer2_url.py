@@ -124,7 +124,18 @@ def _heuristic_score(feats: dict) -> float:
 def _score_url(url: str) -> dict:
     feats = extract_features(url)
     if not feats:
-        return {"score": 0.0, "detail": "Could not parse URL"}
+        return {"score": 0.0, "detail": "Could not parse URL",
+                "evidence": {"features": {}, "flags": [], "ml_prob": None}}
+
+    # Which boolean signals actually tripped. Hoisted above the model branch so
+    # the evidence record carries them on both paths — it used to be computed
+    # only in the heuristic fallback, so a model-scored URL (the normal case)
+    # reported nothing but "ML model score: 0.87".
+    # Counters are excluded: "url_len is truthy" is not a finding.
+    flags = [k for k, v in feats.items() if v and k not in
+             ("url_len", "dots_in_host", "query_len", "special_in_path", "hyphen_count", "subdomain_depth")]
+    # Built inside the value check_url() memoizes, so cache hits keep evidence.
+    evidence = {"features": feats, "flags": flags, "ml_prob": None}
 
     if _model is not None and pd is not None:
         try:
@@ -136,15 +147,15 @@ def _score_url(url: str) -> dict:
             ]
             X = pd.DataFrame([feats])[feat_order]
             prob = float(_model.predict_proba(X)[0][1])
-            return {"score": round(prob, 4), "detail": f"ML model score: {prob:.2f}"}
+            evidence["ml_prob"] = round(prob, 4)
+            return {"score": round(prob, 4), "detail": f"ML model score: {prob:.2f}",
+                    "evidence": evidence}
         except Exception:
             pass
 
     score = _heuristic_score(feats)
-    flags = [k for k, v in feats.items() if v and k not in
-             ("url_len", "dots_in_host", "query_len", "special_in_path", "hyphen_count", "subdomain_depth")]
     detail = "Heuristic: " + (", ".join(flags) if flags else "no flags")
-    return {"score": round(score, 4), "detail": detail}
+    return {"score": round(score, 4), "detail": detail, "evidence": evidence}
 
 
 # L2 is a pure function of the URL — memoize so repeat visits skip the model call.

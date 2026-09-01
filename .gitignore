@@ -35,6 +35,16 @@ models/*.bin
 data/urls_labeled.csv
 output/
 
+# ── Generated CTU-13 training dataset ────────────────────────
+# c3_ctu13_dataset.csv is ~465 MB — over GitHub's 100 MB file limit, and
+# fully regenerable via: python scripts/build_ctu13_dataset.py
+# (deterministic, ~5 min, reads D:\CTU-13-Dataset).
+# label_mapping_report.csv is intentionally NOT ignored — it is small (93 KB)
+# and serves as the auditable label-mapping record for the research writeup.
+data/c3_ctu13_dataset.csv
+data/c3_ctu13_c2_dataset.csv
+data/_ctu13_build_stats.csv
+
 # ── Dataset (large zip — store separately) ───────────────────
 Dataset/
 notebooks/
@@ -61,7 +71,42 @@ desktop.ini
 .env
 .env.*
 secrets.json
+/core/c1/data/GoogleChromeExtension
 core/settings.json
 
 # ── Claude Code internal state ────────────────────────────────
 .claude/
+
+
+# ── C1: raw source corpora (inputs to the scripts, not the analyzer) ──
+/core/c1/data/GoogleChromeExtension
+core/c1/data/MaliciousBrowserExtensions/
+/core/c1/data/MalCryptoExt_malicious_extensions
+core/c1/data/malext_sentry and chrome_mal_ids Finalized Blocklist IDs.xlsx
+
+# 184 MB across 103,802 files. enrich.find_local_manifest() reads it to
+# recover the manifest of an extension the store has already delisted, and
+# returns None when it is absent — analyzer.py already handles that and
+# reports the row as unavailable, so C1 runs correctly without it. What it
+# costs is enrichment coverage for delisted IDs, not function. Committing
+# 103k files would make every clone, status and checkout slow permanently,
+# so it is distributed alongside the repo rather than inside it.
+core/c1/data/chrome-extension-manifests-dataset/
+
+# ── C1: working copies and reference material ────────────────
+/core/c1/backups
+core/c1/Guide Resources/component1_field_guide.html
+/core/c1/Guide Resources
+
+# ── C3: scratch notes and superseded training artefacts ──────
+# C3 originally ignored *.md, *.txt and *.csv wholesale. Those globs are
+# dropped on integration: they would have swallowed requirements.txt,
+# README.md, data/verified_domains.txt and every tracked C1/C2/C4 dataset,
+# and they contradicted the note above keeping label_mapping_report.csv.
+# The specific files C3 meant to exclude are listed instead.
+C3_FULL_EXPLANATION.txt
+C3_Problems_And_Fixes.txt
+C3 - Train Score.png
+notebooks/IF_model_training.ipynb
+notebooks/RF_model_training.ipynb
+models/archive/c3_ctu13_rf_ip_botnet_label_OBSOLETE.pkl

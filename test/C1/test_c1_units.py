@@ -2,6 +2,7 @@
 C1 Unit Tests — Static Extension Analyzer
 Run from project root:  python Test/C1/test_c1_units.py
 """
+import asyncio
 import sys
 import os
 import json
@@ -153,6 +154,102 @@ class TestManifestV2Compatibility(unittest.TestCase):
         feats = extract_manifest_features({}, "")
         self.assertEqual(feats["has_webRequest"], 0.0)
         self.assertEqual(feats["total_permission_count"], 0.0)
+
+    def test_mv2_host_permissions_counted_from_permissions_array(self):
+        """MV2 has no separate 'host_permissions' field — match patterns like
+        'https://*.example.com/*' live directly inside 'permissions'. Before
+        this fix, host_permission_count read 0 for every MV2 extension
+        regardless of how many hosts it actually requested — a real bug,
+        since this is XGBoost's single most important feature."""
+        manifest = {
+            "manifest_version": 2,
+            "permissions": [
+                "https://*.example.com/*", "http://foo.com/*", "<all_urls>",
+                "storage", "activeTab",   # named API permissions — must NOT be counted as hosts
+            ],
+        }
+        feats = extract_manifest_features(manifest, "")
+        self.assertEqual(feats["host_permission_count"], 3.0)
+        self.assertEqual(feats["total_permission_count"], 5.0)
+        self.assertEqual(feats["has_all_urls"], 1.0)
+
+    def test_mv3_host_permissions_still_counted_from_own_field(self):
+        """MV3's separate host_permissions field must still work as before —
+        this fix only adds MV2 coverage, it must not change MV3 behaviour."""
+        manifest = {
+            "manifest_version": 3,
+            "permissions": ["storage", "scripting"],
+            "host_permissions": ["https://*.example.com/*", "<all_urls>"],
+        }
+        feats = extract_manifest_features(manifest, "")
+        self.assertEqual(feats["host_permission_count"], 2.0)
+        self.assertEqual(feats["total_permission_count"], 2.0)
+
+
+class TestIsolationForestFusion(unittest.TestCase):
+    """Regression guards for the Isolation Forest zero-day layer (analyzer.py
+    Step 5b). The anomaly detector must only ever RAISE the static score —
+    it must never cause a known-malicious sample to be missed, and it must
+    not fire on ordinary benign permission profiles (false-positive guard)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from core.c1.analyzer import analyze_extension
+        cls.analyze = staticmethod(analyze_extension)
+
+    def _run(self, manifest, source, ext_id):
+        return asyncio.run(self.analyze(json.dumps(manifest), source, ext_id))
+
+    def test_simple_benign_extension_is_not_flagged_as_anomaly(self):
+        result = self._run(BENIGN_MANIFEST, "", "test_if_benign")
+        self.assertEqual(result["verdict"], "SAFE")
+        self.assertNotIn("ZERO_DAY_ANOMALY", result["flags"])
+
+    def test_bundled_malicious_fixture_still_malicious(self):
+        base = os.path.join(_ROOT, "core", "c1", "test_malicious_ext")
+        with open(os.path.join(base, "manifest.json"), encoding="utf-8") as f:
+            manifest = json.load(f)
+        with open(os.path.join(base, "background.js"), encoding="utf-8") as f:
+            source = f.read()
+        result = self._run(manifest, source, "test_if_malicious")
+        self.assertEqual(result["verdict"], "MALICIOUS")
+        self.assertIn("anomaly_score", result["static"])
+
+    def test_real_benign_power_extensions_never_flagged_as_anomaly(self):
+        """Regression guard: an earlier threshold (50) flagged 5 of these 14
+        real, legitimate, complex extensions as ZERO_DAY_ANOMALY even though
+        every one of them is in the model's own benign training set — see
+        scripts/README.md. They must never trigger the flag."""
+        power_csv = os.path.join(_ROOT, "core", "c1", "data", "benign_power_extensions.csv")
+        if not os.path.exists(power_csv):
+            self.skipTest("benign_power_extensions.csv not present")
+
+        import csv as csv_mod
+        with open(power_csv, newline="", encoding="utf-8") as f:
+            rows = list(csv_mod.DictReader(f))
+        self.assertGreater(len(rows), 0, "benign_power_extensions.csv is empty")
+
+        from core.c1.features import build_feature_vector
+        from core.c1 import analyzer as analyzer_mod
+        analyzer_mod._load_resources()
+
+        flagged = []
+        for row in rows:
+            feature_values = {k: float(v) for k, v in row.items()
+                               if k not in ("label", "extension_id")}
+            vector = build_feature_vector(analyzer_mod._FEATURE_COLUMNS, feature_values)
+            anomaly = analyzer_mod.predict_anomaly_score(analyzer_mod._ISO_FOREST, vector)
+            if anomaly >= analyzer_mod.ISO_FOREST_ANOMALY_THRESHOLD:
+                flagged.append((row.get("extension_id", "?"), anomaly))
+
+        self.assertEqual(flagged, [],
+                          f"Known-benign power extensions flagged as zero-day anomalies: {flagged}")
+
+    def test_anomaly_score_present_and_bounded(self):
+        result = self._run(MALICIOUS_MANIFEST, MALICIOUS_CODE, "test_if_bounds")
+        anomaly = result["static"]["anomaly_score"]
+        self.assertGreaterEqual(anomaly, 0.0)
+        self.assertLessEqual(anomaly, 1.0)
 
 
 if __name__ == "__main__":
