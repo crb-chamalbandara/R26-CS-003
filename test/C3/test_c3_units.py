@@ -19,11 +19,11 @@ if _ROOT not in sys.path:
 
 from core.c3.alert_store import C3AlertStore
 from core.c3.analyzer import C3Analyzer
-from core.c3.anomaly_engine import C3RFClassifierEngine
+from core.c3.anomaly_engine import C3XGBoostEngine
 from core.c3.block_store import C3BlockStore
 from core.c3.feature_engine import compute_features, FEATURE_ORDER
 from core.c3.interceptor import C3Interceptor
-from core.c3.risk_fusion import C3RiskFusion
+from core.c3.risk_fusion import BEACON_THRESHOLD, C3RiskFusion
 
 
 def _make_events(n, interval_ms=5000, method="GET", background=True, user_active=False):
@@ -44,7 +44,7 @@ def _make_events(n, interval_ms=5000, method="GET", background=True, user_active
     return events
 
 
-class _DummyRfModel:
+class _DummyMLModel:
     """Module-level (not nested) so pickle can actually serialize it --
     pickle requires classes to be importable by module path."""
     def predict_proba(self, X):
@@ -192,54 +192,70 @@ class TestRiskFusion(unittest.TestCase):
         self.fusion = C3RiskFusion()
 
     def test_verdict_beacon_when_score_ge_0_6(self):
-        result = self.fusion.fuse(rf=0.8, reputation=0.9, heuristic=0.7)
+        result = self.fusion.fuse(ml=0.8, reputation=0.9, heuristic=0.7)
         self.assertEqual(result["verdict"], "BEACON")
         self.assertGreaterEqual(result["score"], 0.6)
 
     def test_verdict_safe_when_all_zero(self):
-        result = self.fusion.fuse(rf=0.0, reputation=0.0, heuristic=0.0)
+        result = self.fusion.fuse(ml=0.0, reputation=0.0, heuristic=0.0)
         self.assertEqual(result["verdict"], "SAFE")
         self.assertLess(result["score"], 0.3)
 
     def test_verdict_suspicious_mid_range(self):
-        result = self.fusion.fuse(rf=0.5, reputation=None, heuristic=0.3)
+        result = self.fusion.fuse(ml=0.5, reputation=None, heuristic=0.3)
         self.assertEqual(result["verdict"], "SUSPICIOUS")
         self.assertGreaterEqual(result["score"], 0.3)
         self.assertLess(result["score"], 0.6)
 
-    def test_rf_only_does_not_reach_beacon_without_heuristic(self):
-        """High RF score alone should NOT reach BEACON — RF is trained on only
-        187 real positive examples, so heuristic confirmation is still required."""
-        result = self.fusion.fuse(rf=0.95, reputation=None, heuristic=0.0)
-        self.assertLess(result["score"], 0.60,
-                        "RF-only score should stay below 0.60")
+    def test_ml_alone_does_not_reach_beacon_without_heuristic(self):
+        """A high ML score with no heuristic support must NOT reach BEACON —
+        both signals have to be involved (the both-signal gate holds it just
+        below the threshold)."""
+        result = self.fusion.fuse(ml=0.95, reputation=None, heuristic=0.0)
+        self.assertLess(result["score"], BEACON_THRESHOLD,
+                        "ML-only score must stay below the BEACON threshold")
         self.assertNotEqual(result["verdict"], "BEACON")
 
-    def test_reputation_override_triggers_at_0_8(self):
-        """Reputation >= 0.8 forces score to at least 0.60."""
-        result = self.fusion.fuse(rf=None, reputation=0.85, heuristic=0.1)
-        self.assertGreaterEqual(result["score"], 0.60)
-        self.assertEqual(result["verdict"], "BEACON")
+    def test_heuristic_alone_does_not_reach_beacon_without_ml(self):
+        """Symmetric case: a high heuristic score with a near-zero ML score
+        must NOT reach BEACON while an ML score exists at all."""
+        result = self.fusion.fuse(ml=0.02, reputation=None, heuristic=0.98)
+        self.assertLess(result["score"], BEACON_THRESHOLD,
+                        "heuristic-only score must stay below the BEACON threshold")
+        self.assertNotEqual(result["verdict"], "BEACON")
+
+    def test_reputation_is_evidence_only_and_never_changes_the_score(self):
+        """Threat-intel reputation is analyst-facing evidence, not a score
+        input: fuse() must return the same score/verdict with and without it."""
+        with_rep = self.fusion.fuse(ml=0.4, reputation=0.95, heuristic=0.3)
+        without_rep = self.fusion.fuse(ml=0.4, reputation=None, heuristic=0.3)
+        self.assertEqual(with_rep["score"], without_rep["score"])
+        self.assertEqual(with_rep["verdict"], without_rep["verdict"])
+        # A strong reputation hit on its own does not manufacture a BEACON.
+        self.assertNotEqual(
+            self.fusion.fuse(ml=None, reputation=0.85, heuristic=0.1)["verdict"],
+            "BEACON",
+        )
 
     def test_score_clamped_between_0_and_1(self):
-        result = self.fusion.fuse(rf=1.0, reputation=1.0, heuristic=1.0)
+        result = self.fusion.fuse(ml=1.0, reputation=1.0, heuristic=1.0)
         self.assertLessEqual(result["score"], 1.0)
         self.assertGreaterEqual(result["score"], 0.0)
 
     def test_result_has_required_keys(self):
-        result = self.fusion.fuse(rf=0.5, reputation=0.5, heuristic=0.5)
+        result = self.fusion.fuse(ml=0.5, reputation=0.5, heuristic=0.5)
         self.assertIn("score", result)
         self.assertIn("verdict", result)
         self.assertIn("detail", result)
 
-    def test_heuristic_only_mode_when_no_rf_or_rep(self):
-        result = self.fusion.fuse(rf=None, reputation=None, heuristic=0.7)
+    def test_heuristic_only_mode_when_no_ml_or_rep(self):
+        result = self.fusion.fuse(ml=None, reputation=None, heuristic=0.7)
         self.assertAlmostEqual(result["score"], 0.7, places=2)
         self.assertEqual(result["verdict"], "BEACON")
 
     def test_full_signal_fusion(self):
         result = self.fusion.fuse(
-            rf=0.8,
+            ml=0.8,
             reputation=0.7,
             heuristic=0.6,
         )
@@ -247,7 +263,7 @@ class TestRiskFusion(unittest.TestCase):
         self.assertEqual(result["verdict"], "BEACON")
 
     def test_none_inputs_handled_gracefully(self):
-        result = self.fusion.fuse(rf=None, reputation=None, heuristic=None)
+        result = self.fusion.fuse(ml=None, reputation=None, heuristic=None)
         self.assertIn("verdict", result)
         self.assertEqual(result["verdict"], "SAFE")
 
@@ -274,7 +290,7 @@ class TestFeatureFusionIntegration(unittest.TestCase):
         if feats["background_tab_ratio"] > 0.80:
             heuristic += 0.20
         # Normal browsing: low heuristic → SAFE
-        result = self.fusion.fuse(rf=None, reputation=None, heuristic=heuristic)
+        result = self.fusion.fuse(ml=None, reputation=None, heuristic=heuristic)
         # Normal events should not reach BEACON threshold
         self.assertLess(result["score"], 0.60)
 
@@ -506,13 +522,13 @@ class TestFeatureEngineEdgeCases(unittest.TestCase):
             self.assertEqual(feats[key], 0.0)
 
 
-# ── Model Loading Compatibility (anomaly_engine.C3RFClassifierEngine) ─────────
+# ── Model Loading Compatibility (anomaly_engine.C3XGBoostEngine) ─────────
 # An incompatible/malformed model file must fail safe (model_loaded stays
 # False, score() returns None) rather than being silently accepted and
 # producing wrong or crashing predictions later.
 class TestModelLoadingCompatibility(unittest.TestCase):
 
-    def _engine_with_payload(self, payload) -> C3RFClassifierEngine:
+    def _engine_with_payload(self, payload) -> C3XGBoostEngine:
         tmp = tempfile.NamedTemporaryFile(suffix=".pkl", delete=False)
         tmp_path = tmp.name
         try:
@@ -520,7 +536,7 @@ class TestModelLoadingCompatibility(unittest.TestCase):
         finally:
             tmp.close()  # must close before reload()/unlink can reopen or remove it on Windows
         try:
-            engine = C3RFClassifierEngine.__new__(C3RFClassifierEngine)
+            engine = C3XGBoostEngine.__new__(C3XGBoostEngine)
             engine._model = None
             engine._feature_names = []
             engine._threshold = 0.5
@@ -532,7 +548,7 @@ class TestModelLoadingCompatibility(unittest.TestCase):
 
     def test_valid_payload_loads(self):
         engine = self._engine_with_payload({
-            "model": _DummyRfModel(),
+            "model": _DummyMLModel(),
             "feature_names": ["iat_mean_ms", "iat_cv"],
             "threshold": 0.5,
         })
@@ -541,21 +557,21 @@ class TestModelLoadingCompatibility(unittest.TestCase):
     def test_non_dict_payload_rejected(self):
         """A bare model-only pickle has no feature_names to validate -- must
         be rejected rather than silently guessed at (old legacy format)."""
-        engine = self._engine_with_payload(_DummyRfModel())
+        engine = self._engine_with_payload(_DummyMLModel())
         self.assertFalse(engine.model_loaded)
         score, detail = engine.score({"iat_mean_ms": 100})
         self.assertIsNone(score)
 
     def test_unknown_feature_names_rejected(self):
         engine = self._engine_with_payload({
-            "model": _DummyRfModel(),
+            "model": _DummyMLModel(),
             "feature_names": ["totally_made_up_feature", "iat_cv"],
             "threshold": 0.5,
         })
         self.assertFalse(engine.model_loaded)
 
     def test_missing_feature_names_rejected(self):
-        engine = self._engine_with_payload({"model": _DummyRfModel(), "threshold": 0.5})
+        engine = self._engine_with_payload({"model": _DummyMLModel(), "threshold": 0.5})
         self.assertFalse(engine.model_loaded)
 
     def test_model_without_predict_proba_rejected(self):
@@ -565,7 +581,7 @@ class TestModelLoadingCompatibility(unittest.TestCase):
         self.assertFalse(engine.model_loaded)
 
     def test_missing_file_fails_safe(self):
-        engine = C3RFClassifierEngine.__new__(C3RFClassifierEngine)
+        engine = C3XGBoostEngine.__new__(C3XGBoostEngine)
         engine._model = None
         engine._feature_names = []
         engine._threshold = 0.5
@@ -594,13 +610,13 @@ class TestAlertStoreSignalDetail(unittest.TestCase):
         store = C3AlertStore(db_path=self._db_path)
         store.add_alert({
             "host": "evil.example", "score": 0.8, "verdict": "BEACON", "detail": "x",
-            "features": {}, "signal_breakdown": {"rf": 0.6},
-            "signal_detail": {"rf": "RF prob=0.6000 threshold=0.50 [bot]"},
+            "features": {}, "signal_breakdown": {"ml": 0.6},
+            "signal_detail": {"ml": "XGB prob=0.6000 threshold=0.50 [bot]"},
         })
         # Fresh instance simulates a backend restart reading from disk.
         reloaded = C3AlertStore(db_path=self._db_path)
         alert = reloaded.list_alerts(1)[0]
-        self.assertEqual(alert["signal_detail"], {"rf": "RF prob=0.6000 threshold=0.50 [bot]"})
+        self.assertEqual(alert["signal_detail"], {"ml": "XGB prob=0.6000 threshold=0.50 [bot]"})
 
     def test_missing_signal_detail_defaults_to_empty_dict(self):
         store = C3AlertStore(db_path=self._db_path)
@@ -634,54 +650,80 @@ class TestAlertStoreSignalDetail(unittest.TestCase):
         self.assertEqual(alert["signal_detail"], {})  # can't recover data never saved, but doesn't crash
 
 
-# ── Reputation Re-Fuse (analyzer._handle_beacon) ───────────────────────────────
-# fuse()'s reputation weight-table entries were previously unreachable dead
-# code: _analyze_once() always calls fuse() with reputation=None, so
-# reputation only ever decorated signal_breakdown for display without
-# actually influencing the persisted score. _handle_beacon() now re-fuses
-# with the real reputation score once known -- these tests confirm it can
-# only ever raise the score (never lower it) and never changes the verdict
-# away from the BEACON that was already independently confirmed.
-class TestHandleBeaconReputationRefuse(unittest.IsolatedAsyncioTestCase):
+# ── Reputation is evidence-only (analyzer._handle_beacon) ─────────────────────
+# Threat-intel reputation is looked up once a BEACON is confirmed and recorded
+# on the alert as analyst-facing evidence. It is NOT an input to the risk
+# score (see core/c3/risk_fusion.py) -- _handle_beacon() must never move the
+# score or the verdict based on it, whether the lookup is flagged or clean.
+class TestHandleBeaconReputationEvidence(unittest.IsolatedAsyncioTestCase):
 
-    def _make_result(self, score, rf, heuristic):
+    def _make_result(self, score, ml, heuristic):
         return {
             "score": score, "verdict": "BEACON", "detail": "initial",
             "source": "fusion",
-            "signal_breakdown": {"rf": rf, "reputation": None, "heuristic": heuristic},
-            "signal_detail": {"rf": "x", "heuristic": "y", "reputation": "pending", "fusion": "z"},
+            "signal_breakdown": {"ml": ml, "reputation": None, "heuristic": heuristic},
+            "signal_detail": {"ml": "x", "heuristic": "y", "reputation": "pending", "fusion": "z"},
             "host": "evil.example", "latest_url": "http://evil.example/beacon",
             "features": {}, "request_count": 20, "timestamp": "2026-01-01T00:00:00",
         }
 
-    async def test_flagged_reputation_can_raise_score(self):
+    async def test_flagged_reputation_recorded_without_changing_score(self):
         analyzer = C3Analyzer()
-        result = self._make_result(score=0.65, rf=0.2, heuristic=0.9)
+        result = self._make_result(score=0.65, ml=0.2, heuristic=0.9)
         with mock.patch("core.c3.analyzer.c3_reputation_engine") as rep_mock, \
              mock.patch("core.c3.analyzer.c3_alert_store") as store_mock, \
              mock.patch("core.c3.analyzer.c3_interceptor"):
             rep_mock.score_beacon = mock.AsyncMock(
-                return_value={"score": 0.9, "flagged": True, "detail": "abuseipdb=0.90"}
+                return_value={"score": 0.9, "flagged": True,
+                              "sources": {"abuseipdb": 0.9, "virustotal": 0.0},
+                              "detail": "FLAGGED — abuseipdb=0.90, virustotal=0.00"}
             )
             store_mock.add_alert = mock.Mock(side_effect=lambda r: r)
             await analyzer._handle_beacon("evil.example", result)
-        self.assertGreaterEqual(result["score"], 0.65)
+        self.assertEqual(result["score"], 0.65)                      # score untouched
         self.assertEqual(result["verdict"], "BEACON")
+        self.assertEqual(result["signal_breakdown"]["reputation"], 0.9)  # recorded as evidence
+        # Per-source scores carried through for the popups (out of 100%).
+        self.assertEqual(result["signal_breakdown"]["reputation_sources"],
+                         {"abuseipdb": 0.9, "virustotal": 0.0})
+        self.assertIn("TI:", result["detail"])
 
-    async def test_clean_reputation_never_lowers_score(self):
+    async def test_clean_reputation_recorded_as_zero_without_changing_score(self):
         analyzer = C3Analyzer()
-        result = self._make_result(score=0.75, rf=0.2, heuristic=0.95)
-        original_score = result["score"]
+        result = self._make_result(score=0.75, ml=0.2, heuristic=0.95)
         with mock.patch("core.c3.analyzer.c3_reputation_engine") as rep_mock, \
              mock.patch("core.c3.analyzer.c3_alert_store") as store_mock, \
              mock.patch("core.c3.analyzer.c3_interceptor"):
             rep_mock.score_beacon = mock.AsyncMock(
-                return_value={"score": 0.0, "flagged": False, "detail": "no TI data"}
+                return_value={"score": 0.0, "flagged": False,
+                              "sources": {"abuseipdb": 0.0, "virustotal": 0.0},
+                              "detail": "Clean — abuseipdb=0.00, virustotal=0.00"}
             )
             store_mock.add_alert = mock.Mock(side_effect=lambda r: r)
             await analyzer._handle_beacon("evil.example", result)
-        self.assertGreaterEqual(result["score"], original_score)
+        self.assertEqual(result["score"], 0.75)                      # score untouched
         self.assertEqual(result["verdict"], "BEACON")
+        # A clean lookup that ran IS a real answer — recorded as 0%, not "n/a".
+        self.assertEqual(result["signal_breakdown"]["reputation"], 0.0)
+        self.assertEqual(result["signal_breakdown"]["reputation_sources"],
+                         {"abuseipdb": 0.0, "virustotal": 0.0})
+        self.assertNotIn("TI:", result["detail"])
+
+    async def test_skipped_reputation_stays_not_available(self):
+        analyzer = C3Analyzer()
+        result = self._make_result(score=0.75, ml=0.2, heuristic=0.95)
+        with mock.patch("core.c3.analyzer.c3_reputation_engine") as rep_mock, \
+             mock.patch("core.c3.analyzer.c3_alert_store") as store_mock, \
+             mock.patch("core.c3.analyzer.c3_interceptor"):
+            rep_mock.score_beacon = mock.AsyncMock(
+                return_value={"score": 0.0, "flagged": False, "sources": {},
+                              "detail": "local host — skipped"}
+            )
+            store_mock.add_alert = mock.Mock(side_effect=lambda r: r)
+            await analyzer._handle_beacon("evil.example", result)
+        self.assertEqual(result["score"], 0.75)
+        self.assertIsNone(result["signal_breakdown"]["reputation"])
+        self.assertEqual(result["signal_breakdown"]["reputation_sources"], {})
 
 
 # ── Reputation Engine: VirusTotal scoring + cached_score ───────────────────

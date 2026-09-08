@@ -16,12 +16,12 @@
 #                         in the background, and how long the user had been idle
 #
 #   feature_engine.py   — turns the list of requests for each destination host
-#                         into 16 numbers (features) that describe the traffic
+#                         into 29 numbers (features) that describe the traffic
 #                         pattern (timing regularity, request rate, same-site
 #                         alignment, script-vs-parser initiator, etc.)
 #
-#   anomaly_engine.py   — the trained Random Forest model scores those
-#                         features for bot-like HTTP behaviour
+#   anomaly_engine.py   — an isotonic-calibrated XGBoost model scores 18 of
+#                         those features for bot-like HTTP behaviour
 #
 #   heuristic rules     — simple if/then rules inside analyzer.py that look for
 #                         patterns like "very regular timing + user is idle"
@@ -30,8 +30,9 @@
 #                         final number (0–1) and decides SAFE / SUSPICIOUS / BEACON
 #
 #   reputation_engine.py — once a BEACON is confirmed, checks the destination
-#                          against threat-intelligence databases (AbuseIPDB, OTX,
-#                          Google Safe Browsing)
+#                          against threat-intelligence databases (AbuseIPDB,
+#                          VirusTotal) and shows the result as analyst evidence
+#                          (it is not folded into the risk score)
 #
 #   alert_store.py      — saves confirmed BEACON alerts to a local SQLite database
 #                         so they survive restarts and can be shown in the dashboard

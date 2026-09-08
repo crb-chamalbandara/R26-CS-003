@@ -1,0 +1,748 @@
+================================================================================
+Publish_C3.txt
+FACT-CHECK OF: core/c3/ICAC2026_C3_Beacon_Detector.pdf
+Checked on     : 2026-09-02
+Checked against: the code in core/c3/ (branch C3, working tree), the result
+                 JSONs in data/ (including deleted ones recovered from git
+                 HEAD), the deployed model file models/c3_xgb_classifier.pkl,
+                 and the raw captures on D:\.
+================================================================================
+
+HOW TO READ THIS FILE
+  [OK]        = checked, correct, keep as it is.
+  [WRONG]     = does not match the system. Must be fixed before submission.
+  [CONFLICT]  = the paper contradicts itself.
+  [RISK]      = not strictly "wrong", but a reviewer or the panel will attack
+                it. Fix the wording.
+Every item gives: what the paper says -> what the system actually does ->
+evidence -> suggested replacement wording.
+
+================================================================================
+PART 0 - SUMMARY (read this first if you only have 5 minutes)
+================================================================================
+
+The evaluation numbers you QUOTE are almost all real - I matched them to the
+raw result files digit for digit. The problem is not invented numbers. The
+problems are:
+
+  (1) The whole SYSTEM DESCRIPTION (Section III + Figure 1) describes an OLD
+      version of the code. Feature count, fusion formula, override rules,
+      thresholds, confirmation rule, reputation feeds and reputation gating
+      are ALL out of date. Eight separate wrong facts.
+
+  (2) The paper mixes up THREE DIFFERENT MODELS and calls them all "the
+      model" / "production" / "deployed". This creates a real contradiction:
+      the SAME beacon profile is reported as 0.947 in Section IV-C and 0.0009
+      in Section IV-D.
+
+  (3) The headline jitter claim ("the same beacon with 5% timing jitter") is
+      NOT supported by the data. The two profiles being compared differ in
+      interval, HTTP method, payload size and URL entropy - not only jitter.
+      This is the claim a reviewer is most likely to kill.
+
+  (4) Section IV-D says the beacon profiles were "generated in the live
+      browser" and Table III reports 1,200 benign "samples". They were NOT
+      captured. They are hand-written feature-vector parameter dictionaries in
+      a Python script. Given your panel's no-synthetic-data rule, THIS IS THE
+      SINGLE HIGHEST-RISK SENTENCE IN THE PAPER.
+
+  (5) Nine of your twelve references are never cited in the text, and one feed
+      you cite (OTX) has been deleted from the code.
+
+Count: 27 issues - 12 critical, 8 medium, 7 minor.
+
+================================================================================
+PART 1 - WHAT IS CORRECT (do not change these)
+================================================================================
+
+[OK] Rolling window of 50 events per host.
+     -> core/c3/interceptor.py:507   deque(maxlen=50)
+
+[OK] "Analysis runs every ten seconds per monitored host."
+     -> core/c3/analyzer.py:268      await asyncio.sleep(10)
+
+[OK] Collection through the CDP Network domain, not request interception;
+     interception used only to block a confirmed host.
+     -> core/c3/interceptor.py:178
+
+[OK] Interaction tracker listens for click, keydown, scroll, touchstart, and
+     deliberately excludes pointer movement.
+     -> core/c3/context_tagger.py:41
+        ["click", "keydown", "scroll", "touchstart"].forEach(...)
+
+[OK] Tracker is also injected into already-open tabs at start-up.
+     -> core/c3/context_tagger.py:88-96 (setup() loops over context.pages and
+        calls inject_page() -> page.evaluate(_TRACKER_JS))
+
+[OK] Service-worker / non-page requests are attributed to background with the
+     user marked inactive.
+     -> core/c3/context_tagger.py:172-195
+
+[OK] SAFE threshold < 0.30.
+     -> core/c3/risk_fusion.py:40   SUSPICIOUS_THRESHOLD = 0.30
+
+[OK] Heuristics work from the first run with no model and no API keys.
+
+[OK] Table II, random-split rows (both exact):
+       HTTP-flow     0.715 / 0.513 / 0.769 / 0.615
+         -> data/_xgb_http_train_results.json (0.7148/0.5128/0.7692/0.6154)
+       Cadence-only  0.197 / 0.073 / 0.769 / 0.133
+         -> data/_xgb_regularized_cadence_results.json
+            (0.1974/0.0727/0.7692/0.1329)
+
+[OK] Table II, cadence-only LOSO row 0.158 / 0.061 / 0.280 / 0.096, and
+     "43 true positives against 515 false ones".
+     -> data/_xgb_regularized_cadence_results.json loso_aggregate
+        {mean_pr_auc 0.1582, mean_precision 0.0606, mean_recall 0.2804,
+         mean_f1 0.0959, total_tp 43, total_fp 515}
+
+[OK] In-sample PR-AUC 0.994, ROC-AUC 1.000, mean-payload-size importance
+     0.477, 681,911 windows, 492 positives, positive-class weight 2770,
+     imbalance 1:1386 (681911/492 = 1385.99).
+     -> data/_xgb_production_train.json (all six numbers exact)
+     BUT see item C-9: this is not the production model.
+
+[OK] The four jitter-test score VALUES: 0.947, 0.984, 0.014, 0.015.
+     -> models/c3_xgb_classifier.pkl -> sanity_scores
+        {detection_lab_5s_post 0.9471, ctu13_native_74s_median 0.9836,
+         cs_10s_5pct_jitter 0.0137, cs_60s_10pct_jitter 0.0151}
+     BUT see item C-11: what they are compared AGAINST is wrong.
+
+[OK] Live-beacon heuristic scores 0.71 / 0.73 / 0.65 and ML 0.0009 / 0 / 0.
+     -> data/_regularized_cadence_fullpipeline.json  beacon_battery
+
+[OK] Table III - all 24 numbers match
+     data/_regularized_cadence_fullpipeline.json hard_negative_sweep exactly
+     (deployed max 0.0601 / 0.3583 / 0.0911 / 0.2541 / 0.4355 / 0.5113;
+      candidate max 0.2447 / 0.5931 / 0.2280 / 0.2931 / 0.6304 / 0.5969;
+      candidate false beacons 0/1/0/0/1/1 = 3).
+
+[OK] The four browser-context features (idle, user-active, background-tab,
+     extension-origin) genuinely have no counterpart in a network capture.
+
+
+================================================================================
+PART 2 - CRITICAL ERRORS (must fix)
+================================================================================
+
+--------------------------------------------------------------------------------
+C-1  [WRONG]  FEATURE COUNT IS 16, NOT 14
+--------------------------------------------------------------------------------
+Paper says (Abstract, Sec III-B, Table I, Fig 1): "a 14-feature vector",
+"Table I lists the 14 features", Fig 1 box "14 features".
+
+Reality: 16 features.
+  -> core/c3/feature_engine.py:27  FEATURE_ORDER has 16 entries.
+     Table I is missing:
+       same_site_ratio        - destination shares an eTLD+1 with the page the
+                                user was on
+       script_initiator_ratio - share of requests whose CDP initiator.type is
+                                "script"
+     These were appended after the original 14 (see the comment in
+     feature_engine.py) and drive heuristic Rules 6 and 9
+     (core/c3/analyzer.py:646, 690).
+
+FIX: change every "14" to "16" and add two rows to Table I:
+     F15 same-site ratio        | destination is the site the user is on
+     F16 script-initiator ratio | fired by page script, not by the user
+     Then "four of whose features have no counterpart in any network capture"
+     becomes SIX - same-site and script-initiator also require the browser.
+
+--------------------------------------------------------------------------------
+C-2  [WRONG]  THE PAPER NEVER SAYS THE ML MODEL USES ONLY 6 FEATURES
+--------------------------------------------------------------------------------
+The paper implies the 14-feature vector is what the model scores.
+
+Reality: the deployed classifier reads SIX features only.
+  -> core/c3/anomaly_engine.py:104  ML_FEATURE_SUBSET =
+     ["iat_cv", "iat_bowley_skewness", "payload_size_mean",
+      "payload_size_std", "url_path_entropy", "http_post_ratio"]
+  -> confirmed inside the model file itself:
+     models/c3_xgb_classifier.pkl -> feature_names = the same 6.
+  iat_mean_ms, iat_mad_ms and request_burst_count were deliberately dropped;
+  the six browser/deterministic features and requests_per_hour never reach the
+  model at all - they only drive heuristic rules.
+
+WHY THIS MATTERS: this is exactly what your panel attacked. Hiding it makes it
+worse; a reviewer who opens the repository finds it in one minute. Either
+disclose it explicitly, or (better) retrain on a larger feature set - see
+Publish_ML.txt.
+
+FIX (if you keep the current model), add to Sec III-C:
+  "Of the 16 features, the supervised component scores six cadence-invariant
+   ones (F02, F03, F06, F07, F08, F13); the remaining ten - including all six
+   browser-context features - are consumed by the deterministic rule layer,
+   because no public corpus can supervise them."
+
+--------------------------------------------------------------------------------
+C-3  [WRONG]  FUSION FORMULA IS WRONG (three different versions in one paper)
+--------------------------------------------------------------------------------
+Paper Sec III-C: "Fusion is 0.60 a + 0.25 r + 0.15 h when all three are
+present, and redistributes weight when any is unavailable - 0.75 a + 0.25 h
+offline, 0.55 h + 0.45 r with no trained model."
+
+Reality:
+  -> core/c3/risk_fusion.py:52-53   ML_WEIGHT = 0.45 ; HEURISTIC_WEIGHT = 0.55
+  -> risk_fusion.py:96              score = ml*0.45 + heuristic*0.55  (ALWAYS)
+  -> risk_fusion.py:98              no ML available -> weights {"heuristic":1.0}
+  -> risk_fusion.py:86-90           the `reputation` argument is accepted and
+                                    then explicitly ignored ("_ = reputation")
+  Reputation is NOT a term in the score, in any configuration.
+
+FIX:
+  "The final score is a fixed blend, 0.45 a + 0.55 h. When no model score is
+   available the heuristic carries full weight. Threat-intelligence reputation
+   is not a scoring term; it is retrieved once a beacon is confirmed and shown
+   as supporting evidence only."
+
+--------------------------------------------------------------------------------
+C-4  [WRONG]  THE TWO "OVERRIDE RULES" NO LONGER EXIST
+--------------------------------------------------------------------------------
+Paper Sec III-C: "Two override rules prevent dangerous misses: a reputation
+score above 0.8 raises the result to at least the beacon threshold, as does
+strong agreement between a high anomaly score and a high heuristic score."
+
+Reality: every score-RAISING override was removed. The only remaining guard
+LOWERS the score.
+  -> risk_fusion.py:104-112  if the blended score reaches BEACON while either
+     signal is below BOTH_SIGNAL_FLOOR (0.10), the score is held at
+     UNCONFIRMED_CAP = 0.51.
+  -> risk_fusion.py module docstring, rule 1: "Nothing else moves it - no
+     overrides, no reputation term."
+Figure 1's caption "adaptive fusion + override rules" is therefore wrong twice:
+the weights are fixed and there are no overrides.
+
+FIX:
+  "One symmetric guard prevents a single-signal verdict: if the blended score
+   reaches the beacon threshold while either the model score or the heuristic
+   score is below 0.10, the verdict is held just below the threshold until the
+   missing signal appears."
+  Relabel the Fig 1 box: "fixed-weight fusion + both-signal guard".
+
+--------------------------------------------------------------------------------
+C-5  [WRONG]  THRESHOLDS IN FIGURE 1 ARE WRONG
+--------------------------------------------------------------------------------
+Paper Fig 1: "SAFE <0.3 . SUSPICIOUS . BEACON >=0.6 . block >=0.8"
+
+Reality:
+  -> risk_fusion.py:39   BEACON_THRESHOLD = 0.52
+     (lowered from 0.60 on 2026-08-27 together with the RF -> XGBoost swap;
+     the code comment says the model and the threshold are a package)
+  -> analyzer.py:48      AUTO_BLOCK_SCORE_FLOOR = 0.75
+  SAFE < 0.30 is correct.
+
+FIX: "SAFE <0.30 . SUSPICIOUS . BEACON >=0.52 . auto-block >=0.75"
+
+--------------------------------------------------------------------------------
+C-6  [WRONG]  THE "THREE OR FOUR / FIVE OBSERVATIONS" RULE DOES NOT EXIST
+--------------------------------------------------------------------------------
+Paper Sec III-C: "A two-tier verdict rule allows only SUSPICIOUS from three or
+four observations and requires five before a host can be declared a beacon and
+blocked, unless reputation already confirms the destination."
+
+Reality:
+  -> analyzer.py:324    allow_beacon = n_events >= 10        (TEN, not five)
+  -> analyzer.py:72-73  _TIMING_CONF_MIN_EVENTS = 6 ,
+                        _TIMING_CONF_FULL_EVENTS = 20
+     Below 6 events the timing features are neutralised and the model is not
+     called; between 6 and 20 the score is ramped smoothly (smoothstep);
+     at 20+ it is bit-identical to plain fusion.
+  -> reputation can never confirm anything (see C-3/C-4), so the "unless
+     reputation already confirms" escape clause does not exist.
+
+FIX:
+  "No model score is produced below six requests. Between six and twenty
+   requests the fused score is ramped by a timing-confidence weight, and a host
+   cannot be declared a beacon before ten requests, whatever the score."
+
+--------------------------------------------------------------------------------
+C-7  [WRONG]  REPUTATION USES 2 FEEDS, NOT 5 - AND IS GATED DIFFERENTLY
+--------------------------------------------------------------------------------
+Paper Fig 1: "reputation 5 feeds".
+Paper Sec III-C: "Reputation aggregates five threat-intelligence sources,
+taking the maximum across them, and is gated: it is queried only for hosts
+whose behavioural score already exceeds 0.2."
+
+Reality:
+  (a) TWO sources: AbuseIPDB and VirusTotal.
+      -> core/c3/reputation_engine.py:118-119 (the only two calls)
+      -> analyzer.py:166 "ti_available ... AbuseIPDB or VirusTotal configured"
+      OTX was deleted from reputation_engine.py, main.py, the settings model
+      and both dashboard inputs. URLhaus and Feodo Tracker appear nowhere in
+      the code (grep returns nothing).
+  (b) "taking the maximum across them" is CORRECT
+      -> reputation_engine.py:131   combined = max(sources.values())
+  (c) There is NO 0.2 gate. Reputation is looked up only inside
+      _handle_beacon(), i.e. after a BEACON verdict is already confirmed.
+      -> analyzer.py:480   rep = await c3_reputation_engine.score_beacon(...)
+      A search for a 0.2 threshold in analyzer.py / reputation_engine.py
+      returns nothing.
+
+FIX:
+  "Reputation aggregates two threat-intelligence sources - AbuseIPDB and
+   VirusTotal - taking the maximum across them. It is queried only after a host
+   has already been declared a beacon, which keeps the system inside free-tier
+   rate limits while active browsing touches dozens of hosts."
+  Then DELETE references [9] OTX, [10] URLhaus, [11] Feodo Tracker and ADD a
+  VirusTotal reference.
+
+--------------------------------------------------------------------------------
+C-8  [WRONG]  "REPUTATION-DEPENDENT CACHE LIFETIME"
+--------------------------------------------------------------------------------
+Paper Sec III-C: "Results are cached with a reputation-dependent lifetime."
+
+Reality: one fixed lifetime for every result.
+  -> reputation_engine.py:48    _CACHE_TTL = 1800   # 30 min
+  -> reputation_engine.py:143   expires_at = time.time() + self._CACHE_TTL
+
+FIX: "Results are cached for thirty minutes."
+
+--------------------------------------------------------------------------------
+C-9  [WRONG]  "THE PRODUCTION SUPERVISED MODEL" IN SEC IV-B IS NOT PRODUCTION
+--------------------------------------------------------------------------------
+Paper Sec IV-B: "The production supervised model was fitted on 681,911 windows
+containing 492 positives ... in-sample PR-AUC of 0.994 and a ROC-AUC of 1.000
+... Its dominant feature is mean payload size at 0.477 importance."
+
+The numbers are right, but that model was retired BEFORE this paper was written
+and is not the deployed one.
+  -> data/_xgb_production_train.json is the output of
+     scripts/train_c3_xgb_production.py, whose own docstring now begins:
+       "SUPERSEDED 2026-08-28 -- kept only as the historical record of the
+        NetFlow-scale methodology."
+     and states: "trained on real CTU-13 + IoT-23 C2-channel windows",
+     7 features, NetFlow flow-total bytes (up to 2.1 GB) carrying the live
+     payload feature name. Archived at
+     models/archive/c3_xgb_classifier_NETFLOW_PRE_HTTP_20260828.pkl.
+  -> the ACTUAL deployed model, models/c3_xgb_classifier.pkl, reports:
+       n_training_windows = 51963
+       n_positive_windows = 110
+       trained_on = "CTU-13 Zeek http.log, label_c2, regularized + monotone-
+                     constrained cadence-invariant"
+       note       = "PRODUCTION model, v2."
+
+FIX: call it "an earlier NetFlow-scale model" or "the first supervised model we
+fitted", NOT "the production supervised model". And state the real production
+model's size: 51,963 windows, 110 positive windows. 110 is small - that is the
+honest core of your negative result, and hiding it is what makes the ML section
+look unexplained.
+
+--------------------------------------------------------------------------------
+C-10 [WRONG]  ABSTRACT: "THE SAME PIPELINE FALLS TO 0.158" - TWO DIFFERENT MODELS
+--------------------------------------------------------------------------------
+Paper Abstract: "Supervised models trained on 681,911 windows derived from a
+public botnet capture reach an in-sample PR-AUC of 0.994 and ROC-AUC of 1.000,
+but under leave-one-scenario-out validation the same pipeline falls to a mean
+PR-AUC of 0.158."
+
+These are two different models, two feature sets, two datasets:
+   0.994 in-sample : 7 features, 681,911 NetFlow windows (CTU-13 + IoT-23),
+                     492 positives   [_xgb_production_train.json]
+   0.158 LOSO      : 6 features, 51,963 Zeek http.log windows (CTU-13 only),
+                     110 positives   [_xgb_regularized_cadence_results.json,
+                     and models/c3_xgb_classifier.pkl honest_loso_aggregate]
+"the same pipeline" is not supported by any experiment in your data folder.
+
+FIX - either
+  (a) report in-sample AND LOSO for the SAME model (re-running in-sample on the
+      cadence model takes minutes), or
+  (b) reword: "One model reaches an in-sample PR-AUC of 0.994; a second,
+      trained only on HTTP windows, reaches a leave-one-scenario-out mean
+      PR-AUC of 0.158. Both results point the same way, but they are separate
+      fits and we do not treat them as one curve."
+Option (a) is much stronger. Do (a) if you have 20 minutes.
+
+--------------------------------------------------------------------------------
+C-11 [WRONG][RISK]  THE JITTER CLAIM IS CONFOUNDED - HIGHEST REVIEWER RISK
+--------------------------------------------------------------------------------
+Paper Abstract: "a cadence-trained model scores 0.947 on one beacon profile and
+0.014 on the same beacon with 5% timing jitter".
+Paper Sec IV-C: "0.947 and 0.984 on two regular ones, and 0.014 and 0.015 on
+otherwise identical beacons carrying 5% and 10% timing jitter."
+
+"the same beacon" / "otherwise identical" is FALSE. From
+scripts/test_c3_regularized_cadence_fullpipeline.py (BEACON_PROFILES) and the
+model's own sanity_scores, the compared profiles are:
+
+  score 0.9471  detection_lab_actual_5s_post
+                interval 5 s , jitter 0.1% , POST ratio 1.00 ,
+                payload 37 B , URL entropy 5.64
+  score 0.0137  cs_10s_5pct_jitter
+                interval 10 s , jitter 5% , POST ratio 0.00 ,
+                payload 300 B , URL entropy 0.00
+
+Four variables changed at once, not one. The model's own importances are
+iat_cv 0.411, http_post_ratio 0.180, url_path_entropy 0.155 - so POST ratio and
+URL entropy alone can plausibly account for most of the drop. The monotone
+constraint is on iat_cv only: "(-1, 0, 0, 0, 0, 0)".
+
+This claim is in your abstract, your contributions list and your conclusion. A
+reviewer who checks it will treat the whole evaluation as careless.
+
+FIX - pick one:
+  (BEST, ~15 min) Run a controlled sweep: take ONE profile, hold method,
+    payload, entropy and interval fixed, vary jitter_pct over
+    0, 1, 2, 5, 10, 20, 30 %, and plot score vs jitter. That gives you a real
+    figure and a real sentence. The script already has jitter_to_cv(); changing
+    the loop is a few lines.
+  (SAFE, 2 min) Reword to what the data supports:
+    "The model scores 0.947 and 0.984 on two low-jitter profiles and 0.014 and
+     0.015 on two profiles carrying 5% and 10% jitter. These profiles also
+     differ in method and payload, so we report this as a sensitivity
+     indication rather than an isolated jitter effect."
+
+--------------------------------------------------------------------------------
+C-12 [WRONG][RISK]  "GENERATED IN THE LIVE BROWSER" AND THE 1,200 SAMPLES
+--------------------------------------------------------------------------------
+Paper Sec IV-D: "Fig. 3 shows the deployed pipeline on three beacon profiles
+generated in the live browser."
+Paper Sec IV-E / Table III: "Table III evaluates 200 samples of each" (1,200).
+Paper Abstract: "Across six hard-negative profiles of 200 samples each ..."
+
+Reality: none of these came from a browser or from a capture. They are
+hard-coded feature-vector parameter dictionaries:
+  -> scripts/test_c3_regularized_cadence_fullpipeline.py
+       BEACON_PROFILES = [ {interval_s, jitter_pct, payload_mean, payload_std,
+                            post_ratio, url_ent, user_active_ratio,
+                            background_tab_ratio, avg_idle_time_ms, ...}, ... ]
+       BENIGN_PROFILES = [ ... same shape, 6 entries ... ]
+       def jitter_to_cv(jitter_pct): return jitter_pct / (100 * sqrt(3))
+  The 200 "samples" per profile are draws around those fixed parameters.
+  Section VI half-discloses this for the beacons ("the beacon profiles used
+  here are generated rather than captured from live malware") but NOT for the
+  1,200 negatives - and Section IV-D states the opposite ("in the live
+  browser").
+
+WHY THIS IS THE MOST DANGEROUS ITEM: your panel explicitly checks for synthetic
+data. As written, the paper presents a synthetic parameter sweep as live
+browser measurement. If that is noticed it damages the paper far more than a
+weak model does.
+
+FIX - required, and it is a wording fix, not a data fix:
+  Sec IV-D: "three beacon profiles specified as feature vectors, with timing,
+             payload and browser-context values set to the patterns produced by
+             our test beacon page"
+  Sec IV-E: "Table III evaluates 200 parameterised draws around each profile.
+             These are constructed benign profiles, not captured traffic; they
+             probe the decision surface of the fused pipeline in regions where
+             real benign traffic is known to sit, and are not used for
+             training."
+  Abstract: "six constructed hard-negative profiles, 200 draws each".
+  Sec VI  : add one line covering the negatives, not only the beacons.
+
+NOTE: the model TRAINING data is real - CTU-13 http.log. Only this evaluation
+battery is constructed. Say that clearly and the paper is still honest and
+still publishable.
+
+
+================================================================================
+PART 3 - INTERNAL CONTRADICTIONS
+================================================================================
+
+--------------------------------------------------------------------------------
+X-1  [CONFLICT]  THE SAME PROFILE SCORES 0.947 AND 0.0009
+--------------------------------------------------------------------------------
+Sec IV-C says the cadence model scores 0.947 on the detection-lab 5 s POST
+profile. Sec IV-D says, on the same profile, "The learned component scores
+0.0009."
+
+Both numbers are real, but they come from DIFFERENT models:
+  0.9471 -> models/c3_xgb_classifier.pkl sanity_scores["detection_lab_5s_post"]
+            (the 6-feature cadence model, final fit)
+  0.0009 -> data/_regularized_cadence_fullpipeline.json
+            beacon_battery[0]["deployed_ml"] - the OLDER 9-feature
+            absolute-timing model that held the production slot at the time of
+            that experiment (DEPLOYED_FEATURES in the script lists 9 features).
+The paper calls both "the model" / "the learned component", so as written it
+contradicts itself by three orders of magnitude on one input.
+
+FIX: name the models - e.g. "M1: absolute-timing HTTP model (9 features)" and
+"M2: cadence-invariant model (6 features)" - and say which figure uses which.
+
+--------------------------------------------------------------------------------
+X-2  [CONFLICT]  THE FUSED SCORES USE WEIGHTS THE PAPER ITSELF DENIES
+--------------------------------------------------------------------------------
+Sec IV-D reports fused scores 0.497, 0.511, 0.455 for heuristics 0.71, 0.73,
+0.65 and ML 0.0009, 0.000, 0.000.
+
+Check the arithmetic:
+  0.497 / 0.71 = 0.70 ;  0.511 / 0.73 = 0.70 ;  0.455 / 0.65 = 0.70
+So these were produced with heuristic weight 0.70 / ML weight 0.30. The
+generating script says so in its own docstring: "risk_fusion.py already weights
+ML at only 0.30 (vs heuristic 0.70)".
+
+But the paper's Sec III-C claims 0.60 a + 0.15 h (which would give about 0.107),
+and the CURRENT code uses 0.45 / 0.55 (which gives 0.391, 0.402, 0.358). Three
+fusion definitions, none of which agree.
+
+FIX: recompute Fig 3 under the current 0.45/0.55 weights:
+  0.45*0.0009 + 0.55*0.71 = 0.3914
+  0.45*0.0000 + 0.55*0.73 = 0.4015
+  0.45*0.0000 + 0.55*0.65 = 0.3575
+All three are still SUSPICIOUS (>=0.30 and <0.52), so your CONCLUSION survives
+unchanged - only the printed numbers move. Do not leave the old ones in.
+
+--------------------------------------------------------------------------------
+X-3  [WRONG]  "THE CANDIDATE WAS NOT PROMOTED" - IT WAS
+--------------------------------------------------------------------------------
+Sec IV-E: "On that basis the candidate was not promoted, and the deployed
+configuration was left in place."
+
+Reality: the cadence-invariant candidate line IS the production model today.
+  -> models/c3_xgb_classifier.pkl:
+       note     = "PRODUCTION model, v2. Cadence-invariant AND burst-count-free"
+       replaces = "...c3_xgb_classifier_HTTP_ABSTIMING_20260828.pkl
+                   (absolute-timing) and ...BURSTGATED_20260828.pkl (v1 of this
+                   script, which still had request_burst_count)"
+       honest_loso_aggregate = {pr_auc 0.1582, precision 0.0606,
+                                recall 0.2804, f1 0.0959}
+     - which is exactly the paper's "Cadence-only, LOSO mean" row in Table II.
+  The candidate was promoted after dropping request_burst_count, and the fusion
+  weights were then changed from 0.30/0.70 to 0.45/0.55. So Table III's
+  "Deployed" column describes a model that is now archived, and its "Candidate"
+  column describes the ancestor of the model that is now deployed.
+
+FIX - this changes the STORY of Sec IV-E, so decide deliberately:
+  Option A (honest and still interesting): "The candidate was promoted only
+    after removing the burst feature that caused two of its three false
+    beacons; the promoted variant reproduces the deployed column's zero false
+    beacons while keeping the candidate's non-zero live score."
+    -> you must re-run Table III with the CURRENT model to say this.
+  Option B: keep the sentence but date it - "At the time of this experiment the
+    candidate was not promoted." Weak, but true.
+Do NOT leave the present tense as it stands.
+
+--------------------------------------------------------------------------------
+X-4  [CONFLICT]  ABSTRACT SAYS 0.000, SECTION IV-D SAYS 0.0009
+--------------------------------------------------------------------------------
+Abstract: "0.000 on all three live browser beacon profiles".
+Sec IV-D: "The learned component scores 0.0009, 0.000 and 0.000."
+FIX: use "below 0.001 on all three" in the abstract.
+
+--------------------------------------------------------------------------------
+X-5  [WRONG]  PER-FOLD PR-AUC RANGE USES AN EXCLUDED FOLD
+--------------------------------------------------------------------------------
+Sec IV-C: "Per-fold PR-AUC ranges from 0.003 to 0.393".
+Sec IV-A promises: "report only folds with enough positives to be meaningful"
+(the code uses MIN_POS_RELIABLE = 10).
+
+Actual per-fold PR-AUC (_xgb_regularized_cadence_results.json loso_folds):
+  scenario 1   0.0155   reliable = false
+  scenario 2   0.0782   reliable = TRUE
+  scenario 5   0.1278   reliable = false
+  scenario 7   0.0029   reliable = false   <-- this is your "0.003"
+  scenario 9   0.3926   reliable = TRUE
+  scenario 13  0.0039   reliable = TRUE
+Reliable-only range is 0.004 to 0.393, over THREE folds.
+
+FIX: "Across the three folds with enough positives to be meaningful, per-fold
+PR-AUC ranges from 0.004 to 0.393." State n=3 in the Fig 2 caption - three
+folds is a real limitation and you are better off owning it.
+
+--------------------------------------------------------------------------------
+X-6  [WRONG]  THE POSITIVE-WEIGHT SWEEP IS MISREPORTED
+--------------------------------------------------------------------------------
+Sec IV-C: "We also swept the positive-class weight from 1.0 to 3.0 under LOSO.
+Mean recall rises modestly from 0.280 to 0.317 while false positives climb from
+515 to 841, and mean PR-AUC falls; the weight was left at 1.0."
+
+Actual sweep (_xgb_regularized_cadence_results.json spw_mult_sweep):
+  mult   PR-AUC   recall   FP
+  1.0    0.1582   0.2804   515
+  1.5    0.1340   0.2759   658
+  2.0    0.1484   0.3030   702
+  2.5    0.1467   0.3165   777
+  3.0    0.1134   0.2940   841
+Recall PEAKS at 0.3165 at multiplier 2.5, then FALLS to 0.294 at 3.0. The paper
+pairs the recall from the 2.5 arm with the false positives from the 3.0 arm.
+PR-AUC is also not monotone (it dips, recovers, then falls).
+
+Also, "positive-class weight from 1.0 to 3.0" is a MULTIPLIER applied on top of
+scale_pos_weight, not the weight itself - which is why it appears to contradict
+Sec IV-B's "positive-class weight of 2770".
+
+FIX: "We swept a multiplier on the positive-class weight from 1.0 to 3.0. Mean
+recall peaks at 0.317 (multiplier 2.5) before falling back to 0.294, while false
+positives climb monotonically from 515 to 841 and mean PR-AUC does not improve.
+The multiplier was left at 1.0."
+
+
+================================================================================
+PART 4 - MEDIUM ISSUES
+================================================================================
+
+M-1 [WRONG] Sec II: Isolation Forest is cited "for the model itself" (ref [3])
+    but no isolation forest exists anywhere in the code - a search for
+    "IsolationForest" across core/ and scripts/ returns nothing. The model is
+    XGBoost, and XGBoost (ref [4]) is never cited in the text.
+    FIX: replace the Isolation Forest paragraph with a gradient-boosting
+    justification and cite [4] there. If you want to keep [3], cite it as an
+    alternative you did NOT take, and say why.
+
+M-2 [WRONG] Sec III-C: "The anomaly model scores deviation from a benign
+    browsing baseline." And Sec VI: "The anomaly model requires a benign
+    baseline collected from the deployed browser, and until enough is gathered
+    the system runs on heuristics and reputation alone."
+    Reality: it is a SUPERVISED binary classifier, pre-trained offline on
+    labelled C2-vs-benign HTTP windows, loaded from disk at start-up
+    (anomaly_engine.py:157-180). It needs no baseline and no warm-up. The only
+    warm-up in the system is the six-request timing floor.
+    FIX: call it "the supervised model" throughout, and delete the baseline
+    sentence from Limitations - replace it with the real limitation: 110
+    positive training windows.
+
+M-3 [WRONG] Sec IV-A: "Offline models were trained on windows derived from a
+    public botnet capture set [1], restricted to HTTP flows."
+    The 681,911-window model of Sec IV-B was NOT HTTP-restricted and was not
+    from [1] alone - it is CTU-13 PLUS IoT-23 NetFlow.
+    -> scripts/train_c3_xgb_production.py: "trained on real CTU-13 + IoT-23
+       C2-channel windows only"; "data/c3_xgb_training.csv (CTU-13/IoT-23
+       NetFlow flow-total bytes)".
+    IoT-23 has NO citation in the paper.
+    FIX: add the IoT-23 reference (Parmisano, Garcia, Erquiaga, "A labeled
+    dataset with malicious and benign IoT network traffic", Stratosphere
+    Laboratory, 2020) and say which model used which corpus.
+
+M-4 [WRONG] Sec IV-A: "a cadence-only model restricted to timing and volume
+    statistics."
+    Its six features include url_path_entropy (a URL feature) and
+    http_post_ratio (an HTTP-method feature) - neither is timing or volume. And
+    it is not "restricted to timing": it deliberately DROPS absolute timing
+    (iat_mean_ms, iat_mad_ms) and request_burst_count.
+    Importances: iat_cv 0.411, http_post_ratio 0.180, url_path_entropy 0.155,
+    payload_size_std 0.109, payload_size_mean 0.085, iat_bowley_skewness 0.059.
+    FIX: "a cadence-invariant model that drops absolute-scale timing and the
+    burst count, keeping six scale-free timing, volume, URL and method
+    features."
+
+M-5 [RISK] Sec III-B: "F01-F08 and F13-F14 are the conventional timing, volume
+    and entropy statistics, computable from a network capture."
+    Two of those are NOT computable from an encrypted network capture: F08
+    (POST ratio) and F13 (URL path entropy) both need plaintext HTTP - and your
+    own Sec II says encrypted transport removes payload inspection. These two
+    are the model's number 2 and number 3 features.
+    Fixing this makes your argument STRONGER: inside the browser you see method
+    and URI even over TLS, so two more features are browser-privileged in
+    practice.
+    FIX: "F01-F07 and F14 are computable from any flow record. F08 and F13
+    require plaintext HTTP at the network layer, so under TLS they too are
+    available only inside the browser - a point in favour of the design, and one
+    reason our training corpus is a plaintext capture while the deployment is
+    encrypted."
+
+M-6 [RISK] The train/serve unit mismatch is not disclosed. In the CTU-13 corpus
+    payload_size_* comes from Zeek response_body_len; in the live system it is
+    the CDP on-wire encoded size (interceptor.py:458). The retired NetFlow model
+    was worse - flow totals up to 2.1 GB carried the same feature name (stated
+    in train_c3_xgb_production.py). Since payload size is the 0.477-importance
+    feature you correctly dismiss, saying WHY it is meaningless is one sentence
+    and it strengthens Sec IV-B.
+
+M-7 [RISK] Table III lists "Active human browsing" among "six hard-negative
+    profiles", but the script marks it "hard": False - it is a normal-traffic
+    control. The abstract names five profiles and then says six.
+    FIX: "five hard-negative profiles plus an active-browsing control".
+
+M-8 [WRONG] Nine of twelve references are never cited in the body:
+    [4] XGBoost, [5] scikit-learn, [6] CDP, [7] Playwright, [8] AbuseIPDB,
+    [9] OTX, [10] URLhaus, [11] Feodo Tracker, [12] MITRE ATT&CK. Only [1], [2]
+    and [3] appear in the text. IEEE reviewers flag uncited references
+    routinely, and [9]/[10]/[11] are feeds the system does not use.
+    FIX: cite [4] in Sec III-C (the model), [5] in Sec IV-A (metrics), [6] and
+    [7] in Sec III-A (collection), [8] in Sec III-C (reputation), [12] in the
+    Introduction (the beaconing technique). DELETE [9], [10], [11]. ADD
+    VirusTotal and the IoT-23 dataset paper.
+
+
+================================================================================
+PART 5 - MINOR / WORDING
+================================================================================
+
+m-1 [TYPO] Sec V: "a model trained on the features that public corporado carry"
+    -> "public corpora carry".
+
+m-2 Sec III-A: "the tracker is additionally evaluated directly into every
+    already-loaded page at start-up" reads badly.
+    -> "the tracker script is also evaluated directly in every already-open page
+       at start-up" (context_tagger.py:88-96).
+
+m-3 Sec III-C: "Deterministic heuristics score perfect timing regularity, idle
+    firing, background origin, extension attribution and low path entropy" -
+    there are NINE rules, and the list omits POST ratio (Rule 7), sustained
+    request rate while idle (Rule 8), script-initiated regular traffic (Rule 6)
+    and the same-site dampener (Rule 9, which SUBTRACTS score). Mentioning Rule
+    9 is worth it: a rule that lowers the score is good evidence you are not
+    just stacking suspicion.
+
+m-4 Fig 1 says "adaptive fusion" - the weights are fixed constants. See C-4.
+
+m-5 Sec IV-B: "It reports an in-sample PR-AUC of 0.994" - add "on its own
+    training rows", so no reader mistakes it for a held-out figure.
+
+m-6 The test suite is a selling point and is never mentioned: 100 unit tests in
+    test/C3/test_c3_units.py plus three scripted end-to-end test cases. One line
+    in Sec III or VI is cheap credibility.
+
+m-7 Sec VI: the real headline limitation - 110 positive training windows in the
+    deployed model - is never stated. It explains every weak number in the
+    paper. Say it.
+
+
+================================================================================
+PART 6 - FIX CHECKLIST (in the order I would do it)
+================================================================================
+
+FAST, MUST DO (about 45 minutes, all wording):
+  [ ] C-12  remove "generated in the live browser"; disclose the constructed
+            hard negatives in Sec IV-E AND Sec VI          <-- do this first
+  [ ] C-11  reword the jitter claim (abstract, contributions, IV-C, conclusion)
+  [ ] C-3   fusion formula -> 0.45 ML + 0.55 heuristic; reputation not a term
+  [ ] C-4   overrides -> the both-signal guard
+  [ ] C-5   Fig 1 thresholds -> BEACON 0.52, auto-block 0.75
+  [ ] C-6   verdict rule -> 6 / 10 / 20 requests
+  [ ] C-7   reputation -> 2 feeds, gated on a confirmed beacon
+  [ ] C-8   cache -> fixed 30 minutes
+  [ ] C-1   14 -> 16 features; add F15/F16 to Table I; "four" -> "six"
+  [ ] C-9   "the production model" -> "an earlier NetFlow-scale model"
+  [ ] C-10  abstract: stop calling two models "the same pipeline"
+  [ ] X-1   name the models M1 / M2 so 0.947 and 0.0009 stop colliding
+  [ ] X-4   abstract 0.000 -> below 0.001
+  [ ] X-5   PR-AUC range -> 0.004 to 0.393 over three folds
+  [ ] X-6   weight sweep -> peaks at 2.5, then falls
+  [ ] M-1   Isolation Forest -> XGBoost, cite [4]
+  [ ] M-2   "anomaly model" -> "supervised model"; fix the baseline sentence
+  [ ] M-3   cite IoT-23; say which corpus fed which model
+  [ ] M-4   "cadence-only" -> "cadence-invariant"; list the six features
+  [ ] M-8   cite [4]-[8] and [12]; delete [9]-[11]; add VirusTotal
+  [ ] m-1   corporado -> corpora
+
+NEEDS A RE-RUN (about 30-60 minutes, worth it if you can):
+  [ ] X-2   recompute Fig 3 fused scores under 0.45/0.55
+            (0.391 / 0.402 / 0.358 - verdicts unchanged)
+  [ ] X-3   re-run Table III with the CURRENT deployed model, then rewrite the
+            "not promoted" conclusion honestly
+  [ ] C-10  re-run in-sample metrics on the cadence model so the abstract's
+            0.994 -> 0.158 comparison is one model
+  [ ] C-11  controlled jitter-only sweep (0,1,2,5,10,20,30%) on one profile
+
+BIGGEST SCIENTIFIC UPGRADE - DONE ON 2026-09-02, numbers are measured:
+  See C3_18Feature_Model_Results.md and the top of Publish_ML.txt.
+  The ML model is now 18 features trained on 6,890 real C2 windows from 6
+  malware families (was 6 features / 110 windows), and it is wired into the
+  live system. Replace the paper's ML section with these:
+      balanced held-out capture, unseen infected host   81.8 % accuracy
+      mean over three held-out scenarios                93.9 % accuracy
+      cross-family ROC-AUC                              0.8213  (was 0.5605)
+      false positives on held-out real browsing         0.00-0.06 %
+      real Zeus C2 through the live pipeline            ML 0.9505 -> BEACON
+  That turns Section IV from a negative result into a positive one WITHOUT
+  giving up the honest part: against a completely unseen malware family
+  balanced accuracy is still only ~62 %, and that limit is what makes the rest
+  believable. Keep reporting it.
+
+  NOTE - do NOT use the older data/c3_final_expanded_dataset.csv numbers
+  (PR-AUC 0.5597 / F1 0.518). 6 of its 13 "reliable" folds contain only
+  positive windows, so precision and PR-AUC are 1.0 by construction there and
+  the mean is inflated. Verified in data/_xgb_expanded4600_loso_results.json
+  (those folds have tn=0, fp=0).
+================================================================================

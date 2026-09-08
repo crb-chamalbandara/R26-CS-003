@@ -10,6 +10,7 @@ import math
 import statistics
 from urllib.parse import urlparse
 
+import numpy as np
 import tldextract
 
 # Frozen/offline extractor: suffix_list_urls=() disables the live network
@@ -20,10 +21,10 @@ import tldextract
 _TLD_EXTRACTOR = tldextract.TLDExtract(suffix_list_urls=())
 
 
-# The names of all 16 features. List ORDER here is purely for CSV/display
-# layout — the RF classifier looks features up BY NAME (see RF_FEATURE_SUBSET
-# in anomaly_engine.py and C3RFClassifierEngine.score()), never by position,
-# so reordering this list cannot break the trained model.
+# The names of all 29 features. List ORDER here is purely for CSV/display
+# layout — the XGBoost classifier looks features up BY NAME (see
+# ML_FEATURE_SUBSET in anomaly_engine.py and C3XGBoostEngine.score()), never
+# by position, so reordering this list cannot break the trained model.
 FEATURE_ORDER = [
     "iat_mean_ms",           # average gap between requests (milliseconds)
     "iat_cv",                # how regular the gaps are (0 = clockwork, 1+ = random)
@@ -40,11 +41,37 @@ FEATURE_ORDER = [
     "url_path_entropy",      # how many different URL paths are being called
     "request_burst_count",   # number of rapid-fire bursts (3+ requests within 2 seconds)
     # Deterministic browser-ground-truth signals (Plane 2). Appended after
-    # the original 14 — the RF only reads the 7 it was trained on, by name
-    # (see anomaly_engine.py), so appending names here never requires
-    # retraining or re-indexing anything.
+    # the original 14 — the XGBoost model only reads the 6 it was trained
+    # on, by name (see anomaly_engine.py), so appending names here never
+    # requires retraining or re-indexing anything.
     "same_site_ratio",       # fraction of requests whose destination shares an eTLD+1 with the page the user was on
     "script_initiator_ratio",# fraction of requests whose CDP initiator.type == "script" (vs parser/preload/other)
+    # ---------------------------------------------------------------------
+    # Plane 3 - the 13 features added 2026-09-02 for the 18-feature supervised
+    # model (models/c3_xgb_classifier_18feat_20260902.pkl, trained by
+    # scripts/train_c3_18feat.py). Every one is SCALE-FREE - a ratio, a share
+    # or a normalised entropy - because absolute byte counts and absolute
+    # intervals do not transfer from a 2011 HTTP capture to a 2026 browser,
+    # which is what limited the previous 6-feature model.
+    # They are computed from data the interceptor ALREADY records per request
+    # (timestamp, size_bytes, request_size, url, method, request_headers), so
+    # nothing new has to be collected.
+    # Parity with the offline training builder is asserted by
+    # test/C3/test_c3_feature_parity.py.
+    # ---------------------------------------------------------------------
+    "iat_norm_mad",          # MAD / median of the gaps - regularity that survives one long pause
+    "iat_burstiness",        # (std-mean)/(std+mean): -1 perfectly regular, +1 bursty
+    "iat_autocorr_lag1",     # correlation of the gap sequence with itself shifted by one
+    "iat_spread_ratio",      # (p90-p10)/median of the gaps - robust timing spread
+    "iat_clock_share",       # share of gaps within +/-10% of the median gap ("on the clock")
+    "iat_entropy_norm",      # normalised entropy of log-binned gaps: 0 = one interval, 1 = scattered
+    "payload_cv",            # response-size std / mean - scale-free version of payload_size_std
+    "payload_repeat_ratio",  # 1 - distinct response sizes / n: near 1 = byte-identical replies
+    "upload_download_ratio", # mean request bytes / mean response bytes - the exfiltration direction
+    "unique_path_ratio",     # distinct paths / n: near 0 = one endpoint hit over and over
+    "uri_len_norm",          # mean path+query length / 200, capped at 1
+    "uri_char_entropy_norm", # mean character entropy of path+query / 6 - encoded data in the URL
+    "referrer_absent_ratio", # share of requests with no Referer - timer-driven traffic has none
 ]
 
 
@@ -188,6 +215,104 @@ def compute_features(events: list[dict]) -> dict:
         # never be treated as a same-site match.
         "same_site_ratio":      round(same_site_matches / same_site_total, 6) if same_site_total else 0.0,
         "script_initiator_ratio": round(script_initiated / n, 6) if n else 0.0,
+        # Plane 3 — the 13 scale-free features the 18-feature model reads.
+        **_ml18_extra_features(
+            iats_ms,
+            payload_sizes,
+            [_safe_float(item.get("request_size")) for item in ordered],
+            paths,
+            [_referer_of(item) for item in ordered],
+        ),
+    }
+
+
+_REFERER_MISSING = {"", "-", "(empty)", "none", "null"}
+
+
+def _referer_of(event: dict) -> str:
+    """The request's Referer header, or "" when it sent none.
+
+    CDP hands the header back under whatever casing the browser used, so the
+    lookup is case-insensitive. A request with no Referer is the signal here —
+    a timer-driven beacon has none, a click-driven request almost always does.
+    """
+    headers = event.get("request_headers") or {}
+    if not isinstance(headers, dict):
+        return ""
+    for key, value in headers.items():
+        if str(key).lower() == "referer":
+            return str(value or "").strip()
+    return ""
+
+
+def _ml18_extra_features(iats_ms: list[float], payload_sizes: list[float],
+                         request_sizes: list[float], paths: list[str],
+                         referers: list[str]) -> dict:
+    """The 13 Plane-3 features.
+
+    Kept in one function, computed from plain lists, so the offline training
+    builder can call the identical code path on capture rows and the live
+    analyzer can call it on CDP events — the train/serve mismatch that broke
+    the previous model is a real cost, and sharing one implementation is the
+    cheapest way to not repeat it.
+    """
+    n = len(paths)
+    gaps = np.asarray([g for g in iats_ms if g >= 0.0], dtype=float)
+
+    g_mean = float(np.mean(gaps)) if gaps.size else 0.0
+    g_std = float(np.std(gaps)) if gaps.size > 1 else 0.0
+    g_median = float(np.median(gaps)) if gaps.size else 0.0
+    g_mad = float(np.median(np.abs(gaps - g_median))) if gaps.size else 0.0
+
+    if gaps.size >= 3:
+        a, b = gaps[:-1], gaps[1:]
+        sa, sb = float(np.std(a)), float(np.std(b))
+        autocorr = (float(np.mean((a - a.mean()) * (b - b.mean())) / (sa * sb))
+                    if sa > 0 and sb > 0 else 0.0)
+    else:
+        autocorr = 0.0
+
+    if gaps.size and g_median > 0:
+        p10, p90 = np.percentile(gaps, [10, 90])
+        spread = float((p90 - p10) / g_median)
+        clock_share = float(np.mean(np.abs(gaps - g_median) <= 0.10 * g_median))
+    else:
+        spread = 0.0
+        clock_share = 0.0
+
+    entropy_norm = 0.0
+    if gaps.size >= 2:
+        positive = gaps[gaps > 0]
+        if positive.size >= 2:
+            counts = np.histogram(np.log10(positive + 1.0), bins=10)[0]
+            counts = counts[counts > 0]
+            total = counts.sum()
+            entropy_norm = float(-sum((c / total) * math.log2(c / total)
+                                      for c in counts)) / math.log2(10)
+
+    p_mean = float(np.mean(payload_sizes)) if payload_sizes else 0.0
+    p_std = float(np.std(payload_sizes)) if len(payload_sizes) > 1 else 0.0
+    r_mean = float(np.mean(request_sizes)) if request_sizes else 0.0
+
+    return {
+        "iat_norm_mad":          round(g_mad / g_median, 6) if g_median > 0 else 0.0,
+        "iat_burstiness":        round((g_std - g_mean) / (g_std + g_mean), 6)
+                                 if (g_std + g_mean) > 0 else 0.0,
+        "iat_autocorr_lag1":     round(max(-1.0, min(1.0, autocorr)), 6),
+        "iat_spread_ratio":      round(spread, 6),
+        "iat_clock_share":       round(clock_share, 6),
+        "iat_entropy_norm":      round(entropy_norm, 6),
+        "payload_cv":            round(p_std / p_mean, 6) if p_mean > 0 else 0.0,
+        "payload_repeat_ratio":  round(1.0 - (len(set(payload_sizes)) / n), 6) if n else 0.0,
+        "upload_download_ratio": round(r_mean / (1.0 + p_mean), 6) if n else 0.0,
+        "unique_path_ratio":     round(len(set(paths)) / n, 6) if n else 0.0,
+        "uri_len_norm":          round(min(statistics.fmean([len(p) for p in paths]) / 200.0, 1.0), 6)
+                                 if n else 0.0,
+        "uri_char_entropy_norm": round(min(statistics.fmean([_shannon_entropy(p) for p in paths]) / 6.0, 1.0), 6)
+                                 if n else 0.0,
+        "referrer_absent_ratio": round(sum(1 for r in referers
+                                           if str(r).strip().lower() in _REFERER_MISSING) / n, 6)
+                                 if n else 0.0,
     }
 
 
@@ -317,7 +442,7 @@ def _burst_count(timestamps: list[float]) -> int:
 # WHAT THIS FILE DOES — plain English summary
 # =============================================================================
 #
-# This file converts raw captured requests into 16 numbers that describe
+# This file converts raw captured requests into 29 numbers that describe
 # the traffic pattern for one destination host.
 #
 # Think of it like a medical lab taking a blood sample and running tests.

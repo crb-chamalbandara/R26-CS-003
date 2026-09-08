@@ -32,11 +32,30 @@ function startBackend() {
   backendProcess = spawn(
     PYTHON,
     ['-m', 'uvicorn', 'core.main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT), '--log-level', 'info'],
-    { cwd: BACKEND_DIR, stdio: ['ignore', 'pipe', 'pipe'] }
+    {
+      cwd: BACKEND_DIR,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // Force Python's stdout/stderr to encode as UTF-8 regardless of the
+      // Windows console's active codepage. Without this, Python falls back
+      // to the system locale encoding (often cp1252) when its output is
+      // piped rather than attached to a real console, so any non-ASCII
+      // character it prints (e.g. an em dash in a log line) is encoded as
+      // one thing while the line below decodes the bytes as UTF-8 --
+      // producing garbled text like "No c2_fusion.pkl <20><><1D> using
+      // weighted-sum fusion" instead of a clean line. This does not change
+      // any Python source or logic, only how its output bytes are encoded.
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+    }
   );
 
-  backendProcess.stdout.on('data', d => process.stdout.write('[Backend] ' + d));
-  backendProcess.stderr.on('data', d => process.stderr.write('[Backend] ' + d));
+  // Prefix every line, not just the first line of each data chunk -- uvicorn
+  // often flushes several log lines at once, and a single '[Backend] ' + d
+  // prepend only tags whichever line happened to be first in that chunk,
+  // leaving the rest looking like they came from Electron itself.
+  const prefixLines = (buf) =>
+    buf.toString('utf-8').replace(/\r?\n(?!$)/g, '\n[Backend] ');
+  backendProcess.stdout.on('data', d => process.stdout.write('[Backend] ' + prefixLines(d)));
+  backendProcess.stderr.on('data', d => process.stderr.write('[Backend] ' + prefixLines(d)));
   backendProcess.on('exit', code => console.log('[Backend] Process exited:', code));
   backendProcess.on('error', err => console.error('[Backend] Failed to start:', err.message));
 }

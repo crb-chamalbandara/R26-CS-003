@@ -4,7 +4,7 @@ TC-01 — Cobalt Strike C2 Beacon via Compromised WordPress Site
 Simulates a 30-second GET beacon from a background tab while the user
 is idle.  Validates that C3 detects the beacon pattern via heuristic
 rules (regular timing + background traffic + same endpoint) and the
-RF classifier (Random Forest, HTTP-behaviour features).
+XGBoost classifier (HTTP-behaviour features).
 
 Run via:  run_testcase_01.bat   (from project root)
 """
@@ -131,7 +131,7 @@ def print_features(feats):
 
 def print_signals(sigs, detail_map=None):
     print(c("\n  Signal Breakdown:", _B, WHT))
-    for key, label in [("rf","RF Classifier  "),
+    for key, label in [("ml","XGBoost        "),
                         ("heuristic","Heuristic      "),("reputation","Reputation (TI)")]:
         val = sigs.get(key)
         if val is not None:
@@ -207,9 +207,9 @@ def main():
     wait_backend()
     c3 = api_get("/c3/status")
     print(c("  Backend       : Online", GRN))
-    print(c(f"  C3 Model      : {'random_forest' if c3.get('rf_model_loaded') else 'heuristic-only'} "
-            f"({'loaded' if c3.get('rf_model_loaded') else 'heuristic-only'})",
-            GRN if c3.get("rf_model_loaded") else YEL))
+    print(c(f"  C3 Model      : {'XGBoost' if c3.get('ml_model_loaded') else 'heuristic-only'} "
+            f"({'loaded' if c3.get('ml_model_loaded') else 'heuristic-only'})",
+            GRN if c3.get("ml_model_loaded") else YEL))
     print(c(f"  Analyzer      : {'running' if c3.get('analyzer_running') else 'stopped'}",
             GRN if c3.get("analyzer_running") else YEL))
     print()
@@ -287,7 +287,7 @@ def main():
                     step(el, f"{c(BEACON_HOST,BLU):<30}  "
                              f"reqs={c(str(rq),WHT):<5}  {score_s(sc):>12}  "
                              f"{verdict_s(vd):<20}  "
-                             f"A={score_s(sg.get('rf'))}  "
+                             f"A={score_s(sg.get('ml'))}  "
                              f"H={score_s(sg.get('heuristic'))}")
                     if rq < MIN_EVENTS:
                         rem = MIN_EVENTS - rq

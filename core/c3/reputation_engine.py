@@ -1,17 +1,21 @@
 """
 C3 reputation engine — beacon-triggered only.
 
-Three sources:
+Two sources:
   • AbuseIPDB  (IP confidence score)
-  • OTX AlienVault  (domain + IP pulse count)
   • VirusTotal  (domain report — multi-engine malicious/suspicious verdict count)
 
 Called only when a BEACON verdict is confirmed, not on every analysis cycle,
 to stay within free-tier API rate limits.
 
+The result is shown to the analyst as supporting evidence on a confirmed
+beacon. It is NOT an input to the risk score — see core/c3/risk_fusion.py,
+where the score is ML + heuristic only.
+
 (VirusTotal replaced Google Safe Browsing here on 2026-08-29. GSB is a
 phishing/malware URL blocklist and is still used, unchanged, by C2's own
-Layer-5 phishing check — this module no longer imports or depends on it.)
+Layer-5 phishing check — this module no longer imports or depends on it.
+OTX AlienVault was removed on 2026-08-30.)
 """
 from __future__ import annotations
 
@@ -23,22 +27,16 @@ from typing import Optional
 
 import httpx
 
-# All three API keys are supplied at runtime from Settings (core/settings.json,
+# Both API keys are supplied at runtime from Settings (core/settings.json,
 # gitignored) — never hardcode credentials in source. main.py forwards them via
 # these set_*_key() functions at startup and whenever Settings are saved.
 _abuseipdb_key: str = ""
-_otx_key: str = ""
 _virustotal_key: str = ""
 
 
 def set_abuseipdb_key(key: str) -> None:
     global _abuseipdb_key
     _abuseipdb_key = (key or "").strip()
-
-
-def set_otx_key(key: str) -> None:
-    global _otx_key
-    _otx_key = (key or "").strip()
 
 
 def set_virustotal_key(key: str) -> None:
@@ -56,9 +54,9 @@ class C3ReputationEngine:
     # ── Public ────────────────────────────────────────────────────────────────
 
     def ti_available(self) -> bool:
-        # True once at least one host/domain-reputation source (AbuseIPDB, OTX,
-        # or VirusTotal) is configured via Settings.
-        return bool(_abuseipdb_key or _otx_key or _virustotal_key)
+        # True once at least one host/domain-reputation source (AbuseIPDB or
+        # VirusTotal) is configured via Settings.
+        return bool(_abuseipdb_key or _virustotal_key)
 
     def cached_score(self, host: str) -> Optional[float]:
         """Last combined TI score for a host if it is still fresh AND was a
@@ -82,9 +80,24 @@ class C3ReputationEngine:
         except (TypeError, ValueError):
             return None
 
+    def cached_result(self, host: str) -> Optional[dict]:
+        """The full last threat-intel result for a host if it is still fresh,
+        whether flagged or clean: {score, flagged, sources, detail}.
+
+        Unlike cached_score(), this also returns clean (0.0) results — the
+        analyzer/dashboard show the real per-source numbers as evidence on a
+        confirmed beacon, and "AbuseIPDB 0% / VirusTotal 0%" is a meaningful,
+        real answer, not an absence of one. Returns None only when no lookup
+        has run for this host yet (or the cached one has expired)."""
+        entry = self._cache.get(self._clean_host(host))
+        if not entry or entry.get("expires_at", 0) <= time.time():
+            return None
+        payload = entry.get("payload")
+        return dict(payload) if isinstance(payload, dict) else None
+
     async def score_beacon(self, host: str, sample_url: str) -> dict:
         """
-        Run all three TI sources against a confirmed beacon host/URL.
+        Run both TI sources against a confirmed beacon host/URL.
         Returns a combined result with per-source breakdown.
         """
         clean_host = self._clean_host(host)
@@ -100,10 +113,9 @@ class C3ReputationEngine:
 
         ips = await self._resolve_ips(clean_host)
 
-        # Run all three sources concurrently
+        # Run both sources concurrently
         tasks: list = [
             self._check_abuseipdb(ips[0]) if ips else self._noop("abuseipdb"),
-            self._check_otx(clean_host, ips),
             self._check_virustotal(clean_host),
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -151,42 +163,6 @@ class C3ReputationEngine:
         except Exception:
             return "abuseipdb", None
 
-    async def _check_otx(self, host: str, ips: list[str]) -> tuple[str, Optional[float]]:
-        if not _otx_key:
-            return "otx", None
-        try:
-            client = await self._client_instance()
-            tasks = [self._otx_domain(host, client)]
-            if ips:
-                tasks.append(self._otx_ip(ips[0], client))
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            scores = [v for v in results if isinstance(v, (int, float))]
-            return "otx", max(scores) if scores else None
-        except Exception:
-            return "otx", None
-
-    async def _otx_domain(self, host: str, client: httpx.AsyncClient) -> Optional[float]:
-        try:
-            url = f"https://otx.alienvault.com/api/v1/indicators/domain/{host}/general"
-            resp = await client.get(url, headers={"X-OTX-API-KEY": _otx_key})
-            if resp.status_code != 200:
-                return None
-            pulses = int(((resp.json().get("pulse_info") or {}).get("count") or 0))
-            return min(1.0, pulses / 10.0) if pulses > 0 else 0.0
-        except Exception:
-            return None
-
-    async def _otx_ip(self, ip: str, client: httpx.AsyncClient) -> Optional[float]:
-        try:
-            url = f"https://otx.alienvault.com/api/v1/indicators/IPv4/{ip}/general"
-            resp = await client.get(url, headers={"X-OTX-API-KEY": _otx_key})
-            if resp.status_code != 200:
-                return None
-            pulses = int(((resp.json().get("pulse_info") or {}).get("count") or 0))
-            return min(1.0, pulses / 10.0) if pulses > 0 else 0.0
-        except Exception:
-            return None
-
     async def _check_virustotal(self, host: str) -> tuple[str, Optional[float]]:
         """VirusTotal API v3 domain report. Score is derived from how many of
         VT's ~90 scanning engines flag the beacon's destination domain.
@@ -207,7 +183,7 @@ class C3ReputationEngine:
           malicious == 2         -> 0.50 if suspicious >= 2 else 0.35
           malicious <= 1         -> 0.30 if suspicious >= 4 else 0.0
         A 404 (domain unknown to VT) is 0.0, not None -- "no evidence", same as
-        a clean AbuseIPDB/OTX result. 401/429/5xx return None so a bad key or a
+        a clean AbuseIPDB result. 401/429/5xx return None so a bad key or a
         rate-limit hit simply drops this source instead of scoring it 0."""
         if not _virustotal_key or not host:
             return "virustotal", None
@@ -281,12 +257,12 @@ c3_reputation_engine = C3ReputationEngine()
 # confirmed BEACON needs enrichment. This avoids exhausting API quotas during
 # normal operation.
 #
-# Given a host and a sample URL it concurrently queries three sources:
+# Given a host and a sample URL it concurrently queries two sources:
 #  - AbuseIPDB (IP confidence score),
-#  - OTX AlienVault (domain/IP pulse counts),
 #  - VirusTotal (domain report — count of engines flagging it malicious/suspicious).
 #
 # The engine resolves hosts to public IPs, skips private or local addresses,
 # caches results for 30 minutes, and returns a simple combined score and a
-# human-readable detail string that the analyzer uses to influence alerts.
+# human-readable detail string. This result is analyst-facing evidence shown
+# on a confirmed beacon; it is NOT fed into the risk score (see risk_fusion.py).
 # =============================================================================

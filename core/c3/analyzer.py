@@ -13,12 +13,14 @@ from datetime import datetime
 from pathlib import Path
 
 from .alert_store import c3_alert_store
-from .anomaly_engine import c3_rf_engine
+from .anomaly_engine import c3_ml_engine
 from .feature_engine import FEATURE_ORDER, compute_features
 from .interceptor import c3_interceptor
 from .reputation_engine import c3_reputation_engine
 from .risk_fusion import (
     BEACON_THRESHOLD,
+    HEURISTIC_WEIGHT,
+    ML_WEIGHT,
     SUSPICIOUS_THRESHOLD,
     UNCONFIRMED_CAP,
     c3_risk_fusion,
@@ -37,10 +39,10 @@ KNOWN_SAFE_CONFIRMATION_BAR = 0.85
 # makes same_site_ratio == 1.0, so risk_fusion.py's Rule-9-driven same-site
 # dampener (heuristic *= 0.70) always applies; even with every other
 # achievable heuristic rule firing and the ML score near 1.0, the fused
-# score (0.45*rf + 0.55*heuristic) tops out around 0.78 -- 0.80 could only
-# ever be reached via reputation actually being flagged (i.e. a genuinely
-# malicious IP), never through beacon timing/payload shape alone. 0.75 is
-# still comfortably above BEACON_THRESHOLD (0.52) and the highest fused
+# score (0.45*ml + 0.55*heuristic -- reputation is never a scoring input,
+# see risk_fusion.py's docstring) tops out around 0.78, so 0.80 is only
+# reachable via ML+Heuristic if both signals genuinely peak together; 0.75
+# is still comfortably above BEACON_THRESHOLD (0.52) and the highest fused
 # score any benign hard-negative window has been measured to reach
 # (0.5138 -- see risk_fusion.py's threshold history), so this does not
 # introduce new false auto-blocks; it only makes a confirmed, high-confidence
@@ -112,13 +114,6 @@ class C3Analyzer:
         self._task: asyncio.Task | None = None
         self._broadcast = None
         self._host_scores: dict[str, dict] = {}
-        # Per-host scoring inputs from the most recent _analyze_once() cycle
-        # (rf_full, heur_full, heur_neutral, w). _handle_beacon() reuses them
-        # to re-fuse with reputation on the SAME footing the cycle used, so
-        # the reputation-enriched score never disagrees with what the next
-        # cycle will independently recompute. Cleared in stop_loop() with the
-        # rest of the per-host state.
-        self._host_score_inputs: dict[str, dict] = {}
         self._last_alert_ts: dict[str, float] = {}
         self._collection_label: int | None = None
         self._collection_samples = 0
@@ -157,7 +152,6 @@ class C3Analyzer:
         # otherwise linger in hosts()/status() (alerts_count, host summaries) after
         # a session restart even though the traffic that produced them is gone.
         self._host_scores.clear()
-        self._host_score_inputs.clear()
         self._host_first_seen.clear()
         self._last_alert_ts.clear()
 
@@ -166,8 +160,12 @@ class C3Analyzer:
         base.update({
             "analyzer_running": self.running,
             "alerts_count": c3_alert_store.count(),
-            "rf_model_loaded": c3_rf_engine.model_loaded,
-            "ti_available": c3_reputation_engine.ti_available(),  # any of AbuseIPDB / OTX / VirusTotal configured
+            "ml_model_loaded": c3_ml_engine.model_loaded,
+            # Real trained feature_importances_, not a hand-ranked guess --
+            # powers the "what the model weighs most" chart in the Detection
+            # Lab's HTML report. {} when no model is loaded.
+            "ml_feature_importance": c3_ml_engine.feature_importance(),
+            "ti_available": c3_reputation_engine.ti_available(),  # AbuseIPDB or VirusTotal configured
             "collection_active": self._collection_label is not None,
             "collection_label": self._collection_label,
             "collection_samples": self._collection_samples,
@@ -178,6 +176,16 @@ class C3Analyzer:
             # threshold instead of duplicating it as a second hardcoded
             # literal that could silently drift out of sync with this one.
             "auto_block_score_floor": AUTO_BLOCK_SCORE_FLOOR,
+            # Same reason, for the fusion weights and verdict thresholds. The
+            # dashboard used to hardcode `{ml: 0.45, heuristic: 0.55}` in its
+            # own c3FusionWeights(); when risk_fusion.py moved to 0.55/0.45 on
+            # 2026-09-03 the dashboard silently kept drawing the old split, so
+            # its contribution donut disagreed with the score beside it. These
+            # fields make risk_fusion.py the single source of truth.
+            "fusion_ml_weight": ML_WEIGHT,
+            "fusion_heuristic_weight": HEURISTIC_WEIGHT,
+            "beacon_threshold": BEACON_THRESHOLD,
+            "suspicious_threshold": SUSPICIOUS_THRESHOLD,
         })
         return base
 
@@ -358,30 +366,35 @@ class C3Analyzer:
             heuristic_detail = "Heuristic: " + (", ".join(heuristic_flags) if heuristic_flags else "no indicators")
 
             # ---- ML: full-timing and timing-neutral views --------------
-            if c3_rf_engine.model_loaded and n_events >= _TIMING_CONF_MIN_EVENTS:
-                rf_full, _rf_dt = c3_rf_engine.score(feats_full)
-                rf_neutral, _ = c3_rf_engine.score(feats_neutral)
+            if c3_ml_engine.model_loaded and n_events >= _TIMING_CONF_MIN_EVENTS:
+                ml_full, _ml_dt = c3_ml_engine.score(feats_full)
+                ml_neutral, _ = c3_ml_engine.score(feats_neutral)
             else:
-                rf_full = rf_neutral = None
-            if rf_full is not None and rf_neutral is not None:
-                rf_disp = round(w * rf_full + (1.0 - w) * rf_neutral, 4)
-                rf_detail = (f"XGB timing-confidence-weighted: full={rf_full:.3f} "
-                             f"neutral={rf_neutral:.3f} w={w:.2f} ({n_events} events)")
-            elif rf_full is not None:
-                rf_disp = round(rf_full, 4)
-                rf_detail = f"XGB prob={rf_full:.4f}"
+                ml_full = ml_neutral = None
+            if ml_full is not None and ml_neutral is not None:
+                ml_disp = round(w * ml_full + (1.0 - w) * ml_neutral, 4)
+                ml_detail = f"XGBoost model over {n_events} requests"
+            elif ml_full is not None:
+                ml_disp = round(ml_full, 4)
+                ml_detail = f"XGBoost model over {n_events} requests"
             else:
-                rf_disp = None
-                rf_detail = f"timing window too small (<{_TIMING_CONF_MIN_EVENTS} events)"
+                ml_disp = None
+                ml_detail = f"timing window too small (<{_TIMING_CONF_MIN_EVENTS} requests)"
 
             latest_url = str(events[-1].get("url") or "") if events else ""
 
-            # ---- Reputation: reuse the last fresh TI verdict for this host
-            # (populated by _handle_beacon()'s beacon-triggered lookup).
-            # Feeding it into every cycle keeps the fused score stable
-            # between cycles instead of dropping the signal to None and
-            # letting the score fall back down.
-            reputation_score = c3_reputation_engine.cached_score(host)
+            # ---- Reputation: reuse the last fresh TI result for this host
+            # (populated by _handle_beacon()'s beacon-triggered lookup). This
+            # is analyst-facing evidence shown alongside the score, NOT a
+            # score input — fuse() is called with reputation=None below and
+            # ignores it regardless (see core/c3/risk_fusion.py). cached_result()
+            # returns clean 0.0 lookups too, so the dashboard can show the real
+            # per-source AbuseIPDB / VirusTotal numbers once a beacon is checked.
+            rep_cached = c3_reputation_engine.cached_result(host)
+            reputation_sources = dict((rep_cached or {}).get("sources") or {})
+            reputation_score = (
+                float(rep_cached["score"]) if (rep_cached and reputation_sources) else None
+            )
 
             # ---- Fuse, then interpolate by timing-sample maturity -------
             # fusion_with_ml  : full timing signals + ML  (what a mature
@@ -395,15 +408,13 @@ class C3Analyzer:
             # the number only ever climbs toward the truth, never overshoots
             # and settles back. At w == 1 this is exactly fusion_with_ml,
             # i.e. the plain fusion -- no residual effect on mature windows.
-            fusion_with_ml = c3_risk_fusion.fuse(rf_full, reputation_score, heur_full)
-            fusion_no_timing = c3_risk_fusion.fuse(None, reputation_score, heur_neutral)
+            fusion_with_ml = c3_risk_fusion.fuse(ml_full, None, heur_full)
+            fusion_no_timing = c3_risk_fusion.fuse(None, None, heur_neutral)
             anchor = min(fusion_no_timing["score"], fusion_with_ml["score"])
             score = anchor + w * (fusion_with_ml["score"] - anchor)
             detail = fusion_with_ml["detail"] if w >= 0.5 else fusion_no_timing["detail"]
             if w < 1.0:
-                detail += (f"; timing-sample maturity {w * 100:.0f}% "
-                           f"({n_events}/{_TIMING_CONF_FULL_EVENTS} events) — score "
-                           f"climbs toward the timing-informed value as the window fills")
+                detail += (f"; timing sample {n_events}/{_TIMING_CONF_FULL_EVENTS} requests")
 
             verdict = ("BEACON" if score >= BEACON_THRESHOLD
                        else "SUSPICIOUS" if score >= SUSPICIOUS_THRESHOLD else "SAFE")
@@ -415,7 +426,7 @@ class C3Analyzer:
             # progress toward confirmation.
             if verdict == "BEACON" and not allow_beacon:
                 verdict = "SUSPICIOUS"
-                detail += f"; awaiting sustained evidence ({n_events}/10 requests) before confirming"
+                detail += f"; {n_events}/10 requests before confirming"
 
             # Lowered-prior handling for known-safe hosts: still fully scored
             # above, but require much stronger evidence (>=0.85) before
@@ -425,28 +436,19 @@ class C3Analyzer:
                 if score >= BEACON_THRESHOLD:
                     score = UNCONFIRMED_CAP
                 verdict = "SUSPICIOUS" if score >= SUSPICIOUS_THRESHOLD else "SAFE"
-                detail += (f"; known analytics/CDN host — needs stronger evidence "
-                           f"(score ≥ {KNOWN_SAFE_CONFIRMATION_BAR:.0%}) before confirming")
-
-            # Carry the exact scoring inputs to _handle_beacon() so its
-            # reputation re-fuse sits on the same footing this cycle used.
-            self._host_score_inputs[host] = {
-                "rf_full": rf_full,
-                "heur_full": heur_full,
-                "heur_neutral": heur_neutral,
-                "w": w,
-            }
+                detail += (f"; known analytics/CDN host — confirm bar "
+                           f"{KNOWN_SAFE_CONFIRMATION_BAR:.0%}")
 
             signal_breakdown = {
-                "rf": rf_disp,
+                "ml": ml_disp,
                 "reputation": reputation_score,
+                "reputation_sources": reputation_sources,
                 "heuristic": heuristic_disp,
             }
             signal_detail = {
-                "rf": rf_detail,
-                "reputation": (f"cached TI hit — score {reputation_score:.2f}"
-                               if reputation_score is not None
-                               else "pending beacon confirmation"),
+                "ml": ml_detail,
+                "reputation": ((rep_cached or {}).get("detail")
+                               or "Runs once a beacon is confirmed"),
                 "heuristic": heuristic_detail,
                 "fusion": detail,
             }
@@ -481,58 +483,34 @@ class C3Analyzer:
             return
         self._last_alert_ts[host] = time.time()
 
-        # Run reputation check now that a BEACON is confirmed — preserves API rate limits.
+        # Run the threat-intel lookup now that a BEACON is confirmed (this
+        # timing preserves API rate limits). The result is recorded as
+        # analyst-facing evidence on the alert — it does NOT change the risk
+        # score or the verdict, both of which were already decided by the
+        # ML + heuristic fusion (see core/c3/risk_fusion.py).
         latest_url = str(result.get("latest_url", ""))
         rep = await c3_reputation_engine.score_beacon(host, latest_url)
-        rep_score = float(rep.get("score", 0.0)) if rep.get("flagged") else None
+        # Per-source scores (0-1), e.g. {"abuseipdb": 0.0, "virustotal": 0.0}.
+        # A real lookup ran iff at least one source returned a value (or the
+        # combined result is flagged); a clean 0.0 is a real answer and IS
+        # shown (as "AbuseIPDB 0% / VirusTotal 0%").
+        rep_sources = dict(rep.get("sources") or {})
+        rep_ran = bool(rep_sources) or bool(rep.get("flagged"))
+        rep_score = float(rep.get("score", 0.0)) if rep_ran else None
 
-        # Re-fuse with the now-known reputation score, on the SAME
-        # timing-sample-maturity footing _analyze_once() used this cycle
-        # (reused from self._host_score_inputs), so the reputation-enriched
-        # number never disagrees with what the next cycle independently
-        # recomputes -- which, now that _analyze_once() also feeds the
-        # cached reputation score into every fusion, it otherwise would.
-        # score is only ever RAISED here (never lowered) and the verdict
-        # stays pinned at BEACON: the cycle already confirmed BEACON from
-        # ML + heuristic evidence alone, so reputation is corroboration that
-        # can strengthen the persisted score but must never undo a verdict
-        # already correctly reached without it.
-        si = self._host_score_inputs.get(host)
-        if si is not None:
-            w = float(si.get("w", 1.0))
-            heur_full = float(si.get("heur_full") or 0.0)
-            heur_neutral = float(si.get("heur_neutral") or 0.0)
-            rf_full = si.get("rf_full")
-            ref_with_ml = c3_risk_fusion.fuse(rf_full, rep_score, heur_full)
-            ref_no_timing = c3_risk_fusion.fuse(None, rep_score, heur_neutral)
-            ref_anchor = min(ref_no_timing["score"], ref_with_ml["score"])
-            refused_score = ref_anchor + w * (ref_with_ml["score"] - ref_anchor)
-            refused_detail = ref_with_ml["detail"]
-        else:
-            # No cached inputs (host confirmed before _analyze_once cached
-            # them, or a direct call) -- fall back to a plain single re-fuse
-            # from the stored display signals.
-            ref = c3_risk_fusion.fuse(
-                result["signal_breakdown"].get("rf"), rep_score,
-                result["signal_breakdown"].get("heuristic"),
-            )
-            refused_score = ref["score"]
-            refused_detail = ref["detail"]
-        if refused_score > result["score"]:
-            result["score"] = round(refused_score, 4)
-            result["detail"] += f" | re-fused with reputation: {refused_detail}"
-
-        # Enrich stored result with reputation data.
+        # Attach reputation data as evidence only (never touches score/verdict).
         result["signal_breakdown"]["reputation"] = rep_score
+        result["signal_breakdown"]["reputation_sources"] = rep_sources
         result["signal_detail"]["reputation"] = rep.get("detail", "")
         if rep.get("flagged"):
             result["detail"] += f" | TI: {rep.get('detail', '')}"
 
         if host in self._host_scores:
-            self._host_scores[host]["score"] = result["score"]
-            self._host_scores[host]["detail"] = result["detail"]
-            self._host_scores[host]["signal_breakdown"]["reputation"] = rep_score
-            self._host_scores[host]["signal_detail"]["reputation"] = rep.get("detail", "")
+            hs = self._host_scores[host]
+            hs["detail"] = result["detail"]
+            hs["signal_breakdown"]["reputation"] = rep_score
+            hs["signal_breakdown"]["reputation_sources"] = rep_sources
+            hs["signal_detail"]["reputation"] = rep.get("detail", "")
 
         alert = c3_alert_store.add_alert(result)
         if self._auto_block_enabled and result.get("score", 0.0) >= AUTO_BLOCK_SCORE_FLOOR:
@@ -752,7 +730,7 @@ c3_analyzer = C3Analyzer()
 # This file is the orchestration loop for C3. Every 10 seconds it inspects the
 # recent requests captured by the browser interceptor, groups them by destination
 # host, computes the 16 C3 features for each host, and scores those features
-# using the heuristic rules and the RF classifier.
+# using the heuristic rules and the XGBoost classifier.
 #
 # The analyzer applies smooth gating so noisy or very small windows do not
 # trigger false positives: the timing-dependent signals (the ML score and the
@@ -764,12 +742,13 @@ c3_analyzer = C3Analyzer()
 # hard on/off gate whose discontinuities made the ML, heuristic and fused
 # scores appear to "jump" the instant an event count was crossed.
 #
-# The analyzer blends signals from heuristics, ML scores, and reputation
-# (reusing the last fresh threat-intel verdict for a host between cycles). It
-# stores per-host results for the dashboard, writes labeled rows to the
-# collection CSV when collection mode is active, and, when a BEACON is
-# confirmed, runs reputation checks, persists an alert, optionally blocks the
-# host in the browser, and broadcasts the alert to listeners.
+# The risk score blends exactly two signals — the ML score and the heuristic
+# score (45% / 55%, see risk_fusion.py). It stores per-host results for the
+# dashboard, writes labeled rows to the collection CSV when collection mode is
+# active, and, when a BEACON is confirmed, runs a threat-intel reputation
+# lookup (recorded as analyst-facing evidence on the alert, not folded into
+# the score), persists an alert, optionally blocks the host in the browser,
+# and broadcasts the alert to listeners.
 #
 # The collection helpers in this file allow labeling and exporting training
 # data so the models can be retrained from real browser captures.
