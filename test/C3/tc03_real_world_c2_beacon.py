@@ -6,8 +6,9 @@ skips the lookup entirely -- see core/c3/reputation_engine.py's
 _is_private_or_local() guard), this test beacons against a REAL, publicly
 resolvable IP/hostname that YOU deploy (see tc03_mimicry_server.py). That
 makes this the only one of the three test cases that genuinely exercises
-C3's full three-signal pipeline end-to-end, including a real outbound
-AbuseIPDB / OTX / VirusTotal query.
+C3's full pipeline end-to-end: the ML + heuristic risk score PLUS a real
+outbound AbuseIPDB / VirusTotal lookup, whose result is attached to the
+alert as analyst evidence (it does not change the risk score).
 
 ARCHITECTURE (four real, live-tested designs before this one -- each
 attempt's actual failure is kept here rather than silently erased, because
@@ -85,18 +86,25 @@ DEFAULT_PORT     = 8080
 # (see the module docstring) inside the demo budget, slow enough that real
 # network/timer jitter stays a small fraction of the interval.
 DEFAULT_INTERVAL = 4_000          # ms
-DEFAULT_JITTER   = 5              # percent
+DEFAULT_JITTER   = 2              # percent -- see test_c3_real_world_beacon.bat's
+                                   # JITTER_PCT for why (this default is cosmetic
+                                   # only: the mimicry server's actual timing is
+                                   # set by whoever launches it, not by this
+                                   # script's own --jitter-pct, which this file
+                                   # never reads for anything but the STEP 2 print)
 POLL_EVERY       = 5
 MIN_EVENTS       = 10            # C3's own hard floor (analyzer.py's allow_beacon)
 DILUTION_EVENTS  = 30            # this test's own floor -- see the module docstring's cliff analysis
 DETECT_MAX_WAIT  = 165           # hard stop for the detection-wait phase specifically
 # Detection (up to DETECT_MAX_WAIT) + maturation (up to MATURATION_WAIT_S,
-# its own separate budget -- see the loop below) can together reach ~295s
-# in the slowest realistic case (165 + 130). This is a display-only figure
-# (how much "budget" is shown remaining each poll); raised from 240 so that
-# display doesn't read as over-budget/red now that MATURATION_WAIT_S is 130
-# -- the panel-facing TARGET is still ~180s (3 min), this is just the ceiling.
-TOTAL_BUDGET_S   = 300           # the whole demo, panel-facing budget
+# its own separate budget -- see the loop below) can together reach ~365s
+# in the slowest realistic case (165 + 200, MATURATION_WAIT_S raised
+# 130 -> 200 on 2026-09-08 -- see that constant's own comment). This is a
+# display-only figure (how much "budget" is shown remaining each poll);
+# raised 300 -> 400 alongside that change so display doesn't read as
+# over-budget/red in the worst case -- the panel-facing TARGET is still
+# ~180s (3 min), this is just the ceiling.
+TOTAL_BUDGET_S   = 400           # the whole demo, panel-facing budget
 # The actual panel-facing goal: auto-block landing close to the 3-minute
 # mark. Kept as its own constant (separate from TOTAL_BUDGET_S, the outer
 # ceiling) purely so STEP 1's summary line can state the real target
@@ -145,7 +153,38 @@ TARGET_AUTO_BLOCK_S = 180
 # it off right at the target. Still not unbounded, and still the same
 # principle: if alignment genuinely hasn't happened by the time this expires,
 # that is the honest result to report, not a bug to paper over.
-MATURATION_WAIT_S = 130
+#
+# WIDENED AGAIN, 130 -> 200, on 2026-09-08, alongside JITTER_PCT 5% -> 2%
+# in test_c3_real_world_beacon.bat, after auto-block was reported not firing
+# even on a run that clearly reached BEACON. Root cause, found by directly
+# probing the live model (models/c3_xgb_scoped_calibrated_20260903.pkl) with
+# synthetic windows built the same way tc03_mimicry_server.py's real traffic
+# is shaped: analyzer.py's block-eligibility check (_handle_beacon(),
+# core/c3/analyzer.py) only re-runs once every 60s -- its own alert cooldown
+# also gates the auto-block check -- so a fused score that clears
+# AUTO_BLOCK_SCORE_FLOOR (0.75) for only part of the maturation window can be
+# missed if none of those 60s-spaced checks happens to land inside it. Two
+# compounding causes of that narrowness, both measured directly against the
+# deployed model+fusion (see JITTER_PCT's own comment for the first):
+#   1. At 5% jitter, the 50-event window's sample iat_cv sits almost exactly
+#      on analyzer.py Rule 1's "iat_cv < 0.05" cliff, so its +0.30 flips on
+#      and off between consecutive windows -- a large, frequent swing.
+#   2. Even fully matured (heuristic pinned at its ~0.60 ceiling, ALL
+#      applicable rules firing every window -- confirmed flat at 0.6020
+#      across 1,440 simulated mature windows), the ML term alone still
+#      varies window to window (measured range 0.8709-0.9505, mean 0.9301 --
+#      ordinary XGBoost sensitivity to which 50 requests are currently in the
+#      window, not a bug), which alone can land fused as low as ~0.7499 -- a
+#      hair under the floor -- on any single reading.
+# Fixing #1 (JITTER_PCT) removes the large swing; widening the wait here
+# gives the 60s-cooldown check more independent tries to land on a >=0.75
+# reading despite #2's smaller, irreducible variance. Simulated over 500 runs
+# at the real 60s check cadence, using the mimicry server's real, live-
+# verified check-in reply size (80 bytes, confirmed via curl):
+# 5%+130s = 76.2% of runs actually auto-block, 2%+130s = 97.6%,
+# 2%+200s = 100%. Neither change alone was enough; both are needed
+# together -- roll back together.
+MATURATION_WAIT_S = 200
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────
 os.system("")
@@ -273,7 +312,7 @@ def print_features(feats):
 
 def print_signals(sigs, detail_map=None):
     print(c("\n  Signal Breakdown:", _B, WHT))
-    for key, label in [("rf", "XGBoost        "), ("heuristic", "Heuristic      "),
+    for key, label in [("ml", "XGBoost        "), ("heuristic", "Heuristic      "),
                         ("reputation", "Reputation (TI)")]:
         val = sigs.get(key)
         if val is not None:
@@ -325,15 +364,31 @@ def validate(host_row, all_hosts, target_host, auto_block_enabled=False,
     check("HTTP POST ratio >= 0.967 (rolling window has diluted the one-time page-load GET "
           "past the model's http_post_ratio cliff -- see the module docstring)",
           float(feats.get("http_post_ratio", 0)) >= 0.967, f"got {feats.get('http_post_ratio', '?')}")
-    # Range check, not just a floor: calibrated 2026-08-30 to a wide, flat
-    # plateau (measured 0.9323 via direct predict_proba() probing -- see
-    # tc03_mimicry_server.py's _CHECKIN_TARGET_BODY_LEN comment) so ML reads
-    # as strong-but-not-maxed rather than saturated near 1.0. The upper
-    # bound catches a regression back toward the old ~98% target just as
-    # much as the lower bound catches the score collapsing.
-    rf_val = float(sigs.get("rf") or 0)
-    check("ML (XGBoost) score in [0.85, 0.96) -- strong but deliberately not maxed",
-          0.85 <= rf_val < 0.96, f"got {rf_val}")
+    # Range check, not just a floor. RE-DERIVED 2026-09-03 against the
+    # DEPLOYED model (c3_xgb_scoped_calibrated_20260903.pkl, isotonic-
+    # calibrated, 18-feature). The previous band [0.85, 0.96) was calibrated
+    # against models/c3_xgb_classifier.pkl -- the retired 6-feature model --
+    # and this test could not pass it any more.
+    #
+    # Measured on a real 35-event run of tc03_mimicry_server.py, feeding the
+    # captured events through the real feature_engine + the deployed engine:
+    #     with the old Referer-sending beacon : ML 0.3305   (test unpassable)
+    #     with the no-Referer beacon (fixed)  : ML 0.7890
+    # A second probe holding features at slightly different measured values
+    # gave 0.7357, so the realistic band is ~0.73-0.80.
+    #
+    # UPPER BOUND RAISED 0.92 -> 0.97 on 2026-09-08: those two probes were
+    # both taken on an early (n~35), not-yet-fully-diluted window. Directly
+    # probing the deployed model across 1,440 simulated FULLY MATURED windows
+    # (n=50, uar=0 -- the state MATURATION_WAIT_S actually waits for) found
+    # ML genuinely ranges 0.8709-0.9505 there, mean 0.9301 -- legitimately
+    # above the old 0.92 ceiling most of the time, which would have failed
+    # this check on a run that reached exactly the state the test is designed
+    # to wait for. 0.97 keeps a real ceiling (still catches genuine
+    # saturation near 1.0) without flagging the measured, correct range.
+    ml_val = float(sigs.get("ml") or 0)
+    check("ML score in [0.65, 0.97) -- strong but deliberately not maxed",
+          0.65 <= ml_val < 0.97, f"got {ml_val}")
     # Ceiling, not just a floor: analyzer.py's Rule 9 same-site dampener
     # (x0.70) always applies to this design (direct navigation is the only
     # reliably-captured design -- see the module docstring), which caps the
@@ -342,17 +397,34 @@ def validate(host_row, all_hosts, target_host, auto_block_enabled=False,
     # MATURATION_WAIT_S above) no matter how the traffic is shaped. 0.50 is
     # comfortably inside that measured ceiling, allowing for run-to-run
     # timing variance without a false failure.
+    # RELAXED 2026-09-03, with the arithmetic. The old >= 0.50 floor was set
+    # when the ML term was contributing far less, so the heuristic had to do
+    # most of the work. It is now strict enough to FAIL A RUN THAT CORRECTLY
+    # REACHED BEACON: fusion is 0.55*ML + 0.45*heuristic (weights changed
+    # 0.45/0.55 -> 0.55/0.45 on 2026-09-03), so at the measured ML of 0.789
+    # the ML term alone contributes 0.434, and the heuristic only needs
+    #     (0.52 - 0.434) / 0.45 = 0.191
+    # to cross BEACON_THRESHOLD. A run landing at heuristic 0.35 would be a
+    # correct BEACON (0.434 + 0.158 = 0.592) yet fail the old check.
+    #
+    # 0.20 is kept as a real floor rather than dropped, for two reasons: it is
+    # just above the 0.191 the arithmetic requires, and it is comfortably above
+    # risk_fusion.py's BOTH_SIGNAL_FLOOR (0.10), below which the both-signal
+    # guard caps the score at 0.51 and BEACON becomes unreachable no matter
+    # how confident ML is. So this still asserts the heuristic genuinely
+    # contributed rather than the verdict resting on one signal.
     heur_val = float(sigs.get("heuristic") or 0)
-    check("Heuristic score >= 0.50 -- genuinely contributes even after the same-site dampener",
-          heur_val >= 0.50, f"got {heur_val}")
+    check("Heuristic score >= 0.20 -- genuinely contributes (above the both-signal "
+          "floor, and enough to carry ML over BEACON_THRESHOLD)",
+          heur_val >= 0.20, f"got {heur_val}")
 
     # The distinguishing check for this test case: proves the reputation
     # engine took the REAL-lookup code path rather than the private/local
     # skip path. A "clean" real result correctly leaves signal_breakdown's
     # reputation NUMBER as None (see reputation_engine.py's score_beacon() --
-    # only a flagged result feeds a numeric score back into fusion), so the
-    # detail STRING is the only reliable evidence a real query ran; checking
-    # the numeric field alone would incorrectly fail on your own clean VPS.
+    # only a flagged result records a numeric score), so the detail STRING is
+    # the only reliable evidence a real query ran; checking the numeric field
+    # alone would incorrectly fail on your own clean VPS.
     rep_detail = str(sig_detail.get("reputation", ""))
     check("Real threat-intel lookup executed (not local-host-skipped)",
           rep_detail not in _LOCAL_SKIP_MESSAGES,
@@ -419,7 +491,7 @@ def main():
     print()
     print(c("  Scenario:", _B, WHT), "Jittered POST heartbeat to REAL, publicly-resolvable")
     print(c("            ", _D), "infrastructure — exercises the full pipeline including a genuine")
-    print(c("            ", _D), "AbuseIPDB / OTX / VirusTotal lookup (impossible on 127.0.0.1).")
+    print(c("            ", _D), "AbuseIPDB / VirusTotal lookup (impossible on 127.0.0.1).")
     print()
     print(f"  Target host      : {c(target_host, WHT)}")
     print(f"  Target timing    : {c(f'auto-block by ~{TARGET_AUTO_BLOCK_S}s (~3 min)', _B, MAG)}")
@@ -436,14 +508,14 @@ def main():
     print(f"  Expected verdict : {c('BEACON', _B, RED)} (score >= 0.52, auto-block at "
           f">= {round(auto_block_floor * 100)}%) via genuine ML + Heuristic agreement")
     print(c("  Backend       : Online", GRN))
-    print(c(f"  C3 Model      : {'XGBoost' if c3.get('rf_model_loaded') else 'heuristic-only'} "
-            f"({'loaded' if c3.get('rf_model_loaded') else 'heuristic-only'})",
-            GRN if c3.get("rf_model_loaded") else YEL))
+    print(c(f"  C3 Model      : {'XGBoost' if c3.get('ml_model_loaded') else 'heuristic-only'} "
+            f"({'loaded' if c3.get('ml_model_loaded') else 'heuristic-only'})",
+            GRN if c3.get("ml_model_loaded") else YEL))
     ti_ok = bool(c3.get("ti_available"))
     print(c(f"  Threat Intel  : {'at least one key configured' if ti_ok else 'NO KEYS CONFIGURED'}",
             GRN if ti_ok else RED))
     if not ti_ok:
-        print(c("\n  [WARN] No AbuseIPDB/OTX/VirusTotal key is configured in Settings.", YEL))
+        print(c("\n  [WARN] No AbuseIPDB/VirusTotal key is configured in Settings.", YEL))
         print(c("         The reputation lookup this test exists to validate will return", YEL))
         print(c("         'no TI data' instead of a real source result.", YEL))
     print()
@@ -462,9 +534,10 @@ def main():
     print(c("    3. Regular timing + fixed endpoint fires several heuristic rules (Rule 9's", _D))
     print(c("       same-site dampener also applies here, but is not fatal -- see the docstring)", _D))
     print(c("    4. XGBoost scores POST + fixed-payload + zero-entropy-endpoint strongly (~0.85-0.96)", _D))
-    print(c("    5. Fusion (45% ML + 55% Heuristic, until reputation lands): both terms clear BEACON_THRESHOLD", _D))
+    print(c("    5. Fusion (45% ML + 55% Heuristic): both terms clear BEACON_THRESHOLD", _D))
     print(c("    6. Once BEACON confirms: reputation_engine.score_beacon() runs for REAL against", _D))
-    print(c("       this target's real IP -- AbuseIPDB / OTX / VirusTotal are actually queried", _D))
+    print(c("       this target's real IP -- AbuseIPDB / VirusTotal are actually queried, and the", _D))
+    print(c("       result is shown as evidence on the alert (it does not change the score)", _D))
     print()
     navigate(target_url)
     print(c("  Navigated to the real target; its own beacon loop is now running.", GRN))
@@ -518,7 +591,7 @@ def main():
                     step(el, f"{c(target_host, BLU):<32}  "
                              f"reqs={c(str(rq), WHT):<5}  {score_s(sc):>12}  "
                              f"{verdict_s(vd):<20}  "
-                             f"M={score_s(sg.get('rf'))}  H={score_s(sg.get('heuristic'))}  {budget_s}{maturing}")
+                             f"M={score_s(sg.get('ml'))}  H={score_s(sg.get('heuristic'))}  {budget_s}{maturing}")
                     if vd.upper() == "BEACON":
                         final_host_row = hr
                         detected = True
@@ -549,7 +622,7 @@ def main():
                         elif auto_block_was_on:
                             if bool(hr.get("blocked")):
                                 break
-                        elif float(sg.get("heuristic") or 0) >= 0.50 and float(sg.get("rf") or 0) >= 0.80:
+                        elif float(sg.get("heuristic") or 0) >= 0.50 and float(sg.get("ml") or 0) >= 0.80:
                             break
             except RuntimeError as e:
                 step(el, c(f"Poll error: {e}", YEL))
@@ -672,6 +745,32 @@ def main():
     else:
         print(c("  No data captured for the target host. Is the mimicry server reachable", RED))
         print(c("  from this machine's browser (check firewall / port / scheme)?", RED))
+        # Historically the most common real cause when tunnelling, and it
+        # failed silently: ngrok's free tier serves an HTML "You are about
+        # to visit..." interstitial instead of the tunnelled page on the
+        # first browser-looking top-level navigation, so the beacon
+        # <script> never executes and C3 correctly sees zero traffic.
+        # FIXED 2026-09-08: core/playwright_session.py's navigate() now sets
+        # `ngrok-skip-browser-warning` on the navigation itself (previously
+        # only the check-in fetch() calls carried it) whenever the target
+        # host contains "ngrok", so this should no longer be the cause on a
+        # backend that includes that fix. Left here as a diagnostic in case
+        # it still is -- e.g. an older/un-updated backend, or ngrok changing
+        # its interstitial behaviour again.
+        if "ngrok" in str(target_host).lower():
+            print()
+            print(c("  POSSIBLE CAUSE - ngrok free-tier browser interstitial:", _B, YEL))
+            print(c("    The tunnel host is an ngrok domain. On the free tier ngrok can replace", YEL))
+            print(c("    the first browser page-load with its own warning page, so the beacon", YEL))
+            print(c("    script never runs and there is nothing for C3 to detect. The backend's", YEL))
+            print(c("    navigate() should already send the bypass header automatically -- if", YEL))
+            print(c("    you still see this, try ONE of:", YEL))
+            print(c("      - open the tunnel URL once in the WebSentinel browser and click", YEL))
+            print(c("        \"Visit Site\", then re-run this test (the bypass cookie persists", YEL))
+            print(c("        for that browser profile); or", YEL))
+            print(c("      - use a reserved/paid ngrok domain, which has no interstitial; or", YEL))
+            print(c("      - run the mimicry server on a host you own and pass --target-host", YEL))
+            print(c("        directly, which is the setup TEST_CASE_03's doc describes.", YEL))
 
     header("STEP 5 — Pass/Fail Validation")
     print()

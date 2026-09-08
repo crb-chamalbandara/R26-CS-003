@@ -91,7 +91,6 @@ from .c3.analyzer        import c3_analyzer
 from .c3.alert_store     import c3_alert_store
 from .c3.reputation_engine import set_virustotal_key as _c3_set_virustotal_key
 from .c3.reputation_engine import set_abuseipdb_key as _c3_set_abuseipdb_key
-from .c3.reputation_engine import set_otx_key as _c3_set_otx_key
 
 # ── C4 — Browser Artifact Forensic Correlation Engine ─────────────────────────
 from .c4 import (
@@ -201,7 +200,6 @@ _SETTINGS_DEFAULTS: dict = {
     "whitelist": [],
     "gsb_key": "",           # C2 Layer-5 phishing check (Google Safe Browsing)
     "abuseipdb_key": "",     # C3 reputation engine
-    "otx_key": "",           # C3 reputation engine
     "virustotal_key": "",    # C3 reputation engine (replaced GSB here 2026-08-29)
     "pw_home_url": "",
     "warn_threshold": 30,            # risk_score >= this -> warning banner
@@ -234,7 +232,6 @@ def _save_settings(s: dict) -> None:
 settings: dict = _load_settings()
 _c3_set_virustotal_key(settings.get("virustotal_key", ""))
 _c3_set_abuseipdb_key(settings.get("abuseipdb_key", ""))
-_c3_set_otx_key(settings.get("otx_key", ""))
 
 # ── Request / response models ──────────────────────────────────────────────────
 class AnalyzeReq(BaseModel):
@@ -248,7 +245,6 @@ class SettingsReq(BaseModel):
     whitelist: List[str] = []
     gsb_key: str = ""            # C2 Layer-5 phishing check
     abuseipdb_key: str = ""      # C3 reputation engine
-    otx_key: str = ""            # C3 reputation engine
     virustotal_key: str = ""     # C3 reputation engine
     pw_home_url: str = ""
     warn_threshold: int = 30
@@ -407,7 +403,6 @@ async def save_settings(req: SettingsReq):
     _save_settings(settings)
     _c3_set_virustotal_key(req.virustotal_key)
     _c3_set_abuseipdb_key(req.abuseipdb_key)
-    _c3_set_otx_key(req.otx_key)
     return {"status": "saved"}
 
 
@@ -1218,15 +1213,15 @@ async def _tc_c3_human_iat():
 async def _tc_c3_fusion_beacon():
     from .c3.risk_fusion import C3RiskFusion
     fusion = C3RiskFusion()
-    result = fusion.fuse(rf=0.8, reputation=0.9, heuristic=0.7)
+    result = fusion.fuse(ml=0.8, reputation=0.9, heuristic=0.7)
     assert result["verdict"] == "BEACON", f"Expected BEACON, got {result['verdict']}"
     assert result["score"] >= 0.6
-    return {"detail": f"rf=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
+    return {"detail": f"ml=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
 
 async def _tc_c3_fusion_safe():
     from .c3.risk_fusion import C3RiskFusion
     fusion = C3RiskFusion()
-    result = fusion.fuse(rf=0.0, reputation=0.0, heuristic=0.0)
+    result = fusion.fuse(ml=0.0, reputation=0.0, heuristic=0.0)
     assert result["verdict"] == "SAFE", f"Expected SAFE, got {result['verdict']}"
     return {"detail": f"all signals=0 → verdict={result['verdict']} score={result['score']:.2f}"}
 
@@ -2189,6 +2184,44 @@ async def c3_collect_stop():
 @app.post("/c3/collect/export")
 async def c3_collect_export():
     return c3_analyzer.export_collection()
+
+
+@app.post("/c3/test/real-world-beacon")
+async def c3_test_real_world_beacon():
+    """Launch test_c3_real_world_beacon.bat in its own console window.
+
+    That script deploys a real, publicly-reachable C2 mimicry beacon over an
+    ngrok tunnel, drives THIS already-running WebSentinel browser session to
+    it, and waits for C3 to confirm BEACON end-to-end -- including a real
+    outbound AbuseIPDB / VirusTotal lookup against the tunnel's public IP.
+    Runs ~3 minutes and cleans up its own ngrok / mimicry processes on exit.
+
+    Fire-and-forget: the .bat runs in a visible console so the user can watch
+    ngrok setup progress and read any error it prints (e.g. ngrok missing or
+    not authenticated). Re-running is safe -- the .bat kills leftovers from a
+    previous run at startup.
+    """
+    if sys.platform != "win32":
+        return {"status": "error",
+                "detail": "The real-world beacon test is Windows-only (ngrok + .bat)."}
+    bat_path = os.path.join(_REPO_ROOT, "test_c3_real_world_beacon.bat")
+    if not os.path.isfile(bat_path):
+        return {"status": "error",
+                "detail": "test_c3_real_world_beacon.bat not found in the project root."}
+    try:
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        subprocess.Popen(
+            [comspec, "/c", bat_path],
+            cwd=_REPO_ROOT,
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+            close_fds=True,
+        )
+    except Exception as exc:
+        return {"status": "error", "detail": f"Could not launch the test: {exc}"}
+    return {"status": "started",
+            "detail": "Real-world beacon test launched in a new console window. It deploys "
+                      "an ngrok tunnel + mimicry beacon and drives this browser session to "
+                      "it; BEACON confirms in ~3 minutes."}
 
 
 @app.get("/c3/test/beacon-target")

@@ -1,10 +1,11 @@
 """
-TC-03b — Reputation-Override Fusion Verification (safe, read-only, optional)
+TC-03b — Reputation-is-Evidence-Only Verification (safe, read-only, optional)
 =============================================================================
-A companion to TC-03 that proves core/c3/risk_fusion.py's reputation
-override (reputation >= 0.8 floors the fused score at 0.60 = BEACON) against
-a REAL, currently-flagged malicious IP pulled live from a public threat-
-intel feed -- without ever sending a single request TO that IP.
+A companion to TC-03 that proves core/c3/risk_fusion.py treats threat-intel
+reputation as ANALYST EVIDENCE ONLY -- it is never folded into the risk
+score or the verdict -- using a REAL, currently-flagged malicious IP pulled
+live from a public threat-intel feed, without ever sending a single request
+TO that IP.
 
 WHAT THIS SCRIPT DOES
 ----------------------
@@ -14,20 +15,20 @@ WHAT THIS SCRIPT DOES
    (core/c3/reputation_engine.py, imported directly -- this script does not
    edit, monkeypatch, or duplicate any C3 file) exactly the way
    analyzer.py's _handle_beacon() does, to get a real combined score.
-3. Feeds that real score into C3's real, unmodified fusion function
-   (core/c3/risk_fusion.py) alongside a deliberately modest synthetic
-   rf/heuristic pair, to show the override alone is sufficient to reach
-   BEACON -- proving the override logic against live data, not a mocked
-   number.
+3. Calls C3's real, unmodified fusion function (core/c3/risk_fusion.py)
+   TWICE with a deliberately modest synthetic ml/heuristic pair -- once
+   passing that real reputation score, once passing None -- and shows the
+   score and verdict are IDENTICAL either way. It also shows a strong
+   reputation hit on its own does not manufacture a BEACON.
 
 WHAT THIS SCRIPT NEVER DOES
 -----------------------------
 It never opens a connection TO the flagged IP -- no request, no
 navigation, no packet is ever sent to it. Every network call this script
 makes is asking a legitimate third-party threat-intelligence service
-(AbuseIPDB / OTX / VirusTotal) for its existing, already-published opinion
-of that address. This is the same category of activity as looking up a
-phone number in a public directory -- it is standard, safe practice in
+(AbuseIPDB / VirusTotal) for its existing, already-published opinion of
+that address. This is the same category of activity as looking up a phone
+number in a public directory -- it is standard, safe practice in
 detection-engineering research and requires no special authorisation
 beyond your own AbuseIPDB API key.
 
@@ -52,7 +53,7 @@ if _ROOT not in sys.path:
 import httpx  # noqa: E402
 
 from core.c3.reputation_engine import (  # noqa: E402
-    c3_reputation_engine, set_abuseipdb_key, set_otx_key, set_virustotal_key,
+    c3_reputation_engine, set_abuseipdb_key, set_virustotal_key,
 )
 from core.c3.risk_fusion import c3_risk_fusion  # noqa: E402
 
@@ -98,27 +99,24 @@ async def _fetch_blacklist_candidates(abuseipdb_key: str, limit: int = 5) -> lis
 
 
 async def main() -> None:
-    ap = argparse.ArgumentParser(description="TC-03b: Reputation-override fusion verification")
+    ap = argparse.ArgumentParser(description="TC-03b: reputation-is-evidence-only verification")
     ap.add_argument("--test-ip", default=None,
                      help="Skip the live blacklist lookup and use this specific IP instead "
                           "(e.g. one you already know is flagged from a threat feed you trust)")
     ap.add_argument("--abuseipdb-key", default=None, help="Override the key from core/settings.json")
-    ap.add_argument("--otx-key", default=None)
     ap.add_argument("--virustotal-key", default=None)
     args = ap.parse_args()
 
-    header("TEST CASE 03b — Reputation-Override Fusion Verification")
+    header("TEST CASE 03b — Reputation-is-Evidence-Only Verification")
     print()
     print(c("  This test never contacts the flagged IP itself -- it only asks", _D))
-    print(c("  AbuseIPDB / OTX / VirusTotal for their existing opinion of it.", _D))
+    print(c("  AbuseIPDB / VirusTotal for their existing opinion of it.", _D))
     print()
 
     configured = _load_configured_keys()
     abuseipdb_key = args.abuseipdb_key or configured.get("abuseipdb_key", "")
-    otx_key = args.otx_key or configured.get("otx_key", "")
     virustotal_key = args.virustotal_key or configured.get("virustotal_key", "")
     set_abuseipdb_key(abuseipdb_key)
-    set_otx_key(otx_key)
     set_virustotal_key(virustotal_key)
 
     if not abuseipdb_key:
@@ -144,22 +142,28 @@ async def main() -> None:
 
     header("STEP 2 — Real Reputation Lookup (core/c3/reputation_engine.py, unmodified)")
     result = await c3_reputation_engine.score_beacon(candidate, f"http://{candidate}/")
-    rep_score_str = f"{result['score']:.4f}"
-    print(f"\n  Score    : {c(rep_score_str, _B, WHT)}")
+    rep_score = float(result["score"])
+    print(f"\n  Score    : {c(f'{rep_score:.4f}', _B, WHT)}")
     print(f"  Flagged  : {c(str(result['flagged']), GRN if result['flagged'] else RED)}")
     print(f"  Sources  : {result.get('sources', {})}")
     print(f"  Detail   : {result.get('detail', '')}")
 
-    header("STEP 3 — Fusion Override Verification (core/c3/risk_fusion.py, unmodified)")
-    # Deliberately modest rf/heuristic values -- the point is that reputation
-    # ALONE, via the override, is enough to reach BEACON regardless of what
-    # the other two signals say.
-    fused = c3_risk_fusion.fuse(rf=0.3, reputation=result["score"], heuristic=0.2)
-    fused_score_str = f"{fused['score']:.4f}"
-    print(f"\n  Input    : rf=0.30, reputation={rep_score_str}, heuristic=0.20")
-    print(f"  Score    : {c(fused_score_str, _B, WHT)}")
-    print(f"  Verdict  : {c(fused['verdict'], _B, RED if fused['verdict']=='BEACON' else YEL)}")
-    print(f"  Detail   : {fused['detail']}")
+    header("STEP 3 — Fusion Ignores Reputation (core/c3/risk_fusion.py, unmodified)")
+    # Deliberately modest ml/heuristic values. The point: passing the real
+    # reputation score must produce EXACTLY the same fused score/verdict as
+    # passing None -- reputation is evidence, not a score input.
+    with_rep = c3_risk_fusion.fuse(ml=0.30, reputation=rep_score, heuristic=0.20)
+    without_rep = c3_risk_fusion.fuse(ml=0.30, reputation=None, heuristic=0.20)
+    rep_only = c3_risk_fusion.fuse(ml=None, reputation=rep_score, heuristic=0.10)
+    s_with = "{:.4f}".format(with_rep["score"])
+    s_without = "{:.4f}".format(without_rep["score"])
+    s_reponly = "{:.4f}".format(rep_only["score"])
+    print(f"\n  fuse(ml=0.30, reputation={rep_score:.4f}, heuristic=0.20)")
+    print(f"    -> score {c(s_with, _B, WHT)}  verdict {c(with_rep['verdict'], YEL)}")
+    print(f"  fuse(ml=0.30, reputation=None,   heuristic=0.20)")
+    print(f"    -> score {c(s_without, _B, WHT)}  verdict {c(without_rep['verdict'], YEL)}")
+    print(f"  fuse(ml=None, reputation={rep_score:.4f}, heuristic=0.10)   (reputation alone)")
+    print(f"    -> score {c(s_reponly, _B, WHT)}  verdict {c(rep_only['verdict'], YEL)}")
 
     header("STEP 4 — Pass/Fail")
     print()
@@ -167,10 +171,14 @@ async def main() -> None:
         ("Blacklist/candidate IP resolved", bool(candidate)),
         ("Reputation engine flagged the IP (score >= 0.8)",
          result["flagged"] and result["score"] >= 0.8),
-        ("Fusion score reached BEACON threshold via override alone",
-         fused["verdict"] == "BEACON"),
-        ("Override tag present in fusion detail",
-         "override" in fused["detail"]),
+        ("Fused score is identical with vs without the reputation input",
+         with_rep["score"] == without_rep["score"]),
+        ("Fused verdict is identical with vs without the reputation input",
+         with_rep["verdict"] == without_rep["verdict"]),
+        ("A strong reputation hit alone does NOT reach BEACON",
+         rep_only["verdict"] != "BEACON"),
+        ("No override tag leaked into the fusion detail",
+         "override" not in with_rep["detail"].lower()),
     ]
     all_pass = True
     for name, ok in checks:

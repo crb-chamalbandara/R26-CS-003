@@ -1,4 +1,12 @@
 @echo off
+:: Switch this console to UTF-8 (65001) before anything prints. Without this,
+:: the console keeps its legacy OEM codepage (commonly 437), so any non-ASCII
+:: character written by this script or by the Python backend it launches --
+:: even though both now correctly encode as UTF-8 -- gets displayed through
+:: the wrong codepage's character table instead (e.g. an em dash showing up
+:: as "ΓÇö"). This only affects how this window renders text; it changes no
+:: application logic.
+chcp 65001 >nul
 title WebSentinel — All Components (C1+C2+C3+C4)
 cd /d "%~dp0"
 
@@ -64,7 +72,24 @@ echo.
 
 cd electron
 set ELECTRON_RUN_AS_NODE=
-npx electron .
+
+:: Launch the already-installed Electron binary directly instead of through
+:: "npx electron .". npx resolves the local binary via an auto-generated
+:: node_modules\.bin\electron.cmd shim that itself calls node.exe on a
+:: further-quoted path -- an extra layer of Windows batch-file indirection
+:: that is a known source of "The filename, directory name, or volume label
+:: syntax is incorrect." on machines whose user profile path contains a
+:: space (this one does: "Lasith Krishan"). electron\node_modules\electron
+:: is guaranteed to exist by this point (installed above if missing), so
+:: this reaches the exact same electron.exe the shim would have, just
+:: without the extra hop -- same app, same main.js, nothing else changes.
+:: npx is kept as a fallback only, in case a future Electron release moves
+:: this path.
+if exist "node_modules\electron\dist\electron.exe" (
+    "node_modules\electron\dist\electron.exe" .
+) else (
+    npx electron .
+)
 
 if errorlevel 1 (
     echo.

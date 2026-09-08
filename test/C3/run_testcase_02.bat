@@ -1,6 +1,6 @@
-﻿@echo off
+@echo off
 setlocal enabledelayedexpansion
-title TC-02 â€” Cloud APT C2 Exfiltration Beacon
+title TC-02 - Cloud APT C2 Exfiltration Beacon
 
 set "APP_ROOT=%~dp0..\..\"
 set "PYTHON=%APP_ROOT%.venv\Scripts\python.exe"
@@ -10,8 +10,8 @@ set "BACKEND_STARTED=0"
 
 echo.
 echo ================================================================
-echo   TEST CASE 02 â€” Cloud APT C2 Exfiltration Beacon
-echo   Component: C3 â€” Browser Execution Aware C2 Beacon Detector
+echo   TEST CASE 02 - Cloud APT C2 Exfiltration Beacon
+echo   Component: C3 - Browser Execution Aware C2 Beacon Detector
 echo ================================================================
 echo.
 echo   This test will:
@@ -34,7 +34,7 @@ echo.
 echo ================================================================
 echo.
 
-:: â”€â”€ Validate Python venv â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+:: -- Validate Python venv -----------------------------------------------------
 if not exist "%PYTHON%" (
     echo [ERROR] Python venv not found at: %PYTHON%
     echo         Create it:  python -m venv .venv
@@ -43,26 +43,26 @@ if not exist "%PYTHON%" (
     exit /b 1
 )
 
-:: â”€â”€ Validate test script â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+:: -- Validate test script -----------------------------------------------------
 if not exist "%SCRIPT%" (
     echo [ERROR] Test script not found: %SCRIPT%
     pause
     exit /b 1
 )
 
-:: â”€â”€ Check if backend is already running â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+:: -- Check if backend is already running --------------------------------------
 "%PYTHON%" -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     echo [INFO] Backend already running on port 8001.
     goto :run_test
 )
 
-:: â”€â”€ Kill leftover process on port 8001 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+:: -- Kill leftover process on port 8001 ---------------------------------------
 for /f "tokens=5" %%p in ('netstat -aon ^| findstr ":8001 " 2^>nul') do (
     taskkill /PID %%p /F >nul 2>&1
 )
 
-:: â”€â”€ Start backend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+:: -- Start backend ------------------------------------------------------------
 echo [START] Launching WebSentinel backend (port 8001)...
 pushd "%APP_ROOT%"
 set PYTHONUTF8=1
@@ -70,7 +70,7 @@ start "%BACKEND_TITLE%" /MIN "%PYTHON%" -m uvicorn core.main:app --host 127.0.0.
 popd
 set "BACKEND_STARTED=1"
 
-:: â”€â”€ Wait for backend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+:: -- Wait for backend ---------------------------------------------------------
 set WAITED=0
 :wait_loop
 if %WAITED% GEQ 45 goto :start_failed
@@ -91,7 +91,7 @@ echo         Check the "%BACKEND_TITLE%" window for errors.
 pause
 exit /b 1
 
-:: â”€â”€ Run test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+:: -- Run test -----------------------------------------------------------------
 :run_test
 echo [TEST] Starting TC-02...
 echo.
@@ -100,7 +100,7 @@ set PYTHONUTF8=1
 set "TEST_EXIT=%ERRORLEVEL%"
 echo.
 
-:: â”€â”€ Cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+:: -- Cleanup ------------------------------------------------------------------
 if "%BACKEND_STARTED%"=="1" (
     echo ================================================================
     set /p "STOP=  Stop the backend? [Y/n]: "

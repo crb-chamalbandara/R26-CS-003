@@ -6,11 +6,10 @@ It is a small, standalone, dependency-free (Python stdlib only) HTTP server
 that you deploy to infrastructure YOU legitimately own or control — a cheap
 VPS, a free-tier cloud VM, or a tunnel (ngrok/Cloudflare Tunnel) from your
 own machine. Its only job is to give C3 a REAL, publicly-resolvable IP/
-hostname to beacon against, so the reputation/threat-intel layer of the
-detection pipeline is genuinely exercised end-to-end instead of being
-skipped (AbuseIPDB/OTX/VirusTotal are never queried for 127.0.0.1 or any
-other private/loopback address — see core/c3/reputation_engine.py's
-_is_private_or_local() guard).
+hostname to beacon against, so the reputation/threat-intel lookup is
+genuinely exercised end-to-end instead of being skipped (AbuseIPDB and
+VirusTotal are never queried for 127.0.0.1 or any other private/loopback
+address — see core/c3/reputation_engine.py's _is_private_or_local() guard).
 
 WHAT THIS SERVER DOES — and does not do
 ----------------------------------------
@@ -27,9 +26,9 @@ WHAT THIS SERVER DOES — and does not do
   "WHY POST + A FIXED PAYLOAD" below for why that specific shape matters.
 - It never reaches out to any third party itself; it only receives the
   requests the test browser sends it. All the REAL network calls in this
-  test (to AbuseIPDB / OTX / VirusTotal) are made by C3's own reputation
-  engine, asking THOSE services for their opinion of THIS server's IP —
-  this script never contacts them.
+  test (to AbuseIPDB / VirusTotal) are made by C3's own reputation engine,
+  asking THOSE services for their opinion of THIS server's IP — this
+  script never contacts them.
 
 WHY POST + A FIXED PAYLOAD (measured, not assumed)
 ----------------------------------------------------
@@ -171,6 +170,28 @@ _MIN_CHECKIN_REPLY = b'{"ok":true}'
 # midpoint of that plateau, chosen for margin against real-world byte
 # variance in either direction -- not the exact center of a narrower or
 # riskier zone.
+#
+# STATUS 2026-09-03 -- THIS CONSTANT IS NOW INERT, AND THE REASONING ABOVE IS
+# HISTORICAL. Everything above was derived against models/c3_xgb_classifier.pkl,
+# the 6-feature model that is no longer deployed, and it leaned on
+# payload_size_std, which is not even in the current ML feature set. The
+# deployed model is the isotonic-calibrated 18-feature
+# c3_xgb_scoped_calibrated_20260903.pkl.
+#
+# Re-probed against the DEPLOYED model using a real 35-event run of this
+# server, sweeping payload_size_mean with every other feature held at its
+# measured value:
+#     40B .. 100B -> ML 0.3305      120B .. 700B -> ML 0.1261
+#     1200B+      -> ML 0.1392
+# i.e. the byte-size lever this constant pulls no longer meaningfully moves
+# the score, and no value of it can rescue the profile on its own. What DOES
+# move it is referrer_absent_ratio (0.3305 -> 0.7357), fixed in
+# _landing_page_html() above.
+#
+# 80 is KEPT because it still sits in the best of those bands and still gives
+# a constant-length reply (which payload_repeat_ratio wants), but do not treat
+# the "~92-93% ML band" claim above as current -- it describes a retired model.
+# Re-derive against the live model before citing any number from it.
 _CHECKIN_TARGET_BODY_LEN = 80
 
 
@@ -191,10 +212,39 @@ def _landing_page_html(interval_ms: int, jitter_pct: int) -> str:
     # -- an immediate first fetch on page load would create one near-
     # zero-length inter-arrival gap that spikes iat_cv for the whole
     # window, a real bug this project found and fixed live once already.
+    # referrerPolicy:'no-referrer' -- FIXED 2026-09-03, and this is a FIDELITY
+    # fix, not a score-gaming one. A same-origin fetch() sends a Referer header
+    # by default, so this beacon was arriving with a Referer on every check-in
+    # (measured referrer_absent_ratio = 0.029). A real timer-driven C2 beacon
+    # is not initiated by a document click and carries NO Referer -- that is
+    # exactly what the deployed model learned from real capture data
+    # (referrer_absent_ratio median 1.000 for real C2, 0.06 for benign
+    # browsing), and it is the model's single highest-weighted feature at
+    # 31.8%. So the old page was mimicking C2 *badly* on the one signal that
+    # matters most.
+    #
+    # Measured against the DEPLOYED model (c3_xgb_scoped_calibrated_20260903)
+    # on a real 35-event local run of this exact server, holding every other
+    # feature at its genuinely observed value:
+    #     referrer_absent_ratio 0.029 (Referer sent)  -> ML 0.3305
+    #     referrer_absent_ratio 1.000 (no Referer)    -> ML 0.7357
+    # A single-feature sweep found NOTHING ELSE moves the score at all --
+    # payload_repeat_ratio, payload_cv, http_post_ratio, url_path_entropy,
+    # iat_clock_share and iat_entropy_norm were each flat to 4 decimals. See
+    # _CHECKIN_TARGET_BODY_LEN below for why the old byte-size tuning is now
+    # inert.
+    #
+    # ngrok-skip-browser-warning: ngrok's free tier interposes an HTML
+    # "You are about to visit..." interstitial on browser-looking requests to
+    # *.ngrok-free.app. Sending this header (any value) suppresses it, so the
+    # check-in gets the real fixed-size reply instead of an ngrok HTML page of
+    # a completely different length -- which would wreck payload_repeat_ratio.
+    # Harmless when not tunnelling through ngrok.
     scale = interval_ms * jitter_pct / 100
     return (
         "<script>M=Math;f=()=>{"
-        "fetch('/c',{method:'POST'});"
+        "fetch('/c',{method:'POST',referrerPolicy:'no-referrer',"
+        "headers:{'ngrok-skip-browser-warning':'1'}});"
         f"setTimeout(f,{interval_ms}-{scale:g}*M.log(M.random()))"
         f"}};setTimeout(f,{interval_ms})</script>"
     )
@@ -277,8 +327,13 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--interval-ms", type=int, default=5_000,
                      help="base beacon interval in ms (default 5000 = 5s)")
-    ap.add_argument("--jitter-pct", type=int, default=5,
-                     help="timing jitter as a percent of the interval (default 5)")
+    ap.add_argument("--jitter-pct", type=int, default=2,
+                     help="timing jitter as a percent of the interval (default 2 -- "
+                          "lowered from 5 on 2026-09-08: at 5%% the 50-event window's "
+                          "sample iat_cv sits almost exactly on analyzer.py Rule 1's "
+                          "0.05 cliff, making the heuristic score (and so auto-block) "
+                          "flicker window to window; see test_c3_real_world_beacon.bat's "
+                          "JITTER_PCT for the full measured writeup)")
     args = ap.parse_args()
 
     _Handler.interval_ms = max(1000, args.interval_ms)

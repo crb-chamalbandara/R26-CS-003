@@ -648,7 +648,24 @@ class PlaywrightSession:
     async def navigate(self, url: str, timeout: int = 30_000) -> str:
         if not self.is_running:
             raise RuntimeError("Playwright session not running")
-        await self._page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        # ngrok's free tier serves its own "You are about to visit..." HTML
+        # interstitial to the first browser-looking top-level navigation of a
+        # tunnel instead of proxying straight to the tunnelled site. This
+        # header (any value) suppresses it -- see tc03_mimicry_server.py,
+        # which already sends it on its own check-in fetch() calls; the
+        # initial page navigation was the one request that couldn't carry it
+        # (TC-03's own module docstring documented this as the likely cause
+        # of "no data captured" against a fresh tunnel). Scoped to ngrok
+        # hosts and cleared right after so it never leaks onto unrelated
+        # requests from this page.
+        is_ngrok = "ngrok" in (urlparse(url).hostname or "")
+        if is_ngrok:
+            await self._page.set_extra_http_headers({"ngrok-skip-browser-warning": "1"})
+        try:
+            await self._page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        finally:
+            if is_ngrok:
+                await self._page.set_extra_http_headers({})
         return self._page.url
 
     async def download_file(self, url: str, timeout: int = 20_000) -> dict:
