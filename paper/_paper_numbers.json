@@ -1,0 +1,142 @@
+{
+  "min_pos_reliable": 10,
+  "scope": {
+    "criterion": "C2 window in scope iff error_status_ratio < 1.0 (the channel completed at least one exchange)",
+    "max_windows_per_pair": 150,
+    "removed_c2_windows": 6560,
+    "removed_families": {
+      "Zeus78": 6550,
+      "Neris": 10
+    },
+    "in_scope_c2_windows": 330,
+    "in_scope_c2_pairs": 50
+  },
+  "LOFO": {
+    "n_folds_total": 6,
+    "n_folds_reliable": 3,
+    "reliable_names": [
+      "FastFlux",
+      "Neris",
+      "ZeusV1"
+    ],
+    "excluded": {
+      "Sogou": 3,
+      "Zeus78": 1,
+      "ZeusB26": 3
+    },
+    "mean_reliable": {
+      "accuracy": 0.8376,
+      "precision": 0.8428,
+      "recall": 0.8395,
+      "f1": 0.8289,
+      "roc_auc": 0.9266
+    },
+    "per_family": {
+      "FastFlux": {
+        "accuracy": 0.8833,
+        "precision": 0.8603,
+        "recall": 0.9167,
+        "f1": 0.8873,
+        "roc_auc": 0.9278,
+        "n_test_positives": 12
+      },
+      "Neris": {
+        "accuracy": 0.8741,
+        "precision": 0.7994,
+        "recall": 1.0,
+        "f1": 0.8884,
+        "roc_auc": 0.9649,
+        "n_test_positives": 85
+      },
+      "Sogou": {
+        "accuracy": 0.4,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "roc_auc": 0.3667,
+        "n_test_positives": 3
+      },
+      "Zeus78": {
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "roc_auc": 1.0,
+        "n_test_positives": 1
+      },
+      "ZeusB26": {
+        "accuracy": 0.9333,
+        "precision": 0.9,
+        "recall": 1.0,
+        "f1": 0.9429,
+        "roc_auc": 0.9222,
+        "n_test_positives": 3
+      },
+      "ZeusV1": {
+        "accuracy": 0.7553,
+        "precision": 0.8686,
+        "recall": 0.6018,
+        "f1": 0.711,
+        "roc_auc": 0.8871,
+        "n_test_positives": 226
+      }
+    }
+  },
+  "LOPO": {
+    "n_folds_total": 15,
+    "n_folds_reliable": 4,
+    "excluded_fold_sizes": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+    ],
+    "mean_reliable": {
+      "accuracy": 0.9227,
+      "precision": 0.8935,
+      "recall": 0.9625,
+      "f1": 0.9253,
+      "roc_auc": 0.9782
+    },
+    "mean_all_folds_unfiltered": {
+      "accuracy": 0.9616,
+      "precision": 0.9476,
+      "recall": 0.99,
+      "f1": 0.9658,
+      "roc_auc": 0.9912
+    },
+    "reliable_fold_sizes": [
+      87,
+      84,
+      55,
+      20
+    ]
+  },
+  "published_as_reported_previously": {
+    "accuracy": 0.9616,
+    "precision": 0.9476,
+    "recall": 0.99,
+    "f1": 0.9658,
+    "roc_auc": 0.9912
+  },
+  "out_of_scope": {
+    "family_counts": {
+      "Zeus78": 6550,
+      "Neris": 10
+    },
+    "n_windows": 6560,
+    "benign_comparison_windows": 2902,
+    "benign_held_out_of_training": true,
+    "median_score": 0.7239853342374166,
+    "recall_at_threshold": 1.0,
+    "roc_auc_vs_benign": 0.9950287123262342,
+    "note": "Dead-channel C2 (every request errored), non-periodic: iat_cv 1.61 vs 0.005 for in-scope C2. Excluded from the headline by the scope criterion, reported here. Benign comparison captures were held out of this model's training so the number is not inflated."
+  }
+}

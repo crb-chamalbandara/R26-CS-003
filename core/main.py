@@ -132,7 +132,6 @@ from .c3.analyzer        import c3_analyzer
 from .c3.alert_store     import c3_alert_store
 from .c3.reputation_engine import set_virustotal_key as _c3_set_virustotal_key
 from .c3.reputation_engine import set_abuseipdb_key as _c3_set_abuseipdb_key
-from .c3.reputation_engine import set_otx_key as _c3_set_otx_key
 
 # ── C4 — Browser Artifact Forensic Correlation Engine ─────────────────────────
 from .c4 import (
@@ -257,7 +256,6 @@ _SETTINGS_DEFAULTS: dict = {
     "whitelist": [],
     "gsb_key": "",           # C2 Layer-5 phishing check (Google Safe Browsing)
     "abuseipdb_key": "",     # C3 reputation engine
-    "otx_key": "",           # C3 reputation engine
     "virustotal_key": "",    # C3 reputation engine (replaced GSB here 2026-08-29)
     "pw_home_url": "",
     # C1 dynamic sandbox containment. "auto" picks the strongest backend the
@@ -295,7 +293,6 @@ def _save_settings(s: dict) -> None:
 settings: dict = _load_settings()
 _c3_set_virustotal_key(settings.get("virustotal_key", ""))
 _c3_set_abuseipdb_key(settings.get("abuseipdb_key", ""))
-_c3_set_otx_key(settings.get("otx_key", ""))
 
 
 def _apply_sandbox_settings() -> dict:
@@ -322,7 +319,6 @@ class SettingsReq(BaseModel):
     whitelist: List[str] = []
     gsb_key: str = ""            # C2 Layer-5 phishing check
     abuseipdb_key: str = ""      # C3 reputation engine
-    otx_key: str = ""            # C3 reputation engine
     virustotal_key: str = ""     # C3 reputation engine
     pw_home_url: str = ""
     c1_isolation_backend: str = "auto"
@@ -630,7 +626,6 @@ async def save_settings(req: SettingsReq):
     # C3 threat-intel keys are held in the C3 modules, not the settings dict.
     _c3_set_virustotal_key(req.virustotal_key)
     _c3_set_abuseipdb_key(req.abuseipdb_key)
-    _c3_set_otx_key(req.otx_key)
     # C1 re-applies its isolation backend / sandbox networking on every save.
     applied = _apply_sandbox_settings()
     return {"status": "saved", "sandbox": applied}
@@ -1652,15 +1647,15 @@ async def _tc_c3_human_iat():
 async def _tc_c3_fusion_beacon():
     from .c3.risk_fusion import C3RiskFusion
     fusion = C3RiskFusion()
-    result = fusion.fuse(rf=0.8, reputation=0.9, heuristic=0.7)
+    result = fusion.fuse(ml=0.8, reputation=0.9, heuristic=0.7)
     assert result["verdict"] == "BEACON", f"Expected BEACON, got {result['verdict']}"
     assert result["score"] >= 0.6
-    return {"detail": f"rf=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
+    return {"detail": f"ml=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
 
 async def _tc_c3_fusion_safe():
     from .c3.risk_fusion import C3RiskFusion
     fusion = C3RiskFusion()
-    result = fusion.fuse(rf=0.0, reputation=0.0, heuristic=0.0)
+    result = fusion.fuse(ml=0.0, reputation=0.0, heuristic=0.0)
     assert result["verdict"] == "SAFE", f"Expected SAFE, got {result['verdict']}"
     return {"detail": f"all signals=0 → verdict={result['verdict']} score={result['score']:.2f}"}
 
@@ -2737,7 +2732,11 @@ async def c3_test_real_world_beacon():
         raise HTTPException(status_code=500,
                             detail=f"Could not launch the test: {exc}")
     return {
-        "status": "launched",
+        # "started", not "launched" -- the dashboard's openC3BeaconTest() only
+        # treats an exact "started" as success (anything else, including a
+        # merely-truthy response, falls through to its generic failure toast
+        # using this same `detail` string). Keep these in sync.
+        "status": "started",
         "pid": _c3_realworld_proc.pid,
         "detail": "Real-world C2 beacon test launched in a new console window. "
                   "It deploys an ngrok-tunnelled mimicry beacon and drives the "

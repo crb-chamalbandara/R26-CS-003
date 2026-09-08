@@ -8,7 +8,7 @@ Pipeline:
     -> CDP network interception (C3 interceptor)
     -> Context tagging (idle time, background tab, user activity)
     -> Feature extraction (16 features: IAT stats, rate, browser context)
-    -> RF classifier scoring (7 network-flow features, CTU-13 C2-trained)
+    -> XGBoost classifier scoring (6 features, CTU-13 HTTP C2-trained)
     -> Heuristic scoring (9 rules)
     -> Risk fusion (fixed weight table)
     -> BEACON verdict + alert storage
@@ -149,7 +149,7 @@ def _print_row(elapsed: float, host_row: dict | None) -> str:
         f"{c(BEACON_TARGET, BLU):<30}  "
         f"reqs={c(str(reqs), WHT):<8}  "
         f"{score_str(score):>12}  {verdict_str(verd):<20}  "
-        f"A={score_str(sigs.get('rf'))}  "
+        f"A={score_str(sigs.get('ml'))}  "
         f"H={score_str(sigs.get('heuristic'))}  "
         f"R={score_str(sigs.get('reputation'))}"
     )
@@ -215,7 +215,7 @@ def _print_alert_box(host_row: dict, alert: dict | None) -> None:
         print(f"  Time      : {c(ts[:19], _D)}")
     print()
     print(c("  Signal breakdown:", _B + WHT))
-    for sig, label in [("rf", "RF classifier       "),
+    for sig, label in [("ml", "XGBoost classifier  "),
                         ("heuristic", "Heuristic rules     "),
                         ("reputation", "Reputation (TI)     ")]:
         val = sigs.get(sig)
@@ -324,7 +324,7 @@ def main() -> None:
     print()
     print(c("  Detection pipeline:", _D))
     print(c("    Browser -> CDP intercept -> Context tag -> Feature extract", _D))
-    print(c("    -> RF classifier (7 network-flow features, CTU-13 C2-trained)", _D))
+    print(c("    -> XGBoost classifier (6 features, CTU-13 HTTP C2-trained)", _D))
     print(c("    -> Heuristic rules (9 rules)", _D))
     print(c("    -> Risk fusion (fixed weight table) -> Verdict", _D))
     print()
@@ -336,8 +336,8 @@ def main() -> None:
     if health:
         print()
     c3_st = api_get("/c3/status")
-    ml  = c3_st.get("rf_model_loaded", False)
-    mty = "random_forest" if ml else "heuristic-only"
+    ml  = c3_st.get("ml_model_loaded", False)
+    mty = "XGBoost" if ml else "heuristic-only"
     print(c("  Backend  : Online", GREEN))
     print(c(f"  C3 model : {mty} ({'loaded' if ml else 'NOT loaded -- heuristic only'})",
             GREEN if ml else YELLOW))
@@ -399,7 +399,7 @@ def main() -> None:
     print(c("    1. CDP captures every POST to /c3/test/beacon-target", _D))
     print(c("    2. Context tagger records idle time + tab visibility per request", _D))
     print(c("    3. After 10+ requests: IAT CV < 0.05 fires 'regular timing'", _D))
-    print(c("    4. RF classifier scores HTTP behaviour -> elevated bot probability", _D))
+    print(c("    4. XGBoost classifier scores HTTP behaviour -> elevated bot probability", _D))
     print(c("    5. Fused score crosses 0.60 -> BEACON verdict", _D))
     print()
     print(c(f"  Navigating Playwright browser to beacon page...", _D))

@@ -142,7 +142,7 @@ def print_features(feats):
 
 def print_signals(sigs, detail_map=None):
     print(c("\n  Signal Breakdown:", _B, WHT))
-    for key, label in [("rf","RF Classifier  "),
+    for key, label in [("ml","XGBoost        "),
                         ("heuristic","Heuristic      "),("reputation","Reputation (TI)")]:
         val = sigs.get(key)
         if val is not None:
@@ -275,9 +275,9 @@ def main():
     wait_backend()
     c3 = api_get("/c3/status")
     print(c("  Backend       : Online", GRN))
-    print(c(f"  C3 Model      : {'random_forest' if c3.get('rf_model_loaded') else 'heuristic-only'} "
-            f"({'loaded' if c3.get('rf_model_loaded') else 'heuristic-only'})",
-            GRN if c3.get("rf_model_loaded") else YEL))
+    print(c(f"  C3 Model      : {'XGBoost' if c3.get('ml_model_loaded') else 'heuristic-only'} "
+            f"({'loaded' if c3.get('ml_model_loaded') else 'heuristic-only'})",
+            GRN if c3.get("ml_model_loaded") else YEL))
     print(c(f"  Analyzer      : {'running' if c3.get('analyzer_running') else 'stopped'}",
             GRN if c3.get("analyzer_running") else YEL))
     print()
@@ -357,7 +357,7 @@ def main():
                     step(el, f"{c(BEACON_HOST,BLU):<30}  "
                              f"reqs={c(str(rq),WHT):<5}  {score_s(sc):>12}  "
                              f"{verdict_s(vd):<20}  "
-                             f"A={score_s(sg.get('rf'))}  "
+                             f"A={score_s(sg.get('ml'))}  "
                              f"H={score_s(sg.get('heuristic'))}")
                     if rq < MIN_EVENTS:
                         rem = MIN_EVENTS - rq

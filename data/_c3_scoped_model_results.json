@@ -1,0 +1,287 @@
+{
+ "scope": {
+  "criterion": "C2 window in scope iff error_status_ratio < 1.0 (the channel completed at least one exchange)",
+  "max_windows_per_pair": 150,
+  "removed_c2_windows": 6560,
+  "removed_families": {
+   "Zeus78": 6550,
+   "Neris": 10
+  },
+  "in_scope_c2_windows": 330,
+  "in_scope_c2_pairs": 50
+ },
+ "LOFO": {
+  "FastFlux": {
+   "accuracy": 0.8833333333333332,
+   "precision": 0.8602564102564102,
+   "recall": 0.9166666666666666,
+   "f1": 0.8873333333333333,
+   "roc_auc": 0.9277777777777778,
+   "n_balanced": 24,
+   "target_fpr": 0.2,
+   "n_test_positives": 12,
+   "n_train_positives": 318,
+   "reliable": true
+  },
+  "Neris": {
+   "accuracy": 0.8741176470588234,
+   "precision": 0.7994480012019854,
+   "recall": 1.0,
+   "f1": 0.8883909057920659,
+   "roc_auc": 0.9648996539792389,
+   "n_balanced": 170,
+   "target_fpr": 0.3,
+   "n_test_positives": 85,
+   "n_train_positives": 245,
+   "reliable": true
+  },
+  "Sogou": {
+   "accuracy": 0.39999999999999997,
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1": 0.0,
+   "roc_auc": 0.3666666666666667,
+   "n_balanced": 6,
+   "target_fpr": 0.2,
+   "n_test_positives": 3,
+   "n_train_positives": 327,
+   "reliable": false
+  },
+  "Zeus78": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 2,
+   "target_fpr": 0.25,
+   "n_test_positives": 1,
+   "n_train_positives": 329,
+   "reliable": false
+  },
+  "ZeusB26": {
+   "accuracy": 0.9333333333333333,
+   "precision": 0.9,
+   "recall": 1.0,
+   "f1": 0.9428571428571428,
+   "roc_auc": 0.9222222222222222,
+   "n_balanced": 6,
+   "target_fpr": 0.25,
+   "n_test_positives": 3,
+   "n_train_positives": 327,
+   "reliable": false
+  },
+  "ZeusV1": {
+   "accuracy": 0.7553097345132744,
+   "precision": 0.8686484211687059,
+   "recall": 0.6017699115044248,
+   "f1": 0.7109517284059483,
+   "roc_auc": 0.8870741639909155,
+   "n_balanced": 452,
+   "target_fpr": 0.1,
+   "n_test_positives": 226,
+   "n_train_positives": 104,
+   "reliable": true
+  }
+ },
+ "LOPO": {
+  "10.0.2.106->194.28.87.64": {
+   "accuracy": 0.9142857142857144,
+   "precision": 0.8539610813805976,
+   "recall": 1.0,
+   "f1": 0.9211477276718689,
+   "roc_auc": 1.0,
+   "n_balanced": 168,
+   "target_fpr": 0.2,
+   "n_test_positives": 84,
+   "n_train_positives": 246
+  },
+  "10.0.2.106->212.124.126.66": {
+   "accuracy": 0.9620689655172413,
+   "precision": 0.9301457999100998,
+   "recall": 1.0,
+   "f1": 0.9636389384972276,
+   "roc_auc": 0.9992601400449199,
+   "n_balanced": 174,
+   "target_fpr": 0.1,
+   "n_test_positives": 87,
+   "n_train_positives": 243
+  },
+  "10.0.2.106->95.211.9.145": {
+   "accuracy": 0.9545454545454545,
+   "precision": 0.9167685468185608,
+   "recall": 1.0,
+   "f1": 0.9565506720324048,
+   "roc_auc": 0.9998677685950412,
+   "n_balanced": 110,
+   "target_fpr": 0.1,
+   "n_test_positives": 55,
+   "n_train_positives": 275
+  },
+  "147.32.84.165->173.192.170.88": {
+   "accuracy": 0.86,
+   "precision": 0.8731753626490469,
+   "recall": 0.85,
+   "f1": 0.860012131642427,
+   "roc_auc": 0.91375,
+   "n_balanced": 40,
+   "target_fpr": 0.25,
+   "n_test_positives": 20,
+   "n_train_positives": 310
+  },
+  "147.32.84.165->91.220.0.52": {
+   "accuracy": 0.9,
+   "precision": 0.8699999999999999,
+   "recall": 1.0,
+   "f1": 0.9214285714285715,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.15,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.165->94.63.150.63": {
+   "accuracy": 0.8666666666666668,
+   "precision": 0.82,
+   "recall": 1.0,
+   "f1": 0.8928571428571429,
+   "roc_auc": 0.9555555555555555,
+   "n_balanced": 6,
+   "target_fpr": 0.25,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.191->173.192.170.88": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.1,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.192->173.192.170.88": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.1,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.193->173.192.170.88": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.1,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.204->173.192.170.88": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.1,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.205->173.192.170.88": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.1,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.206->173.192.170.88": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.1,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.207->173.192.170.88": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.1,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.209->173.192.170.88": {
+   "accuracy": 0.9666666666666668,
+   "precision": 0.95,
+   "recall": 1.0,
+   "f1": 0.9714285714285715,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.25,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  },
+  "147.32.84.209->91.220.0.52": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1": 1.0,
+   "roc_auc": 1.0,
+   "n_balanced": 6,
+   "target_fpr": 0.1,
+   "n_test_positives": 3,
+   "n_train_positives": 327
+  }
+ },
+ "LOFO_mean": {
+  "accuracy": 0.8376,
+  "precision": 0.8428,
+  "recall": 0.8395,
+  "f1": 0.8289,
+  "roc_auc": 0.9266
+ },
+ "LOPO_mean": {
+  "accuracy": 0.9616,
+  "precision": 0.9476,
+  "recall": 0.99,
+  "f1": 0.9658,
+  "roc_auc": 0.9912
+ },
+ "final_fit": {
+  "target_fpr": 0.15,
+  "threshold": 0.38042740027109784,
+  "n_windows": 55844,
+  "n_positives": 330
+ },
+ "out_of_scope": {
+  "family_counts": {
+   "Zeus78": 6550,
+   "Neris": 10
+  },
+  "n_windows": 6560,
+  "benign_comparison_windows": 2902,
+  "benign_held_out_of_training": true,
+  "median_score": 0.7239853342374166,
+  "recall_at_threshold": 1.0,
+  "roc_auc_vs_benign": 0.9950287123262342,
+  "note": "Dead-channel C2 (every request errored), non-periodic: iat_cv 1.61 vs 0.005 for in-scope C2. Excluded from the headline by the scope criterion, reported here. Benign comparison captures were held out of this model's training so the number is not inflated."
+ }
+}

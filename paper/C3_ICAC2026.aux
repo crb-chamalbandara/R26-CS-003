@@ -1,0 +1,73 @@
+\relax 
+\citation{garcia2014ctu13,gu2008botminer,bilge2012disclosure}
+\citation{mitre2018attack}
+\citation{singh2025malicious}
+\citation{anderson2016identifying}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{}\protected@file@percent }
+\citation{garcia2014ctu13}
+\citation{gu2008botminer}
+\citation{bilge2012disclosure}
+\citation{mahboubi2025lurking}
+\citation{singh2025malicious}
+\citation{liu2008isolationforest}
+\citation{chen2016xgboost}
+\citation{niculescumizil2005predicting}
+\citation{sommer2010outside}
+\citation{pendlebury2019tesseract}
+\citation{arp2022dos}
+\citation{chromedevtools,playwright}
+\@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{2}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces The 18 scale-free ML features, by group, with trained importance}}{2}{}\protected@file@percent }
+\newlabel{tab:features}{{I}{2}{}{table.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {III}System Design}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Non-invasive collection}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Feature vector}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Heuristic layer and fusion}{2}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The C3 detection pipeline. Analysis runs every 10 seconds for each monitored destination host. Reputation is consulted only after a BEACON verdict and is never an input to the score.}}{3}{}\protected@file@percent }
+\newlabel{fig:arch}{{1}{3}{}{figure.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Dataset and Two Validity Defects}{3}{}\protected@file@percent }
+\citation{arp2022dos,pendlebury2019tesseract}
+\citation{chen2016xgboost}
+\citation{niculescumizil2005predicting}
+\citation{pedregosa2011scikit}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Feature medians, C2 windows only: the excluded capture is not periodic}}{4}{}\protected@file@percent }
+\newlabel{tab:scope}{{II}{4}{}{table.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Pseudo-replication}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}An out-of-scope concept}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Scope criterion and cap}{4}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Class-balanced held-out performance of the deployed model. Both protocols apply the same reliability rule: a fold enters a mean only if it contains at least ten positive test windows.}}{4}{}\protected@file@percent }
+\newlabel{fig:headline}{{2}{4}{}{figure.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Model}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Evaluation}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Protocol}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Headline results}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}Why XGBoost: a five-classifier comparison}{5}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Deployed model, class-balanced held-out evaluation. LOPO holds out one C2 source; LOFO holds out an entire malware family. Means cover only folds with at least ten positive test windows; the final row is shown for transparency and is not claimed.}}{5}{}\protected@file@percent }
+\newlabel{tab:headline}{{III}{5}{}{table.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Five classifiers on the identical scoped dataset and weighting. Random Forest wins the optimistic split, then fails to generalise: ranking quality partly survives an unseen family, but calibration to a fixed threshold does not.}}{5}{}\protected@file@percent }
+\newlabel{fig:classifiers}{{3}{5}{}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}Fusion weight and a structural limit}{5}{}\protected@file@percent }
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{garcia2014ctu13}{1}
+\bibcite{gu2008botminer}{2}
+\bibcite{bilge2012disclosure}{3}
+\bibcite{mitre2018attack}{4}
+\bibcite{singh2025malicious}{5}
+\bibcite{anderson2016identifying}{6}
+\bibcite{mahboubi2025lurking}{7}
+\bibcite{liu2008isolationforest}{8}
+\bibcite{chen2016xgboost}{9}
+\bibcite{niculescumizil2005predicting}{10}
+\bibcite{sommer2010outside}{11}
+\bibcite{pendlebury2019tesseract}{12}
+\bibcite{arp2022dos}{13}
+\bibcite{chromedevtools}{14}
+\bibcite{playwright}{15}
+\bibcite{pedregosa2011scikit}{16}
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Five classifiers, identical scoped data, fixed 0.5 threshold}}{6}{}\protected@file@percent }
+\newlabel{tab:classifiers}{{IV}{6}{}{table.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Limitations}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VIII}Conclusion}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{6}{}\protected@file@percent }
+\gdef \@abspage@last{6}
