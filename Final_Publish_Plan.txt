@@ -1,0 +1,682 @@
+================================================================================
+C3 FINAL PUBLISH PLAN
+Turning the current research prototype into a real-world C2 beacon detector
+AND blocker
+================================================================================
+
+HOW THIS DOCUMENT WAS PRODUCED
+--------------------------------------------------------------------------------
+Every claim below was checked directly against the current source code, not
+against memory of earlier conversations or the research paper alone. The files
+read in full for this review were:
+
+  core/c3/__init__.py
+  core/c3/interceptor.py        (collection + the existing blocker)
+  core/c3/context_tagger.py     (user-activity / idle tracking)
+  core/c3/feature_engine.py     (29-feature computation)
+  core/c3/anomaly_engine.py     (the ML model loader and its own change log)
+  core/c3/risk_fusion.py        (ML + heuristic fusion logic)
+  core/c3/analyzer.py           (the 10-second loop and all 9 heuristic rules)
+  core/c3/reputation_engine.py  (AbuseIPDB / VirusTotal)
+  core/c3/alert_store.py, core/c3/block_store.py
+  core/main.py (grepped for every C3 integration point)
+  core/playwright_session.py (grepped for browser launch mode)
+  models/ and test/C3/ directory listings
+
+Where a claim is something I inferred (not directly proven by a code path),
+it is explicitly marked "UNVERIFIED — CONFIRM BY TESTING" so it is never
+confused with something I actually traced.
+
+Nothing in this document has been applied to the code. This is a plan only.
+
+
+================================================================================
+SECTION 1 — WHAT C3 ACTUALLY IS TODAY (so the rest of this plan makes sense)
+================================================================================
+
+C3 is a 4-stage pipeline that runs inside ONE dedicated, backend-launched
+Chromium browser window (Playwright's launch_persistent_context, not the
+user's normal everyday browser — see Section 2, this matters a lot):
+
+  1. COLLECTION
+     core/c3/interceptor.py attaches a Chrome DevTools Protocol (CDP) session
+     to every open tab and records every outgoing request without pausing the
+     browser. context_tagger.py separately injects a small script into every
+     tab that reports clicks/keys/scrolls/touches and tab visibility back to
+     Python. Requests are kept in a 50-request rolling window per destination
+     host.
+
+  2. FEATURES
+     feature_engine.py turns each host's window into 29 numbers every
+     10 seconds: 18 are "scale-free" (ratios/shares/entropies) and feed the
+     ML model; the other 11 (absolute timing, request rate, same-site ratio,
+     script-initiator ratio, and the 4 browser-context fields) feed the
+     heuristic rules directly.
+
+  3. SCORING
+     anomaly_engine.py runs an isotonic-calibrated XGBoost model over the 18
+     ML features. analyzer.py separately runs 9 hand-written heuristic rules
+     over the other features. risk_fusion.py combines them:
+         final_score = 0.55 * ML_score + 0.45 * heuristic_score
+     with a "both signals must agree" guard (neither signal alone can push
+     the score to BEACON), thresholds SAFE < 0.30 <= SUSPICIOUS < 0.52 <=
+     BEACON, and a hard rule that BEACON can never be confirmed on fewer
+     than 10 observed requests.
+
+  4. RESPONSE
+     - reputation_engine.py queries AbuseIPDB + VirusTotal ONLY after a
+       BEACON is confirmed, and shows the result to the analyst as evidence.
+       It never changes the score.
+     - alert_store.py writes a permanent SQLite record of the alert.
+     - interceptor.py CAN ALREADY BLOCK the host — this is not something
+       that needs to be built from scratch. See Section 4.
+
+This is a genuinely well-engineered pipeline for what it is. The code is
+unusually well-documented — nearly every constant has a comment explaining
+the measurement that produced it, which is exactly what made this review
+possible to do accurately. The gaps identified below are real, but they sit
+on top of a solid foundation, not a shaky one.
+
+
+================================================================================
+SECTION 2 — THE ONE DECISION THAT HAS TO BE MADE BEFORE ANYTHING ELSE
+================================================================================
+
+core/playwright_session.py launches its own private, headed Chromium instance
+(launch_persistent_context, headless=False). C3 only ever sees traffic that
+passes through THAT browser window.
+
+This means C3, as it exists right now, is a MONITORED SANDBOX BROWSER, not a
+protection layer for a person's actual daily-driver browser. Nobody is
+automatically protected just by using their computer normally — they would
+have to be deliberately browsing inside WebSentinel's own browser window for
+C3 to see anything at all.
+
+Before writing one more line of code, decide which of these two products you
+are actually finalizing, because they are genuinely different pieces of
+engineering, not two settings of the same one:
+
+  OPTION A — "Analyst sandbox / secure browsing gateway"
+    Keep the current architecture. A SOC analyst, a researcher, or a locked-
+    down kiosk machine browses through WebSentinel's own browser on purpose,
+    the same way people already use dedicated malware-detonation VMs or
+    remote-browser-isolation products. This is what is already built, and it
+    is a legitimate, sellable product on its own. Real-world work here is
+    hardening what exists (Sections 4-6 below), not re-architecting it.
+
+  OPTION B — "Always-on endpoint protection for a real user's normal browser"
+    This requires a genuinely different delivery mechanism: a browser
+    extension using the webRequest / declarativeNetRequest APIs (for
+    Chrome/Edge) so it runs inside the browser the person already uses every
+    day, plus a native-messaging or local-service component if you also want
+    to see non-browser traffic. CDP/Playwright cannot attach to a browser
+    instance you don't control from the outside; this is a new build, not an
+    upgrade of the current interceptor.
+
+RECOMMENDATION: Finish and harden Option A first. It is close to done, it is
+a real, defensible product ("a safe, instrumented browser for opening
+suspicious links/pages/extensions, with automatic C2 blocking"), and every
+hardening step in this plan makes it stronger. Option B is a legitimate
+future direction but should be scoped as a second, separate project, not
+folded into "finishing" C3 — attempting both at once is how neither ships.
+
+Everything below assumes Option A unless a step says otherwise.
+
+
+================================================================================
+SECTION 3 — ML + HEURISTIC LIMITATIONS (the part you asked about mainly)
+================================================================================
+
+3.1 A real statistical inconsistency in how the headline accuracy is measured
+--------------------------------------------------------------------------------
+This came out of a separate fact-check of the research paper, and it matters
+here too because it is about how much you can actually trust the model's
+reported numbers, not just how the paper reads.
+
+The evaluation reports two protocols: LOPO (unseen C2 infrastructure, same
+malware family) and LOFO (a whole malware family held out). The methodology
+correctly excludes any held-out fold with fewer than 10 test-positive
+windows from the LOFO average (three of six families are excluded for this
+reason). But the SAME rule is not applied to LOPO: 11 of its 15 reported
+folds have only 3 test-positive windows each, and they ARE included in the
+headline 96.2% accuracy number. Recomputing the average using only the folds
+that meet the model's own reliability bar gives roughly 92.3% accuracy /
+89.3% precision — measurably lower on every metric.
+
+WHY THIS MATTERS FOR A REAL DEPLOYMENT, not just a paper: the true unseen-
+infrastructure accuracy you should plan around operationally is closer to
+92% than 96%, and precision (the number that determines how often you would
+be blocking a real, legitimate destination) is closer to 89% than 95%.
+
+FIX: apply the same 10-positive reliability filter to LOPO as LOFO already
+uses, recompute the real headline numbers, and use the corrected numbers for
+any real-world capacity/false-positive planning.
+
+3.2 Thin malware-family diversity behind the headline number
+--------------------------------------------------------------------------------
+Of the six malware families in the corpus, only three (FastFlux, Neris,
+ZeusV1) have enough held-out data to trust at all. One of those three,
+ZeusV1, is on its own 226 of the 330 total positive windows in the entire
+dataset (68.5%) and is the hardest of the three (60.2% recall, 71.1% F1 on
+its own fold) — a real, honestly-reported generalization gap, not a bug.
+
+WHAT THIS MEANS FOR REAL DEPLOYMENT: the model has meaningful, trustworthy
+evidence behind its generalization claim for essentially ONE malware
+family's traffic pattern at real scale. It has not been shown to generalize
+across a broad population of modern malware families. Treat "generalizes to
+unseen C2" as "generalizes within the neighborhood of the families we
+actually have enough data for," not as a general claim.
+
+3.3 The model's own change log already told you not to ship the current
+tuning as-is
+--------------------------------------------------------------------------------
+This is the single most important thing in this whole review, and it is not
+my opinion — it is a direct quote from anomaly_engine.py's own comments,
+written by whoever tuned it:
+
+  "Kept anyway, deliberately, because this system is being demonstrated as a
+   research prototype where showing the ML layer visibly contribute is the
+   priority, and the false-positive cost is disclosed rather than hidden...
+   reconsider this choice before any real (non-demo) deployment."
+
+The same comment names a CONCRETE, already-identified false-positive risk
+class: traffic shaped like "push_keepalive" and "extension_filter_list_
+update" — i.e. legitimate push-notification keep-alives and ad-blocker /
+extension auto-update traffic — was measured to be structurally hard to tell
+apart from a beacon using timing and context alone, without a reputation
+signal. Roughly 1-4 false BEACONs per 1,800 draws (about 0.1-0.2%) were
+measured on this exact traffic shape.
+
+FIX (this must happen before "finalized"): re-run the tuning decision the
+code comment is asking for. At minimum, gather a fresh, larger sample of
+real push-notification-keepalive and real extension-auto-update traffic,
+measure the current false-positive rate against it directly, and decide
+consciously whether to accept it, tune the heuristic thresholds to reduce
+it, or require reputation/allowlisting for those two specific traffic
+shapes before allowing an auto-block.
+
+3.4 Confirmed BEACON is architecturally unreachable without real browser
+context — by design, but worth knowing precisely
+--------------------------------------------------------------------------------
+risk_fusion.py's "both signals must agree" guard means that if the heuristic
+signal is unavailable (no real browser context — which is the absolute best
+any network-only capture could ever provide), the fused score is
+mathematically capped just below the BEACON threshold, no matter how
+confident the ML score is. This was measured directly: confirmed-BEACON
+recall is exactly 0.000 at every ML/heuristic weight combination tested
+(0.45 through 0.70) once context is unavailable. A bypass for very
+high-confidence ML scores (>= 0.95) was tested and explicitly rejected: it
+would catch 78.8% of context-blind C2 but at a 0.441% false-BEACON rate on
+benign traffic, versus zero today.
+
+This is a genuinely good, disclosed safety decision, not a defect — flagged
+here only so it is a CONSCIOUS choice you re-confirm, not something you
+discover by surprise later ("why didn't it block that obvious beacon?" — the
+answer is: because it had no browser context to corroborate with, by
+design).
+
+3.5 The heuristic rules are hand-tuned, not learned, and some are explicitly
+uncalibrated
+--------------------------------------------------------------------------------
+All 9 rules in analyzer.py are fixed if/then thresholds. Two of them say so
+directly in their own comments: Rule 6 ("no labeled data yet to calibrate
+this precisely") and Rule 8 ("small weight, no calibration data yet"). This
+is not necessarily wrong — deterministic rules are easy to audit and explain
+to an analyst, which the ML model is not — but it means there is no
+statistical guarantee behind their exact weights (0.30, 0.25, 0.20, 0.10,
+0.10, 0.05, 0.08, 0.08), and they were tuned by reasoning + spot-checks
+rather than a labeled dataset.
+
+WORTH KNOWING — realistic ways the current fixed thresholds could be evaded
+by an attacker who has read this code (the code is thorough and readable,
+which is good practice, but it also means an adversary who obtains it knows
+exactly where the lines are drawn):
+  - Rule 1 (the strongest single rule) needs iat_cv < 0.05 AND payload <
+    8,000 bytes AND user_active_ratio < 0.50. A beacon that jitters its
+    timing just above 0.05 CV, or pads its payload just over 8 KB, avoids
+    it outright.
+  - Rule 8 exists specifically to catch timing-jitter evasion of Rule 1, but
+    only fires above 500 requests/hour. A beacon that jitters AND stays
+    under roughly one request every 7 seconds evades both Rule 1 and Rule 8
+    simultaneously.
+  - Rule 9 (the same-site dampener) multiplies the whole heuristic score by
+    0.70 whenever over 80% of a host's traffic shares the active page's
+    registrable domain. A C2 channel run from a compromised or
+    attacker-purchased subdomain of the very site the user is already on
+    would receive this discount for free.
+  - The known-safe host allowlist in analyzer.py (_SAFE_HOST_SUFFIXES) is a
+    fixed list of ~18 domains (Google Analytics, Doubleclick, Facebook
+    Pixel, common CDNs, YouTube, Google Accounts). It is well-designed
+    (raises the confirmation bar to 0.85 rather than exempting these hosts
+    outright), but it is necessarily incomplete, and any traffic proxied or
+    fronted through a domain that merely resembles one of these gets no
+    special treatment — nor is that a weakness, just a reminder the list
+    needs periodic maintenance as legitimate high-frequency services change.
+
+FIX: treat this list of evasion paths as a starting checklist for a red-team
+pass (Section 6, Phase 7) rather than something to patch reactively one rule
+at a time.
+
+3.6 The fusion weights were never validated end-to-end against a labeled,
+held-out set of real fused verdicts
+--------------------------------------------------------------------------------
+The 0.55/0.45 ML/heuristic split was chosen by sweeping the weight and
+re-running the real fuse() function over the scoped dataset — a sound
+method — but risk_fusion.py's own docstring says plainly: "there is no
+labelled fusion-outcome dataset in this project to calibrate against." The
+sweep optimizes BEACON F1 under one assumed context condition
+("background/idle"). It has not been validated against a broad, independent
+set of real end-to-end sessions covering many different legitimate usage
+patterns (active browsing, mixed foreground/background tabs, multiple
+extensions, etc.) with a human-confirmed ground truth of what should and
+should not have alerted.
+
+FIX: before calling the system finalized, run it passively (alert-only, no
+blocking) against a genuinely diverse set of real, everyday browsing
+sessions for an extended period, and have a human review every SUSPICIOUS/
+BEACON verdict it produces. This is the real "labelled fusion-outcome
+dataset" the code comment says does not exist yet.
+
+3.7 No feedback loop from analyst decisions back into the system
+--------------------------------------------------------------------------------
+alert_store.py stores what happened, but there is no mechanism found for an
+analyst to mark an alert as "correct" or "false positive" and have that
+recorded anywhere. Every real detection system needs this, both to build the
+labeled fusion-outcome dataset from 3.6 and to catch model/rule drift over
+time.
+
+3.8 Dataset era and coverage — already known from the paper, repeated here
+because it is directly relevant to "real world" readiness
+--------------------------------------------------------------------------------
+The training and evaluation data comes from CTU-13-era captures (~2011) plus
+a handful of Zeus-family variants. There is no coverage in training or
+evaluation for the C2 techniques most common in real incidents today:
+  - C2-over-legitimate-cloud-API (Discord webhooks, Slack, Telegram Bot API,
+    Google Sheets/Drive, cloud storage buckets, Cloudflare Workers) — the
+    single most common modern browser/extension C2 channel, and exactly the
+    kind of traffic the "known-safe host" and same-site logic could
+    plausibly be evaded by, since it rides on infrastructure that otherwise
+    looks completely legitimate.
+  - Deliberately jittered / malleable C2 profiles (Cobalt Strike malleable
+    profiles, sleep+jitter timing) — mentioned as a named limitation in the
+    paper already, worth restating here as an ML/heuristic gap specifically.
+  - Encrypted SNI / ECH, HTTP/3 / QUIC traffic shapes.
+
+Test cases already exist in this repo that model some of this (TC01 is a
+Cobalt-Strike-style beacon via a compromised WordPress site, TC02 is a
+Discord-cloud-based dual-channel APT scenario, TC03 covers a real-world
+reputation-checked beacon with its own mimicry server and an ngrok tunnel).
+This is a genuinely good starting point — it means you are not starting from
+nothing on modern-C2 coverage, only that these currently serve as
+FUNCTIONAL/INTEGRATION tests, not as TRAINING or accuracy-measurement data.
+
+
+================================================================================
+SECTION 4 — THE BLOCKER: what already exists, and what "real world" needs
+================================================================================
+
+4.1 Credit where due: there is already a real, working blocker
+--------------------------------------------------------------------------------
+This is not a "future feature" — interceptor.py already implements it:
+  - block_host() registers a Playwright context.route() abort handler AND a
+    CDP Network.setBlockedURLs entry (defense-in-depth: two independent
+    mechanisms).
+  - Every block is persisted to a local SQLite database (block_store.py)
+    with a 24-hour expiry, and is automatically re-applied if the backend or
+    browser session restarts, and automatically lifted after 24 hours.
+  - Auto-block is opt-in (off by default) and, even when enabled, only fires
+    above a 0.75 fused-score floor — well above the 0.52 confirmation
+    threshold — specifically so only very high-confidence beacons are ever
+    auto-blocked without a human in the loop.
+This is a sound, conservative design. The gaps below are about maturing it
+for production, not about it being broken.
+
+4.2 Scope limit: it can only block traffic that flows through this one
+managed browser context
+--------------------------------------------------------------------------------
+The code says this about itself: neither blocking mechanism "guarantees
+interception of traffic that never goes through this browser context at all
+(e.g. a native OS process, or ... some Service Worker traffic)." Combined
+with Section 2's architecture decision, this means: if the goal is "detect
+and block C2 running as a native process on the machine," this blocker
+cannot do that today, by design, regardless of tuning. That is a Section 2 /
+Option B problem, not a bug to fix here.
+
+4.3 A specific, verified blind spot: extension background service workers
+--------------------------------------------------------------------------------
+I checked this directly rather than assuming it. interceptor.py only ever
+attaches a CDP session to Playwright "page" objects (context.pages, and new
+"page" events). Browser extensions do almost all of their real networking
+from a background service worker (Manifest V3) or background page
+(Manifest V2) — not from a visible tab — and Playwright exposes those as a
+SEPARATE target type that nothing in this codebase currently attaches to. A
+grep across the entire C3 module and main.py found no code path that
+attaches to a service worker or background-page target at all.
+
+PRACTICAL CONSEQUENCE: a malicious extension that beacons purely from its
+own background service worker, with no tab visibly open, most likely
+produces ZERO captured traffic in C3 today — which is a direct blind spot in
+exactly the "malicious browser extension" scenario the whole project is
+motivated by.
+
+UNVERIFIED — CONFIRM BY TESTING: I did not run the browser to prove traffic
+is actually missed (that requires a live test), but I found no code path
+that could capture it. Recommended first real-world validation step:
+install a real extension that is known to make background-service-worker
+network calls (many ad-blockers auto-update their filter lists this way)
+and confirm whether any of that traffic appears anywhere in the C3
+dashboard. If it does not, this is priority #1 to fix before calling the
+detector production-ready for the extension-threat scenario.
+
+FIX: add CDP attachment for extension service worker / background page
+targets (Playwright exposes context.service_workers, and CDP's Target
+domain can enumerate "service_worker" targets directly), feed their network
+events through the exact same _on_request/_on_response/_on_finished path
+already built, and mark those events' is_background_tab=True /
+is_extension_origin=True the same way worker-initiated requests already are
+in context_tagger.py.
+
+4.4 auto_block_enabled does not appear to survive a restart
+--------------------------------------------------------------------------------
+enable_auto_block()/disable_auto_block() are only ever called from the two
+dashboard REST endpoints. I found no code path that persists this flag to
+settings.json or reloads it at startup, unlike the AbuseIPDB/VirusTotal keys
+which are explicitly loaded from settings at startup. If this is correct,
+turning auto-block on, then restarting the backend for any reason (a crash,
+an update, a scheduled restart), silently reverts the system to alert-only
+with no visible warning — a false sense of protection.
+
+UNVERIFIED — CONFIRM BY TESTING: enable auto-block, restart the backend, and
+check whether /c3/status still reports auto_block_enabled: true.
+
+FIX: persist this setting the same way the API keys already are, and
+restore it at startup.
+
+4.5 Fixed 24-hour block, host-level only, no manual override path found
+--------------------------------------------------------------------------------
+- No allowlist/override mechanism was found for a host that gets
+  legitimately (if rarely) auto-blocked — an analyst would have to manually
+  unblock it via the dashboard, and it could be auto-blocked again if the
+  same pattern repeats. A short-term "trust this host, don't re-block for
+  N days" action is worth adding.
+- Blocking is by hostname only. An attacker whose C2 rotates subdomains or
+  uses a domain-generation algorithm evades a host-level block trivially
+  after the first one fires. There is no fallback to blocking the resolved
+  IP (or IP range) once a domain is confirmed malicious.
+- After 24 hours, the block silently lifts with no re-check that the threat
+  is actually gone — a still-compromised host will simply start
+  re-beaconing and get re-detected/re-blocked, which works but produces
+  repeat alerts rather than a stable resolution.
+
+4.6 Detection-then-block is not prevention
+--------------------------------------------------------------------------------
+Because BEACON cannot be confirmed before at least 10 requests have already
+been observed (a deliberate, sensible anti-false-positive design), the C2
+channel will always have successfully communicated at least 10 times before
+any block can occur. For a "blocker" being positioned as real protection,
+this needs to be stated as an explicit, understood limitation: this system
+stops sustained beaconing, it does not prevent the first exchange of
+data/instructions.
+
+4.7 No authentication on the block/unblock/auto-block endpoints
+--------------------------------------------------------------------------------
+See Section 5.1 — this applies specifically and importantly here, since
+these are the endpoints that take a hard-to-reverse action on live network
+traffic.
+
+
+================================================================================
+SECTION 5 — OTHER C3 PIECES: supporting infrastructure gaps
+================================================================================
+
+5.1 No authentication or authorization anywhere in the backend
+--------------------------------------------------------------------------------
+A full grep of core/main.py for login/authentication/API-key-on-requests/
+JWT/session-token handling found nothing. Every C3 endpoint (view alerts,
+view hosts, block a host, unblock a host, enable/disable auto-block, start/
+stop training-data collection) is reachable by anyone who can reach the
+backend's port, with no credential required. This is acceptable only for a
+single analyst on a fully trusted, offline machine. It must be fixed before
+any deployment reachable from a shared network.
+
+5.2 No SIEM/webhook/syslog export for C3 alerts
+--------------------------------------------------------------------------------
+The dashboard can export C3 alerts as a JSON file the user manually
+downloads from the browser. There is no webhook, syslog, or SIEM
+integration for C3 specifically (a "SIEM Export" button exists in the
+dashboard, but it belongs to a different component, C4, not C3). A real SOC
+deployment needs alerts to flow automatically into whatever the team already
+uses (Splunk, Elastic, a Slack/Teams webhook, syslog), not to be manually
+exported.
+
+5.3 Single-machine, single-file storage — no fleet-wide view
+--------------------------------------------------------------------------------
+Alerts and blocks are stored in local SQLite files under the current user's
+home directory. There is no mechanism to see or correlate detections across
+more than one monitored machine. If the real-world goal is protecting more
+than one machine, a centralized backend (even a simple shared database) is
+needed; if the goal is strictly single-analyst/single-machine, this is fine
+as-is.
+
+5.4 Reputation engine: real but fragile at any meaningful scale
+--------------------------------------------------------------------------------
+- AbuseIPDB and VirusTotal free tiers have low daily/per-minute quotas. On
+  hitting a rate limit or any non-200 response, the code returns None for
+  that source silently — the analyst sees a source simply missing from the
+  evidence, with no visible "quota exhausted" warning anywhere found.
+- Only one resolved IP address is checked against AbuseIPDB (the
+  alphabetically-first one after resolving DNS), not all of them — a
+  multi-IP destination could have its worst IP go unchecked.
+FIX: surface quota/rate-limit failures as a visible status (not just a
+silently missing evidence field), and check all resolved IPs, not just one.
+
+5.5 No model version registry — rollback knowledge lives only in code
+comments
+--------------------------------------------------------------------------------
+anomaly_engine.py's docstring is an excellent, thorough history of every
+model this slot has used and exactly how to roll each one back — but it is
+prose, not tooling. There is one live model file in models/
+(c3_xgb_scoped_calibrated_20260903.pkl) and no manifest recording its
+training data hash, measured metrics, or a scripted rollback command.
+FIX: a small JSON manifest alongside the model file (version, training date,
+dataset identity, measured metrics, and which risk_fusion.py weights it must
+be paired with) turns "read the comment and edit three files by hand" into a
+safe, scripted rollback.
+
+5.6 Stale documentation inside the code
+--------------------------------------------------------------------------------
+Minor, but worth a cleanup pass for anyone maintaining this after you:
+feature_engine.py's own module docstring and closing summary still say "16
+features" / "14 numbers" in two places, while the real, current count is 29
+(18 ML + 11 heuristic-only). Not a functional bug — the code is correct —
+just a documentation drift that will confuse the next person who reads it.
+
+5.7 Privacy and legal posture — not a code issue, but a real deployment
+blocker if ignored
+--------------------------------------------------------------------------------
+C3 records every click, keypress, scroll, and touch event, plus full
+per-request URLs, for every tab, indefinitely (up to 10,000 requests per
+host in the full history log). Before deploying this anywhere with real
+users other than the person running it themselves, you need an explicit,
+written answer to: what is the data-retention period, who can see it, does
+it require user consent or an employee-monitoring notice, and does it
+comply with relevant regulations for wherever it is deployed (this is a
+policy/legal question, not something I can resolve here, but it must be
+answered before "finalized" for any multi-user or workplace context).
+
+5.8 Test coverage: a genuinely good foundation, with real gaps
+--------------------------------------------------------------------------------
+What exists is solid: TC01 (Cobalt-Strike-style beacon via a compromised
+WordPress page), TC02 (Discord-cloud dual-channel APT), TC03 (a real-world
+reputation-checked beacon, its own mimicry C2 server, and an ngrok tunnel
+test), plus a large unit-test file and a dedicated feature-parity test that
+checks the live scoring code matches the offline training code exactly
+(test_c3_feature_parity.py) — this last one is an unusually good practice
+that prevents train/serve skew, and should be kept and extended, not
+replaced.
+
+Missing:
+  - No adversarial/evasion-specific test suite exercising the exact
+    thresholds listed in 3.5 (jitter just above 0.05 CV, payload just above
+    8 KB, subdomain-of-safe-site hosting, sub-500/hr jittered beacon).
+  - No load/performance test for many simultaneous hosts/tabs (does the
+    10-second analyzer loop, and the 24h block-sweep, stay responsive with,
+    say, 50 monitored hosts at once?).
+  - No test proving or disproving the extension-service-worker blind spot
+    from 4.3 — this should be the very first new test written.
+
+
+================================================================================
+SECTION 6 — THE STEP-BY-STEP IMPROVEMENT PLAN
+================================================================================
+
+This is ordered by what should happen first. Each phase lists WHY it is at
+that position, not just WHAT to do.
+
+--------------------------------------------------------------------------------
+PHASE 0 — Decide the deployment model (Section 2)
+--------------------------------------------------------------------------------
+Confirm, in writing, that Option A (managed sandbox browser) is the product
+being finalized. Everything after this phase assumes that answer. If the
+real intent is Option B (protect the user's everyday browser), stop here and
+scope that as its own project instead of trying to retrofit it onto this
+architecture.
+
+--------------------------------------------------------------------------------
+PHASE 1 — Close the extension service-worker blind spot (Section 4.3)
+--------------------------------------------------------------------------------
+Do this before any other engineering work. It is the single highest-impact,
+most concretely verified gap, and it sits directly on the project's stated
+threat model (malicious browser extensions).
+  1. Write the test first: install a real background-networking extension,
+     confirm whether its traffic appears in C3 today.
+  2. If confirmed missing, add CDP attachment for service worker /
+     background page targets, routed through the existing event pipeline.
+  3. Re-run TC02 (the Discord dual-channel test) and confirm it still passes
+     with the new attachment path active, to make sure nothing regresses.
+
+--------------------------------------------------------------------------------
+PHASE 2 — Fix the measurement issues that affect real operational planning
+(Section 3.1, 3.2)
+--------------------------------------------------------------------------------
+  1. Apply the same <10-test-positive reliability filter to LOPO that LOFO
+     already uses; recompute the real headline accuracy/precision numbers.
+  2. Use the CORRECTED numbers (not the current 96.2%) for any real-world
+     capacity or false-positive-budget planning, and for any external-facing
+     claim about accuracy.
+  3. Document, plainly, which single malware family (ZeusV1) the "unseen
+     family" generalization claim is mostly resting on, so nobody downstream
+     over-trusts a "generalizes to any new malware" claim it does not yet
+     support.
+
+--------------------------------------------------------------------------------
+PHASE 3 — Re-open the tuning decision the code already asked for (Section 3.3)
+--------------------------------------------------------------------------------
+  1. Collect a larger, fresh, real sample of push-notification-keepalive and
+     extension-filter-list-update traffic (the two named risk classes).
+  2. Measure the current false-BEACON rate against it directly.
+  3. Decide, consciously and on the record: accept the current rate, retune
+     the affected heuristic rules/thresholds, or require a reputation check
+     before allowing these two traffic shapes to reach BEACON.
+
+--------------------------------------------------------------------------------
+PHASE 4 — Modernize dataset coverage for evaluation and red-teaming
+(Section 3.5, 3.8)
+--------------------------------------------------------------------------------
+This is about TESTING and EVALUATION coverage, not about violating the
+existing no-synthetic-training-data policy — nothing here should be used to
+train the model unless it is a real, labeled capture.
+  1. Build (or extend) a benign-traffic evaluation set covering modern
+     legitimate cloud-API usage patterns: Discord/Slack/Telegram webhooks,
+     Google Sheets/Drive, cloud storage, Cloudflare Workers — the same shape
+     real modern C2 increasingly hides inside.
+  2. Use the project's OWN existing mimicry server (test/C3/
+     tc03_mimicry_server.py) to run controlled red-team passes against the
+     exact evasion techniques listed in Section 3.5 (timing just above 0.05
+     CV, payload just above 8 KB, sub-500/hr jitter, same-site hosting) and
+     record the results as a formal adversarial-robustness test suite.
+  3. Treat any of this as evaluation/red-team data only. If it later proves
+     useful as TRAINING data, that decision should be made explicitly and
+     separately, respecting the project's real-data-only policy.
+
+--------------------------------------------------------------------------------
+PHASE 5 — Harden the blocker for production use (Section 4.4, 4.5, 4.7)
+--------------------------------------------------------------------------------
+  1. Persist auto_block_enabled the same way the reputation API keys already
+     are, and restore it at startup. Confirm with a real restart test.
+  2. Add authentication to every mutating C3 endpoint at minimum (block,
+     unblock, enable/disable auto-block, start/stop collection) — see
+     Phase 6, this can be done together.
+  3. Add an IP-level fallback block for a host confirmed malicious, so a
+     rotated subdomain resolving to the same infrastructure is still caught.
+  4. Add a short-lived "trust this host, do not re-block" override action
+     for a host an analyst has manually cleared.
+
+--------------------------------------------------------------------------------
+PHASE 6 — Security and access-control pass on C3 itself (Section 5.1)
+--------------------------------------------------------------------------------
+  1. Add authentication (at minimum, a single shared API key or local
+     session token) in front of the entire backend, not just C3's endpoints
+     — a security product with an unauthenticated control plane undermines
+     its own purpose.
+  2. Re-confirm the existing good practice continues: API keys stay in
+     settings.json (already gitignored) and are never hardcoded or logged.
+  3. Write down the answer to the privacy/retention questions in Section 5.7
+     before deploying anywhere with more than one user.
+
+--------------------------------------------------------------------------------
+PHASE 7 — Build the missing operational plumbing (Section 3.6, 3.7, 5.2, 5.5)
+--------------------------------------------------------------------------------
+  1. Add an accept/false-positive disposition action on each alert, stored
+     alongside it — this is the real "labeled fusion-outcome dataset" the
+     fusion layer currently lacks, and the foundation for measuring drift
+     later.
+  2. Add at least one real outbound integration for C3 alerts (a webhook is
+     the simplest: Slack/Teams/syslog), so alerts do not depend on someone
+     remembering to check the dashboard.
+  3. Add a small model-version manifest (training date, dataset identity,
+     measured metrics, paired fusion weights) next to the model file, so
+     rollback becomes a scripted action instead of "read the comment in
+     anomaly_engine.py and edit three files."
+
+--------------------------------------------------------------------------------
+PHASE 8 — Real-world validation before calling it finalized (Section 3.6)
+--------------------------------------------------------------------------------
+  1. Run the system in ALERT-ONLY mode (auto-block off) against real,
+     everyday, diverse browsing sessions for an extended period.
+  2. Have a human review every SUSPICIOUS/BEACON verdict produced and record
+     accept/false-positive using the mechanism from Phase 7.
+  3. Only turn auto-block on for real traffic once this measured, in-the-
+     wild false-positive rate is known and accepted — not before.
+  4. Re-run the full adversarial suite from Phase 4 one more time as a final
+     gate before calling the detector-and-blocker production-ready.
+
+--------------------------------------------------------------------------------
+PHASE 9 — Documentation and maintainability cleanup (Section 5.6)
+--------------------------------------------------------------------------------
+Low priority, low effort, but worth doing before calling anything
+"finalized": fix the stale "16 features"/"14 numbers" comments in
+feature_engine.py, and fold the model-version manifest from Phase 7 into the
+existing ARCHITECTURE.md so there is one current, accurate reference
+document rather than history scattered across code comments.
+
+
+================================================================================
+SECTION 7 — IF YOU CAN ONLY DO THREE THINGS RIGHT NOW
+================================================================================
+1. Confirm the extension-service-worker blind spot (Phase 1) — this is the
+   most concrete, most consequential gap found, and it is cheap to test.
+2. Fix the LOPO reliability-filter inconsistency and recompute the real
+   accuracy numbers (Phase 2) — you should not make real deployment
+   decisions off the current 96.2% figure.
+3. Add authentication to the backend (Phase 6.1) — a blocker/detector with
+   an open control plane is not production-safe at any traffic-volume or
+   trust level above "one person, one offline machine."
+
+Everything else in this document is real and worth doing, but these three
+are the ones most likely to matter if something goes wrong in the real
+world before the rest of the plan is complete.
+
+================================================================================
+END OF PLAN
+================================================================================

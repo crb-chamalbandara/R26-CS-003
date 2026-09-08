@@ -1,0 +1,882 @@
+================================================================================
+C3 — BROWSER-EXECUTION-AWARE C2 BEACON DETECTOR
+Full technical reference — written for research-chat context
+Verified directly against the source code on 2026-08-31 (every C3 file re-read
+fresh for this update; nothing here is carried over from an older summary).
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. INTRODUCTION — WHAT C3 IS AND WHY IT EXISTS
+--------------------------------------------------------------------------------
+
+WebSentinel is a browser-security research project with four detector parts
+(C1-C4) running inside one Electron desktop app. C3 is the part that looks for
+Command-and-Control (C2) "beacon" traffic — the small check-in requests malware
+makes to an attacker's server on a fixed schedule after a machine is taken over
+(for example Cobalt Strike, Discord-used-as-C2, cloud-API-used-as-C2).
+
+C3's main idea, and its real research point, is written plainly in its own
+source comments: a network-only intrusion detection system (IDS) can only see
+packets on the wire. It cannot know whether a person was looking at the screen,
+whether the tab that made the request was hidden, or whether a browser
+extension caused it. C3 runs INSIDE the browser (through the Chrome DevTools
+Protocol, the same channel browser dev-tools use), so it can see all of that.
+C3 therefore joins two kinds of evidence that a packet-only tool cannot join:
+
+  1. Network / timing evidence — how even the gaps between requests are, how
+     big the payloads are, which HTTP method is used, how many different URLs
+     are hit. A program on a timer makes almost perfectly even gaps; a person
+     does not.
+
+  2. Browser-execution evidence — was the user actually interacting with THAT
+     site, was the tab in the background, did an extension start the request,
+     is the destination the same registered domain as the page the user was
+     looking at. None of this exists at the network layer. It only exists
+     inside the browser process.
+
+C3 puts both kinds of evidence together through one machine-learning model and
+a set of hand-written rules ("heuristics"), giving one final 0-1 risk score and
+a three-level verdict: SAFE / SUSPICIOUS / BEACON. Once a beacon is confirmed,
+C3 also does an external threat-intelligence lookup on the destination — but
+that result is shown to the analyst as extra evidence only. IT IS NOT PART OF
+THE RISK SCORE (this changed on 2026-08-30 — see section 3.6).
+
+
+--------------------------------------------------------------------------------
+2. PIPELINE OVERVIEW (top-level shape)
+--------------------------------------------------------------------------------
+
+    Browser (Playwright / Chromium, driven by Electron)
+      |
+      v
+    interceptor.py       captures every outgoing request through CDP
+      |
+      v
+    context_tagger.py    tags each request: was the user active? was the tab
+                          hidden? did an extension start it? how long has the
+                          user been idle on THAT site?
+      |
+      v
+    feature_engine.py    every 10 seconds, turns each host's recent request
+                          history into 16 numbers ("features")
+      |
+      v
+    anomaly_engine.py    a trained XGBoost model scores 6 of those features
+      (ML)                -> "how likely is this a C2 beacon", 0 to 1
+      |
+    analyzer.py           9 hand-written rules score the browser-context and
+      (heuristics)         timing features -> a heuristic score, 0 to 1
+      |
+      v
+    risk_fusion.py        final score = 0.45 * ML + 0.55 * heuristic
+                          verdict: SAFE (<0.30) / SUSPICIOUS (>=0.30) /
+                          BEACON (>=0.52)
+      |
+      v (only after verdict == BEACON)
+    reputation_engine.py  checks the destination against AbuseIPDB and
+                          VirusTotal. Shown as analyst evidence next to the
+                          alert. NOT folded into the score.
+      |
+      v
+    alert_store.py        saves the confirmed alert to a local SQLite database
+                          so it survives app restarts
+    block_store.py        saves any host-block to a local SQLite database with
+                          a 24-hour auto-expiry, so a block survives a restart
+      |
+      v
+    dashboard (Electron)  shows live requests, alerts, per-host analysis, and a
+                          "Detection Lab" tab; can optionally auto-block a
+                          confirmed host (opt-in, off by default)
+
+analyzer.py is the conductor: it owns the 10-second loop that pulls fresh
+request windows from interceptor.py and drives every other part.
+
+
+--------------------------------------------------------------------------------
+3. FILE-BY-FILE BREAKDOWN (core/c3/)
+--------------------------------------------------------------------------------
+
+3.1  __init__.py
+--------------------------------------------------------------------------------
+Just a package comment — no running code. It lists the pipeline order above and
+is a handy one-screen map of the folder. (One small stale line: it still says
+"Random Forest model" where the model is now XGBoost — see 3.5.)
+
+
+3.2  interceptor.py — "the ears" of C3
+--------------------------------------------------------------------------------
+Opens one Chrome DevTools Protocol (CDP) Network session on every open tab (and
+every new tab that opens later) and listens to three CDP events that together
+describe one full HTTP request:
+
+  1. Network.requestWillBeSent  — the browser is about to send a request
+  2. Network.responseReceived   — the server replied with headers
+  3. Network.loadingFinished    — the whole response body has arrived
+
+Only when all three events for one request_id have arrived does the interceptor
+build one complete "event" record and add it to that host's rolling window.
+
+Two per-host stores (this is important):
+
+  - _host_windows: a deque capped at the last 50 requests per host. This is the
+    SCORING window. The feature engine and the trained model are tuned for
+    windows of 50 or fewer, so this size must not change.
+
+  - _host_history: a separate, much larger log (capped at _HOST_HISTORY_MAX =
+    10,000) that keeps EVERY request to a host until the moment the host is
+    blocked. This feeds only the "Host Analysis" screen in the dashboard, so
+    that view can show the full request list instead of stopping at 50. When a
+    host is blocked, its history stops growing right there (a blocked host
+    should make no new real traffic anyway).
+
+Other details worth knowing:
+
+  - Internal browser URLs are skipped by scheme: about, chrome, devtools,
+    data, blob, file.
+  - host_events(host) also drops anything older than _MAX_EVENT_AGE_S = 1800
+    seconds (30 minutes) before returning a window. So a host that goes quiet
+    for hours and then gets a few fresh requests can never be scored on a mix
+    of hours-old and brand-new events — every score reflects a genuinely
+    recent window.
+  - If tagging a request fails (a brief CDP lag calling context_tagger.py),
+    the code falls back to BENIGN defaults (idle_time_ms=0, user_was_active=
+    True, is_background_tab=False), not worst-case ones. The comment explains
+    why: the old worst-case defaults used to build exactly the evidence two of
+    the heuristic rules look for, so a short hiccup could cause a false BEACON
+    on normal traffic. The rule C3 follows in several places: when unsure,
+    hold back suspicion, do not invent it.
+  - block_host(host) / unblock_host(host): once a BEACON is confirmed AND
+    auto-block is turned on (see analyzer.py), the interceptor registers a
+    Playwright route handler (two URL patterns, with and without a port) that
+    aborts every future request to that host. It also pushes the block to CDP
+    (Network.setBlockedURLs) on every tab as a second layer. Neither layer is
+    guaranteed to catch service-worker traffic — the UI text says so.
+  - Every block is also written to disk through block_store.py (see 3.10), so
+    it survives a restart and lifts itself after 24 hours. On startup the
+    interceptor re-applies every still-active block WITHOUT resetting its 24h
+    clock.
+  - status() reports: running, hosts_monitored, requests_captured,
+    blocked_hosts (full records with expiry times), blocked_count.
+
+
+3.3  context_tagger.py — "was a person driving this, or not"
+--------------------------------------------------------------------------------
+This is the file that gives C3 its browser-execution-aware edge. Two parts:
+
+  Part 1 — a tiny JavaScript tracker (_TRACKER_JS) injected into every tab
+  (through Playwright's add_init_script, so it runs in any new tab before page
+  content loads; also injected directly into tabs that were already open). It
+  listens for click, keydown, scroll, and touchstart and reports each one back
+  to Python with a timestamp, the page URL, and document.visibilityState.
+
+  Part 2 — enrich_request(page, request_url, initiator), called by the
+  interceptor for every finished request. It works out:
+
+    - idle_time_ms: milliseconds since the user last interacted WITH THAT
+      SPECIFIC SITE (scheme + host), not anywhere in the browser. This is the
+      single most important choice in the file. If the user is typing in Gmail
+      while a hidden tab quietly beacons to evil.com for two hours, C3
+      correctly reports the evil.com requests as idle-fired. A network-only
+      tool cannot know this, and even a naive "is the user active anywhere"
+      browser check would get it wrong.
+    - user_was_active: True only if the user interacted within the last 30,000
+      ms (_ACTIVE_WINDOW_MS) on that site AND the tab was visible.
+    - is_background_tab: True if the tab is hidden or minimised, or if the
+      request came from a worker / service-worker / shared-worker (no visible
+      tab at all — always treated as background).
+    - is_extension_origin: True if the request URL, the initiator URL, or the
+      page URL starts with "chrome-extension://".
+    - initiator_type / initiator_url / page_url / last_event_type: raw context
+      passed straight through to the feature engine.
+
+  record_navigation(url) is a smaller method that main.py calls on every real
+  top-level navigation (typed URL, clicked link, submitted form). A navigation
+  fires no click/keydown/scroll on the NEW page, so without this the burst of
+  page-load requests right after a navigation was wrongly scored as
+  "idle-fired" — a real source of false positives on ordinary sites like
+  Google / YouTube just after opening them. It only touches the navigated
+  site's clock, never the global one, so a navigation on one site can never
+  hide a background beacon on a different site.
+
+
+3.4  feature_engine.py — turns raw requests into 16 numbers
+--------------------------------------------------------------------------------
+compute_features(events) turns one host's rolling window of raw request records
+into 16 numbers. FEATURE_ORDER is the master list (order matters only for CSV
+and display — models look features up by name, not position):
+
+  Timing (from the gaps between one request and the next, in ms):
+    1. iat_mean_ms          — average gap between requests
+    2. iat_cv               — how even the gaps are (standard deviation / mean).
+                              Near 0 = clockwork-even, the classic timer signal.
+    3. iat_bowley_skewness  — quartile-based lean of the gap spread (not thrown
+                              off by one outlier, unlike a mean-based measure)
+    4. iat_mad_ms           — median absolute deviation of the gaps (a spread
+                              measure that shrugs off outliers; near 0 for a
+                              perfectly even beacon)
+
+  Rate / volume:
+    5. requests_per_hour    — request count stretched out over the window's
+                              time span, with the divider held to at least 60
+                              seconds (_MIN_RATE_WINDOW_S). That floor stops a
+                              20-request page-load burst in 2 seconds from
+                              blowing up to a meaningless ~36,000/hr; it caps
+                              that same burst at a sane ~1,200/hr. The floor
+                              can only ever LOWER the rate, never raise a value
+                              that was already right.
+    6. payload_size_mean    — average request/response size in bytes
+    7. payload_size_std     — how much the size varies
+    8. http_post_ratio      — share of requests that are POST
+
+  Browser-context (only C3 has these — a network sensor cannot):
+    9.  avg_idle_time_ms     — average idle time across the window
+    10. user_active_ratio    — share of requests fired while the user was active
+    11. background_tab_ratio — share fired from a hidden tab
+    12. extension_origin_ratio — share started by a browser extension
+
+  URL / burst pattern:
+    13. url_path_entropy     — Shannon entropy over the set of URL paths (path
+                              plus query string, so /beacon?ts=1 and
+                              /beacon?ts=2 count as DIFFERENT paths on purpose
+                              — a beacon that only changes a timestamp should
+                              not look "varied"). Same endpoint every time ->
+                              entropy 0.0 (beacon-like). Many different
+                              endpoints -> higher entropy (normal browsing).
+    14. request_burst_count  — how many bursts of 3+ requests inside a 2-second
+                              window (a page load makes 1-2; steady beaconing
+                              makes 0)
+
+  Measured browser ground-truth ("Plane 2" — read directly, not learned;
+  added after the first 14):
+    15. same_site_ratio      — share of requests whose destination shares a
+                              registered domain (eTLD+1) with the page the user
+                              was on. Uses the tldextract library so compound
+                              endings like .co.uk are handled properly instead
+                              of a naive "last two labels" check that would
+                              wrongly treat evil.co.uk and other.co.uk as the
+                              same site. Requests where either side cannot be
+                              parsed are left out of the ratio, not guessed.
+    16. script_initiator_ratio — share of requests whose CDP initiator.type is
+                              "script" (started by JS) rather than
+                              parser / preload / other.
+
+Notes:
+  - _TLD_EXTRACTOR is built once at import with suffix_list_urls=(), which
+    turns off tldextract's default habit of fetching a suffix list over the
+    network. So feature scoring never needs the internet and never waits on a
+    request.
+  - STALE COMMENT: the "WHAT THIS FILE DOES" summary at the bottom of
+    feature_engine.py still says "14 numbers" / "read these 14 numbers" in two
+    places (lines ~325 and ~348). That text is out of date — the function
+    returns 16, and the ML model uses only a 6-feature subset of them (see
+    3.5). Do not treat that trailing comment as a source of truth.
+
+
+3.5  anomaly_engine.py — the one machine-learning model C3 runs
+--------------------------------------------------------------------------------
+C3 used to run two Isolation Forest models; both were removed (neither was
+C2-specific — the timing one was trained unsupervised on general pcap with no
+label). After that it briefly used a Random Forest, then several XGBoost
+versions. The class name has followed along: it is now C3XGBoostEngine, and the
+module-level object is c3_ml_engine (the analyzer imports it under that name;
+status() reports ml_model_loaded).
+
+  C3XGBoostEngine — a supervised XGBoost classifier.
+    - Loads models/c3_xgb_classifier.pkl at startup (and on reload()).
+    - Read straight from the pickle: XGBClassifier, 150 trees, max depth 3,
+      learning rate 0.08, decision threshold 0.5, and exactly 6 input features
+      (ML_FEATURE_SUBSET), a subset of the 16 from feature_engine.py:
+          iat_cv, iat_bowley_skewness,
+          payload_size_mean, payload_size_std,
+          url_path_entropy, http_post_ratio
+      It deliberately DOES NOT use absolute-timing features (iat_mean_ms,
+      iat_mad_ms) or request_burst_count — see "cadence-invariant" below. It
+      also does not use any of the browser-context features (idle time,
+      user-active ratio, background-tab ratio, extension ratio, same-site,
+      script-initiator). Those are all handled by the heuristic rules in
+      analyzer.py, so nothing goes unused system-wide.
+    - score(features) returns predict_proba for the bot class — "how likely is
+      this a C2 beacon", 0 to 1.
+    - CADENCE-INVARIANT: an earlier HTTP model leaned on how many SECONDS apart
+      the requests were, so it scored ~0 on any beacon faster than CTU-13's own
+      ~74-120-second pace — which made the ML layer look dead during a live
+      5-second demo. This version drops absolute timing and leans on iat_cv
+      (how EVEN the gaps are, regardless of speed) plus payload / URL / POST
+      shape, so it gives a real non-zero score at any beacon speed.
+    - Training data: CTU-13's Zeek http.log captures (a real, public botnet
+      dataset), with the target being label_c2 — a window counts as positive
+      only if it contains a genuine C2 command-channel flow, NOT CTU-13's broad
+      IP-based "Botnet" label (which is mostly scans and floods — see 6).
+      51,963 training windows, of which only 110 are positive.
+    - If the model file is missing, the engine logs it and the analyzer falls
+      back to heuristic-only scoring. C3 keeps working, just without the ML
+      part.
+
+MANY OTHER .pkl FILES SIT IN models/ BUT ARE NOT LOADED. As of 2026-08-31 the
+folder has several experimental XGBoost candidates from retraining passes on
+2026-08-30 and 2026-08-31 (file names contain COMPARISON_ONLY, familybalanced,
+familydiverse, merged, expanded, notebook_repro). None of these is wired into
+anomaly_engine.py — the live model path is fixed at models/c3_xgb_classifier.pkl.
+Older models (the pre-XGBoost Random Forest, the NetFlow XGBoost, the
+absolute-timing HTTP XGBoost, etc.) are kept under models/archive/ with a
+README, purely as rollback points.
+
+Honest measured accuracy of the DEPLOYED model (from its own saved metadata):
+  - Leave-one-scenario-out test (train on some CTU-13 scenarios, test on a
+    held-out one — the fair test of "does it generalise to a C2 style it has
+    not seen"): mean recall 0.28, mean precision 0.06, mean F1 0.10, mean
+    PR-AUC 0.16 across the reliable folds.
+  - Random-split test (easier — some traffic families appear on both sides):
+    ROC-AUC 0.91, recall 0.77, precision 0.07.
+  - On C3's own Detection-Lab-style test beacons (out-of-fold), the model
+    scores 0.93-0.97 for 5 of the 6 CTU-13 C2 scenarios; one scenario sits
+    at 0.34.
+  - Feature importance: iat_cv 41%, http_post_ratio 18%, url_path_entropy 16%,
+    payload_size_std 11%, payload_size_mean 9%, iat_bowley_skewness 6%.
+
+Read this plainly: the model has a real but weak signal. On its own it is not
+reliable enough to call a beacon (low precision — it fires on too many benign
+windows). That is exactly why fusion (3.6) does not let the ML score confirm a
+BEACON on its own, and why the heuristic layer carries the main weight.
+
+
+3.6  risk_fusion.py — combines the two signals into one score + verdict
+--------------------------------------------------------------------------------
+This module was REWRITTEN on 2026-08-30. It is now deliberately simple.
+
+  C3RiskFusion.fuse(ml, reputation, heuristic):
+
+  RULE 1 — the score is ALWAYS:
+       0.45 * ML  +  0.55 * heuristic
+     (ML_WEIGHT = 0.45, HEURISTIC_WEIGHT = 0.55). When there is no ML score
+     yet (model not loaded, or the timing window is too small — see 3.7),
+     it falls back to heuristic-only (weight 1.0). There are NO weight tiers
+     and NO score-raising overrides. Earlier versions had four weight tiers
+     and two "jump straight to BEACON" overrides — all of that is gone.
+
+  RULE 2 — both signals must be involved before BEACON. If the blended score
+     reaches the BEACON threshold but one side is basically absent (below
+     BOTH_SIGNAL_FLOOR = 0.10), the score is held just under the threshold
+     (UNCONFIRMED_CAP = 0.51) and the detail text names the missing signal
+     ("held just below confirmed — the ML score alone is not enough without a
+     heuristic rule also firing", or the other way round). This is symmetric:
+     it guards against "ML alone" (the model has only ~110 real positives) and
+     against "heuristic alone" equally.
+
+  RULE 3 — threat-intel reputation is NOT part of the score. fuse() still takes
+     a `reputation` argument so old call sites keep working, but it ignores it.
+     The reputation lookup happens later (3.8) and is shown to the analyst as
+     supporting evidence only. It can never change the score or the verdict.
+
+  Verdict thresholds: BEACON >= 0.52, SUSPICIOUS >= 0.30, else SAFE.
+
+  The returned dict has the final score, the verdict, the weights used, and a
+  plain-English detail string, so every decision can be checked by hand.
+
+
+3.7  analyzer.py — the main loop (the biggest, most important file)
+--------------------------------------------------------------------------------
+C3Analyzer runs a loop that wakes every 10 seconds and, for each host that has
+a request window:
+
+  GATING (in this order — none of this changes what is recorded, only what
+  verdict can be reached):
+    - Fewer than 3 events -> skip this host this cycle.
+    - New host (tracked in _host_first_seen): if it has fewer than 15 events
+      AND has been seen for under 15 seconds, skip. This soaks up a normal
+      page-load burst without calling it a beacon. A host that already has 15+
+      events is scored right away, so a fast aggressive real beacon is not
+      shielded by this.
+    - Fewer than 6 events -> the timing features are neutralised before
+      scoring (iat_cv is set to 1.0 = "irregular / unknown", not 0.0, because
+      0.0 would read as a perfect metronome; the other IAT features go to
+      0.0). The ML model is not run at all below 6 events. Browser-context
+      features stay valid at any count.
+    - A confirmed BEACON VERDICT always needs at least 10 requests. Below 10,
+      even if the score reaches the threshold, the verdict is held at
+      SUSPICIOUS (the score itself keeps climbing so the dashboard still shows
+      progress).
+
+  TIMING-SAMPLE MATURITY (new — replaced an older hard cap). A coefficient of
+  variation computed from only a few gaps is noisy. Instead of a hard on/off
+  at 6 events plus a hard 0.51 cap that released at exactly 10 (three sudden
+  steps a fast beacon crossed in one or two cycles — which made the ML score,
+  the heuristic score AND the fused score all "jump from ~25% to ~80%+ in one
+  step"), the analyzer now uses _timing_confidence(n): a smooth 0-to-1 weight
+  that is 0 below 6 events and eases up to 1.0 at 20 events (a "smoothstep"
+  curve). Each cycle it works out two versions of the fusion — one with the
+  real timing + ML, one with timing neutralised and no ML — and reports a
+  blend of the two based on that weight. At 20+ events the blend is EXACTLY the
+  plain fusion, so a normal full window is unaffected; only the 6-to-19 event
+  ramp changes, and it changes from a cliff into a gentle climb. The displayed
+  ML and heuristic sub-scores are blended the same way, so they climb smoothly
+  too.
+
+  KNOWN-SAFE-HOST HANDLING: a hard-coded list (_SAFE_HOST_SUFFIXES) of
+  well-known analytics / CDN / ad domains (Google Analytics, Google Tag
+  Manager, Doubleclick, Facebook pixel, Twitter analytics, jsDelivr, cdnjs,
+  Google / Fontawesome font CDNs, Cloudflare Insights) PLUS two first-party
+  product domains — youtube.com and accounts.google.com — that legitimately
+  make regular background / service-worker traffic. This list is NOT a bypass:
+  these hosts are still scored through the whole pipeline; they just need the
+  score to reach 0.85 (KNOWN_SAFE_CONFIRMATION_BAR), not 0.52, before a BEACON
+  is allowed. It is a second safety net next to the navigation fix in 3.3.
+
+  HEURISTIC SCORING — _heuristic_score(features) has 9 hand-written rules
+  (counted directly in source), each adding to a running score unless noted,
+  capped at 1.0:
+    Rule 1 (+0.30) Very even timing + small payload: iat_cv < 0.05 AND
+                    iat_mean > 0 AND user_active_ratio < 0.50 AND
+                    payload_size_mean < 8000 bytes. Guarded against video
+                    streaming (also iat_cv ~ 0.01 but payload far above 8 KB).
+    Rule 2 (+0.25) Foreground traffic firing while idle: user_active_ratio <
+                    0.05 AND background_tab_ratio < 0.50 AND avg_idle_time_ms
+                    > 30,000 ms.
+    Rule 3 (+0.20 or +0.08) Mostly-background traffic: background_tab_ratio >
+                    0.80. Full weight if no extension is involved; reduced
+                    weight (+0.08) if an extension is, since background
+                    extension traffic (e.g. filter-list updates) can be fine.
+    Rule 4 (+0.10) Extension foreground beacon: extension_origin_ratio > 0.5
+                    AND background_tab_ratio < 0.50 AND iat_cv < 0.05. All
+                    three must hold — an earlier "any extension request" version
+                    fired falsely on uBlock Origin fetching filter lists.
+    Rule 5 (+0.10) Same endpoint + even timing + user not active:
+                    url_path_entropy < 0.50 AND iat_cv < 0.10 AND iat_mean > 0
+                    AND user_active_ratio < 0.50. Compound on purpose —
+                    low entropy alone fires on normal analytics / CDN calls.
+    Rule 6 (+0.05) Script-started even traffic: script_initiator_ratio > 0.70
+                    AND iat_cv < 0.10. A weak, uncalibrated backing signal —
+                    never fires alone because it also needs even timing.
+    Rule 7 (+0.08) High POST share + even timing: http_post_ratio > 0.90 AND
+                    iat_cv < 0.10 AND payload_size_mean < 8000. The only rule
+                    that reads HTTP method at all.
+    Rule 8 (+0.08) Steady high rate while user inactive: requests_per_hour >
+                    500 AND user_active_ratio < 0.50 AND payload_size_mean <
+                    8000 AND iat_mean > 0. Catches a beacon that adds small
+                    random timing jitter to dodge Rule 1's stricter iat_cv <
+                    0.05 gate while still polling often.
+    Rule 9 (multiply by 0.70) Same-site background-sync dampener:
+                    same_site_ratio > 0.80. This is the one "Plane 2" rule
+                    (read straight from the browser's own DOM/CDP state, not
+                    learned). Single-page apps (Slack, Gmail, etc.) fire even,
+                    idle, background, script-started requests to THEIR OWN
+                    other subdomains — the exact shape Rules 1-3 and 6-8 look
+                    for. Applied last and as a multiply, so it can only ever
+                    lower a score the other rules raised; it never adds
+                    suspicion and never lowers a high score against an
+                    unrelated third-party host.
+
+  REPUTATION during normal scoring: signal_breakdown carries the LAST cached
+  threat-intel result for a host if one exists (so the dashboard can keep
+  showing the AbuseIPDB / VirusTotal numbers), but it is passed to fuse() as
+  None and fuse() ignores it either way. A brand-new host has no cached
+  result, so it shows nothing there until a beacon is confirmed.
+
+  FUSION: builds the two fusion versions described under "timing-sample
+  maturity" above, blends them, then applies the 10-request verdict floor and
+  the known-safe-host bar on top.
+
+  ON A CONFIRMED BEACON (_handle_beacon):
+    - A 60-second per-host cooldown stops the same ongoing beacon from raising
+      a fresh alert every 10-second cycle.
+    - Runs c3_reputation_engine.score_beacon(host, latest_url) NOW — this is
+      the only place the reputation lookup happens. The result is written into
+      signal_breakdown / signal_detail as evidence. IT DOES NOT CHANGE THE
+      SCORE OR THE VERDICT — both were already decided by ML + heuristic.
+    - Saves the alert through c3_alert_store.add_alert().
+    - If auto-block is on (opt-in, off by default) AND the score is at least
+      AUTO_BLOCK_SCORE_FLOOR (0.75 — lowered from 0.80 on 2026-08-30 because a
+      beacon captured via direct navigation has same_site_ratio 1.0, so Rule
+      9's dampener always applies and the fused score tops out around 0.78),
+      calls c3_interceptor.block_host(host).
+    - Broadcasts a "c3_alert" WebSocket message to the dashboard.
+
+  AUTO-BLOCK: off by default. enable_auto_block() / disable_auto_block()
+  (through /c3/auto-block/enable and /disable) flip it. The comment explains
+  the off-by-default stance: blocking is hard to undo on live traffic, and
+  Playwright route-based blocking does not reliably catch service-worker
+  traffic, so the research default is "alert always, block only if a person
+  turns it on".
+
+  DATA COLLECTION MODE: start_collection(label) / stop_collection() /
+  export_collection() let an operator label the live traffic (0 = benign, 1 =
+  malicious) while browsing, so every cycle's row (host, label, score, verdict,
+  request_count, and all 16 raw features) is written to
+  data/c3_collection_in_progress.csv. export_collection() moves that to a
+  timestamped final CSV under data/. This is how real, labelled
+  browser-session training data could be built later — matching the project's
+  no-synthetic-data rule (only real captured sessions, never generated data).
+
+  status() also reports: ml_model_loaded (from anomaly_engine), ti_available
+  (whether AbuseIPDB or VirusTotal is configured), auto_block_enabled,
+  auto_block_score_floor, the collection-mode fields, plus everything
+  interceptor.status() already returns and alerts_count.
+
+
+3.8  reputation_engine.py — external threat-intel, beacon-only, evidence-only
+--------------------------------------------------------------------------------
+Runs only AFTER analyzer.py has already confirmed a BEACON for a host. Queries
+two sources at the same time (asyncio.gather):
+
+  - AbuseIPDB: resolves the host to an IP, reads its abuse confidence score
+    (0-100, scaled to 0-1).
+  - VirusTotal: API v3 domain report. Score comes from how many of VT's ~90
+    engines flag the domain. The thresholds are calibrated against real data
+    measured on 2026-08-29 (not round numbers):
+        google.com    -> malicious = 1  (one chronically-noisy engine)
+        microsoft.com -> malicious = 0
+        EICAR test    -> malicious = 3, suspicious = 2
+    So a lone "malicious == 1" is treated as NO evidence (an earlier
+    "malicious >= 1" rule flagged google.com and many big-company domains).
+    Mapping: malicious >= 3 -> 0.55 + 0.06*malicious + 0.03*suspicious (cap
+    0.95); malicious == 2 -> 0.50 if suspicious >= 2 else 0.35; suspicious >= 4
+    -> 0.30; otherwise 0.0. A 404 (domain unknown to VT) is 0.0, not an error.
+    401 / 429 / 5xx return None so a bad key or a rate-limit hit just drops
+    this source.
+
+  (Google Safe Browsing and OTX AlienVault used to be here. GSB was swapped
+  for VirusTotal on 2026-08-29 — GSB is still used, untouched, by C2's own
+  Layer-5 phishing check in core/c2/layer5_reputation.py, which C3 no longer
+  imports. OTX was removed entirely on 2026-08-30.)
+
+Other details:
+  - Both API keys (AbuseIPDB, VirusTotal) come from Settings (core/settings.
+    json, which is gitignored) through set_abuseipdb_key() / set_virustotal_
+    key(), never hardcoded. main.py forwards them at startup and again every
+    time Settings are saved.
+  - ti_available() is True once EITHER key is set.
+  - Private / loopback / reserved / link-local IPs and "localhost" are skipped
+    before any external call.
+  - Results are cached per-host for 30 minutes (_CACHE_TTL = 1800s).
+  - Combined score = the max across the sources that returned a value;
+    flagged = combined >= 0.5. A detail string lists each source (e.g.
+    "abuseipdb=0.00, virustotal=0.79").
+  - cached_result(host) returns the whole last result (flagged OR clean), so
+    the dashboard can show the real per-source numbers — "AbuseIPDB 0% /
+    VirusTotal 0%" is a real answer, not a missing one. cached_score(host)
+    returns only a flagged score (kept for compatibility; not used for the
+    score now).
+
+Again: this result is analyst-facing evidence on a confirmed beacon. It is
+never folded into the risk score (see 3.6 rule 3).
+
+
+3.9  alert_store.py — saved alert history
+--------------------------------------------------------------------------------
+A small SQLite-backed store, self-contained:
+  - The database file is at ~/.websentinel/c3_alerts.db (outside the repo, in
+    the user's home folder), so alerts survive restarts and reboots.
+  - add_alert(alert) writes a full row (host, score, verdict, detail, the full
+    features dict as JSON, the full signal_breakdown as JSON, the full
+    signal_detail as JSON, timestamp) to disk AND pushes it to the front of an
+    in-memory cache capped at 100, so the Alerts tab never has to hit disk on
+    a normal poll.
+  - list_alerts(limit) serves from that cache.
+  - count() does a live SQLite COUNT(*).
+  - There is a migration guard that ALTERs the table to add the signals_json
+    and signal_detail_json columns if an older database file is being reused,
+    so upgrading the app does not break an existing DB.
+
+
+3.10  block_store.py — saved host-block history (newer file)
+--------------------------------------------------------------------------------
+Its own SQLite store, kept in a separate file from alert_store.py on purpose so
+it cannot touch the alerts schema. Database at ~/.websentinel/c3_blocks.db.
+
+Why it exists: block_host() / unblock_host() in interceptor.py used to track
+blocks only in memory, tied to the live Playwright context. So a block quietly
+stopped working the moment the backend or the browser session restarted, with
+no record it had ever existed, and no time limit at all.
+
+Now every block is a real disk row with a 24-hour expiry
+(BLOCK_DURATION_HOURS = 24). interceptor.py calls add_block() / remove_block()
+when it blocks / unblocks, list_active() once at startup to re-apply every
+block that has not expired (without resetting its clock), and list_expired()
+once per analyzer cycle (throttled to every 5 minutes) to auto-unblock hosts
+whose 24 hours are up. add_block() is an upsert — blocking an already-blocked
+host just extends its window, no error and no duplicate row.
+
+
+3.11  test cases — end-to-end scenario tests
+--------------------------------------------------------------------------------
+These live in test/C3/ (there is also an older, partial copy under
+core/c3/testcases/ with only TC-01 and TC-02 — treat test/C3/ as current).
+Each has a Markdown scenario write-up plus a Python driver that exercises the
+live backend, not just unit assertions:
+
+  TC-01 — Cobalt Strike C2 beacon via a compromised WordPress site
+    (tc01_cobalt_strike_beacon.py, run_testcase_01.bat)
+    A normal-looking but compromised blog quietly beacons every 30 seconds
+    (5 s in fast-demo mode) to a disguised C2 domain from a background tab
+    while the user is idle in another tab — modelled on real Cobalt Strike
+    tradecraft. The driver runs a baseline browsing period, starts the beacon,
+    polls /c3/status and /c3/hosts, and checks C3 reaches a BEACON verdict.
+
+  TC-02 — Discord / cloud-APT dual-channel beacon + exfiltration
+    (tc02_cloud_apt_exfiltration.py, run_testcase_02.bat)
+    A modern pattern that abuses a real cloud / chat API as its transport, so
+    domain reputation alone would not catch it (the domain is legitimate).
+
+  TC-03 — Real-world, reputation-checked C2 beacon (newer)
+    (tc03_real_world_c2_beacon.py, tc03_mimicry_server.py,
+     tc03_get_ngrok_url.py, run_testcase_03.bat)
+    Stands up a real, publicly reachable "mimicry" C2 server behind an ngrok
+    tunnel, drives the running WebSentinel browser to it, and checks the whole
+    chain end to end — INCLUDING a real outbound AbuseIPDB / VirusTotal lookup
+    against the tunnel's public IP. Runs ~3 minutes and cleans up its own
+    processes. tc03b_reputation_override_verification.py checks the current
+    contract: the reputation result is evidence only and does not move the
+    score or verdict.
+
+There is also a simpler live demo: scripts/c3_demo.py (run via
+test_c3_beacon.bat at the repo root), which runs the whole pipeline against one
+simulated beacon and prints a narrated walkthrough of each stage — a
+presentation tool, not a pass/fail test. It uses the /c3/test/beacon-page
+endpoint.
+
+And core/main.py has four small built-in checks used by the dashboard's own
+"Test" panel (unit-level, not the full pipeline):
+  _tc_c3_beacon_iat   — 20 perfectly-even synthetic events give iat_cv < 0.10
+                         and background_tab_ratio == 1.0
+  _tc_c3_human_iat    — irregular human-like browsing gives iat_cv > 0.10 and
+                         user_active_ratio == 1.0
+  _tc_c3_fusion_beacon — fuse(ml=0.8, reputation=0.9, heuristic=0.7) reaches
+                         BEACON
+  _tc_c3_fusion_safe   — fuse(ml=0, reputation=0, heuristic=0) stays SAFE
+
+The main unit-test file is test/C3/test_c3_units.py — 100 tests as of
+2026-08-31, covering the feature engine, fusion, the heuristic rules, model
+loading, the timing-maturity ramp, the VirusTotal thresholds, the alert and
+block stores, and the interceptor's blocking logic.
+
+
+--------------------------------------------------------------------------------
+4. BACKEND WIRING (core/main.py)
+--------------------------------------------------------------------------------
+main.py is the shared FastAPI backend for all four components. C3's part:
+
+  Imports: c3_tagger, c3_interceptor, c3_analyzer, c3_alert_store, plus
+  set_virustotal_key and set_abuseipdb_key from reputation_engine. (No OTX or
+  GSB import for C3 any more.)
+
+  Session start (when the shared Playwright session comes up) — in this order:
+    await c3_tagger.setup(pw_session.context)
+    await c3_interceptor.start(pw_session)
+    await c3_analyzer.start_loop(pw_session, _broadcast)
+  Shutdown, reverse:
+    await c3_analyzer.stop_loop()
+    await c3_interceptor.stop()
+
+  Navigation hook: _pw_nav_handler(url, page) — the shared handler that also
+  drives C2's phishing check — calls c3_tagger.record_navigation(url) as its
+  first line (the fix in 3.3).
+
+  REST endpoints:
+    GET  /c3/status                    -> c3_analyzer.status()
+    GET  /c3/alerts?limit=N            -> recent alerts
+    GET  /c3/hosts                     -> per-host summary list
+    GET  /c3/hosts/{host}              -> full feature/signal breakdown + the
+                                          host's request list for one host
+    GET  /c3/requests?limit=N          -> recent requests across all hosts
+    POST /c3/hosts/{host}/unblock      -> unblock a host
+    POST /c3/hosts/{host}/block        -> manual "Block Host" action
+                                          (registered AFTER /unblock in source,
+                                          because FastAPI's {host:path} pattern
+                                          eats slashes and would otherwise
+                                          swallow ".../unblock" into the host)
+    POST /c3/auto-block/enable         -> turn auto-block on
+    POST /c3/auto-block/disable        -> turn auto-block off
+    POST /c3/collect/start|stop|export -> data-collection mode
+    POST /c3/test/real-world-beacon    -> launches test_c3_real_world_beacon.
+                                          bat in its own console window (the
+                                          "Real-World Beacon Test" button in
+                                          Detection Lab). Windows-only. Deploys
+                                          the ngrok tunnel + mimicry beacon,
+                                          drives this browser session to it,
+                                          BEACON confirms in ~3 minutes.
+    GET  /c3/test/beacon-target        -> simple ping target
+    POST /c3/test/beacon-target
+    GET  /c3/test/beacon-page          -> a small self-contained HTML page
+                                          (interval + method via query params)
+                                          that fires a real repeating request
+                                          at beacon-target from inside the
+                                          monitored browser. Used by
+                                          scripts/c3_demo.py.
+
+  Settings: abuseipdb_key and virustotal_key are in the settings dict
+  (core/settings.json, gitignored) with empty defaults and are forwarded into
+  reputation_engine.py at startup and on every Settings save. gsb_key is also
+  in that dict but is C2's Layer-5 key now, not C3's.
+
+
+--------------------------------------------------------------------------------
+5. THE DASHBOARD
+--------------------------------------------------------------------------------
+There is now ONE dashboard file: frontend/dashboard.html. (The old separate
+dashboards/dash_c3.html development copy has been deleted — the previous
+version of this document warned it was out of sync; it is simply gone now.)
+electron/main.js loads frontend/dashboard.html directly.
+
+Its C3 panel matches the current backend:
+  - Model label reads "XGBoost + Heuristic" and is driven by
+    c3Status.ml_model_loaded. No Isolation Forest or Random Forest text
+    anywhere in the C3 panel.
+  - Live stats strip with small trend sparklines.
+  - Live Monitor request table with colour-coded context / activity pills and
+    a capsule-style risk-score bar.
+  - Alerts tab: incident cards with per-signal ring meters (ML / XGBoost,
+    Heuristic), MITRE ATT&CK technique chips (T1071.001 Web Protocols always;
+    T1041 Exfiltration-Over-C2 and T1176 Browser-Extensions shown when that
+    host's own features fit), a one-click "Block Host" action, and an
+    expandable detail panel: a signal-contribution donut (fixed 45% ML / 55%
+    heuristic — reputation is NOT a slice), a feature "evidence shape" radar,
+    per-signal bars, per-feature bars. Once a beacon has been checked, the
+    Reputation area splits into an AbuseIPDB row and a VirusTotal row, each
+    out of 100%.
+  - A short note in the detail view states plainly: "Risk score = ML (XGBoost)
+    + Heuristic only. Reputation / threat-intel is shown as analyst evidence
+    and never affects the score or verdict."
+  - Host Analysis tab: one row per destination host, sortable by score; the
+    request list shows the full capture log (from interceptor._host_history),
+    not just the last 50.
+  - Detection Lab tab: a Blocked-Hosts card with the auto-block on/off toggle,
+    a JSON alert-log export card, AbuseIPDB and VirusTotal API-key fields, a
+    "Real-World Beacon Test" card (the button POSTs /c3/test/real-world-beacon
+    — see section 4) with an animated waveform that depicts the TEST's cadence
+    (its own copy says so), and a live pipeline-status diagram whose badges
+    are all sourced from real /c3/status fields. (The old "Detection Engine
+    Reference" card, which had a stale fusion-weights table, was removed.)
+
+Both the main Settings panel and the Detection Lab tab can hold API keys: the
+main Settings panel has the AbuseIPDB key and the Google Safe Browsing key
+(GSB is C2's); the VirusTotal key lives only in Detection Lab.
+
+The dark-navy glass design system is shared with the other components
+(CSS custom properties; C3's accent colour is a cyan/amber).
+
+
+--------------------------------------------------------------------------------
+6. MACHINE-LEARNING STATUS — HONEST, MEASURED FINDINGS
+--------------------------------------------------------------------------------
+DEPLOYED MODEL: models/c3_xgb_classifier.pkl — XGBoost, 150 trees, depth 3, 6
+cadence-invariant features, threshold 0.5. Trained on CTU-13's Zeek http.log
+captures with the label_c2 target (a window is positive only if it holds a real
+C2 command-channel flow). 51,963 windows, 110 positive. This is real, public
+data — not synthetic.
+
+Why "label_c2" and not CTU-13's own "Botnet" label: CTU-13 assigns "Botnet" by
+IP address — every scenario's docs say, word for word, to label all traffic
+to/from the known-infected IP as "Botnet". Broken down by CTU-13's own
+behaviour sub-labels, that traffic is roughly 33% DNS, 26% ICMP scan/DDoS, 22%
+failed connections, 15% spam, 2% ad-click-fraud HTTP — and only about 1.35% is
+an actual C2 command channel. A model trained straight on the IP label learns
+to spot the loud stuff (scans and floods, trivially separable), not beaconing.
+In earlier work on this project, a Random Forest trained on that IP label got
+leave-one-scenario-out recall of essentially 0.0 on the real C2 subset. So the
+current model targets label_c2 directly.
+
+Even so, the honest numbers for the DEPLOYED model are modest:
+  - Leave-one-scenario-out (the fair "unseen C2 style" test): mean recall
+    0.28, mean precision 0.06, mean F1 0.10, mean PR-AUC 0.16.
+  - Random-split (easier, family overlap): ROC-AUC 0.91, recall 0.77,
+    precision 0.07.
+The low precision is the key point: on its own the model fires on far too many
+benign windows to be trusted. It has a real but weak C2 signal.
+
+There is a known reason it cannot do much better on this data: 110 real
+positive windows across all scenarios, more than half of them in a single
+scenario, is too little and too concentrated to learn a signature that
+generalises across C2 families. This is a data-volume ceiling, not a bug in the
+features or the labels.
+
+Several retraining experiments (family-balanced, family-diverse, merged,
+expanded-dataset) were run on 2026-08-30 and 2026-08-31; their .pkl files are
+in models/ with "COMPARISON_ONLY" in the name. None replaced the deployed model.
+
+WHAT THIS MEANS FOR C3 OVERALL: as it runs today, C3's C2-detection strength
+sits mostly in the 9 heuristic rules in analyzer.py. The ML score is a real,
+non-zero, backing signal that must agree before a BEACON is confirmed (fusion
+rule 2), and it is genuinely useful for showing the ML layer contributing on a
+live demo — but it is not, on its own, a validated C2 detector, and the write-up
+should say so. A documented weak/negative ML result is worth presenting
+honestly; it is unusual to see disclosed at all in work that uses CTU-13.
+
+
+--------------------------------------------------------------------------------
+7. END-TO-END WALKTHROUGH — ONE REQUEST, START TO FINISH
+--------------------------------------------------------------------------------
+What happens when a hidden tab fires a beacon request:
+
+  1. The browser is about to send the request. CDP fires requestWillBeSent.
+     interceptor.py records URL, method, host, and a send timestamp into a
+     pending dict keyed by CDP's request_id.
+  2. The server replies. CDP fires responseReceived. interceptor.py records the
+     status code and a Content-Length-based size.
+  3. The response body finishes. CDP fires loadingFinished with the real
+     on-wire byte count. Now all three events exist, so interceptor.py builds
+     one complete event.
+  4. Before storing it, interceptor.py calls context_tagger.enrich_request()
+     with the page, URL, and CDP initiator info. context_tagger looks up when
+     the user last interacted with THIS SPECIFIC site (not globally), checks
+     document.visibilityState on that tab, and returns idle_time_ms,
+     user_was_active, is_background_tab, is_extension_origin, etc.
+  5. The complete event goes into that host's 50-entry scoring window, into the
+     larger full-history log (unless the host is already blocked), and into the
+     flat recent-requests list the Live Monitor reads.
+  6. Every 10 seconds, analyzer.py's loop wakes, pulls a fresh (age-filtered,
+     <=30-min-old) snapshot of every host's window, and — if the host clears
+     the gating in 3.7 — calls feature_engine.compute_features() to get all 16
+     features.
+  7. analyzer.py runs its 9 heuristic rules -> a 0-1 heuristic score and the
+     list of rules that fired.
+  8. If there are at least 6 events, analyzer.py also calls
+     anomaly_engine.c3_ml_engine.score() with the 6-feature subset -> "how
+     likely a C2 beacon", 0 to 1. Below 6 events the ML model is skipped.
+  9. The two scores go into risk_fusion.fuse(). Final score = 0.45 * ML +
+     0.55 * heuristic (or heuristic-only if there is no ML score). If the
+     score reaches the threshold but one signal is basically absent, it is
+     held just below the threshold. The `reputation` argument is passed as
+     None and is ignored anyway.
+  10. analyzer.py blends this with the "timing neutralised" version by the
+      sample-maturity weight, holds the verdict at SUSPICIOUS if there are
+      fewer than 10 requests, and applies the known-safe-host bar (0.85) if
+      the host is on the allowlist.
+  11. If the verdict is BEACON and this host has not alerted in the last 60
+      seconds, _handle_beacon() runs: it does the reputation lookup NOW
+      (AbuseIPDB + VirusTotal), attaches the result to the alert AS EVIDENCE
+      (the score and verdict do not change), saves a full alert row to SQLite,
+      blocks the host if auto-block is on and the score is at least 0.75, and
+      broadcasts a c3_alert WebSocket message.
+  12. The dashboard receives the message, plays a beep, shows a full-screen
+      beacon overlay with the host, score, and a countdown, and adds an
+      incident card with the ring meters, MITRE chips, and a Block Host
+      button — every number sourced from the real breakdown just computed.
+
+
+--------------------------------------------------------------------------------
+8. SUMMARY — WHAT TO TELL A NEW CHAT ABOUT C3 IN ONE PARAGRAPH
+--------------------------------------------------------------------------------
+C3 is a browser-execution-aware C2 beacon detector. It hooks into the live
+browser through the Chrome DevTools Protocol, tags every outgoing request with
+real browser-process context a network sensor cannot see (per-site user idle
+time, tab visibility, extension origin, same-site relationship to the active
+page), turns each destination host's recent request history into 16 numbers
+every 10 seconds, and scores them with two layers: an XGBoost model on 6
+cadence-invariant features (timing regularity, payload shape, URL diversity,
+POST share — trained on real CTU-13 HTTP C2 captures, honest leave-one-scenario
+recall about 0.28, so a real but weak signal) and 9 hand-written heuristic
+rules (the layer that carries most of the C2-detection weight). The final risk
+score is a fixed blend: 0.45 * ML + 0.55 * heuristic, and a BEACON is only
+confirmed when BOTH signals are involved and at least 10 requests have been
+seen. Threat-intelligence reputation (AbuseIPDB + VirusTotal) is looked up once
+a beacon is confirmed and shown to the analyst as supporting evidence — it is
+NOT part of the score. Confirmed alerts are saved to a local SQLite database;
+host-blocks are saved to a second SQLite database with a 24-hour auto-expiry.
+Auto-blocking a confirmed host is opt-in and off by default. The older
+Isolation Forest and Random Forest models have been removed from the live
+pipeline; many newer XGBoost candidates exist on disk but are not deployed.
+
+================================================================================
+END OF DOCUMENT
+================================================================================

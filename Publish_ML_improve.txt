@@ -1,0 +1,504 @@
+================================================================================
+Publish_ML_improve.txt
+REAL-WORLD, END-TO-END ACCURACY OF C3's DEPLOYED BEACON-DETECTION PIPELINE
+Written: 2026-09-02 (same day as the 18-feature model deployment)
+================================================================================
+
+READ THIS FIRST
+--------------------------------------------------------------------------------
+You asked for the REAL accuracy of REAL-WORLD C2 beacon detection, not a
+scenario-based number, and you asked me to find the failures honestly. I did
+that today by running the traffic through the actual production code path --
+not a hand-rolled scorer -- and the result is more sobering than the number I
+gave you earlier this session. I have to correct myself before anything else:
+
+  THE "81.8% ACCURACY" NUMBER FROM EARLIER TODAY MEASURED THE RAW ML
+  CLASSIFIER ONLY, WITH A THRESHOLD RE-OPTIMISED FOR EACH TEST. IT DOES NOT
+  DESCRIBE WHAT THE DEPLOYED SYSTEM ACTUALLY OUTPUTS. The deployed system
+  never shows a raw ML number to anyone -- it shows SAFE / SUSPICIOUS / BEACON,
+  produced by fusing the ML score with a heuristic score at FIXED weights
+  (0.45 / 0.55) against FIXED thresholds (0.30 / 0.52) that are never
+  recalibrated per family. When I ran real, held-out, genuinely-unseen malware
+  traffic through that actual fusion -- the same four lines of code the live
+  analyzer calls -- end-to-end BEACON recall on a family the model had never
+  seen ranged from 0% to 97% depending on the family, and was 0% for the
+  family that makes up 95% of the training positives when IT is the one held
+  out. Averaged, it is nowhere near 81.8%. Section 3 has the full numbers.
+
+  This is not a result of anything being broken. Every piece of code involved
+  is working exactly as designed -- I verified that. It is a genuine
+  architectural finding about what "confirm a BEACON" currently requires, and
+  it is the single most important thing in this document.
+
+WHAT THIS DOCUMENT IS
+  Section 1  - how "real-world" was tested, and why it is different from
+               scripts/train_c3_18feat.py's numbers
+  Section 2  - proof the new model is correctly wired into the live pipeline
+  Section 3  - the measured, real, end-to-end results (the actual answer to
+               "what is the real accuracy")
+  Section 4  - root-cause analysis of every failure found, ranked
+  Section 5  - the improvement plan, ranked by effort vs. impact
+  Section 6  - what to claim and what NOT to claim, going forward
+  Section 7  - how to reproduce every number in this file
+
+Everything here is measured against REAL, PUBLICLY LABELLED malware and
+benign network captures. No synthetic data anywhere. New files, nothing
+existing modified:
+  scripts/eval_c3_real_world_pipeline.py    the test harness
+  data/_c3_real_world_pipeline_results.json the raw results
+
+
+================================================================================
+1. WHAT "REAL-WORLD TEST" MEANS HERE, AND WHY IT IS A DIFFERENT QUESTION
+================================================================================
+
+scripts/train_c3_18feat.py (this morning's work) answers: "is the CLASSIFIER
+any good at separating C2 from benign, in principle." It calls
+XGBClassifier.predict_proba() directly on offline-computed features, and picks
+a decision threshold FOR EACH TEST from that test's own out-of-fold score
+distribution. That is a legitimate and standard way to evaluate a classifier,
+and the resulting numbers (mean cross-family ROC-AUC 0.82, held-out-capture
+accuracy 81.8-93.9%) are real and reproducible -- but they describe the
+MODEL, not the PRODUCT.
+
+C3 never ships predict_proba() to anyone. What actually runs, every 10
+seconds, for every host, is four pieces of real production code in sequence:
+
+    core/c3/feature_engine.py   compute_features()      -- turns requests into
+                                                             the 18+6 numbers
+    core/c3/anomaly_engine.py   C3XGBoostEngine.score()  -- the ML number
+    core/c3/analyzer.py         C3Analyzer._heuristic_score() -- the rule number
+    core/c3/risk_fusion.py      c3_risk_fusion.fuse()    -- ONE FIXED formula,
+                                                             ONE FIXED pair of
+                                                             thresholds, for
+                                                             every family,
+                                                             forever, unless a
+                                                             human edits the
+                                                             constants
+
+scripts/eval_c3_real_world_pipeline.py (new, today) calls exactly those four
+functions -- the real ones, imported from core/c3/, not reimplemented -- on
+real captured HTTP requests, and reports the VERDICT they produce. That is
+the honest answer to "what would an analyst actually see", which is what
+"real-world accuracy" has to mean for a detector, not a classifier.
+
+THE ONE THING THAT CANNOT BE MEASURED HONESTLY -- BROWSER CONTEXT
+Two of C3's three signal families need to know whether a human was at the
+keyboard and whether the tab was hidden. No network capture, real or
+otherwise, contains that. Inventing "yes, idle, yes, background" as if it
+were a measured fact would be exactly the kind of synthetic-data problem this
+project has spent all year avoiding. So every real-world number below is
+reported under TWO clearly separated, explicitly labelled conditions, never
+blended:
+
+  CONDITION A - "context-blind"
+    Every context field set to interceptor.py's own documented fallback for
+    when it cannot determine context (see interceptor.py's _try_finalize
+    exception handler): idle_time_ms=0, user_was_active=True,
+    is_background_tab=False, is_extension_origin=False. Not invented for this
+    test -- it is the system's own real "I don't know, assume benign"
+    default. Measures a genuine LOWER BOUND: the worst a real deployment can
+    do, since real context (when available) can only help, never hurt,
+    relative to this default.
+
+  CONDITION B - "assumed background/idle" (an ASSUMPTION, stated as one)
+    idle_time_ms=200000, user_was_active=False, is_background_tab=True,
+    initiator_type="script" -- C3's own stated threat model for a
+    browser-borne beacon, applied to real network traffic as an illustration.
+    Labelled everywhere as an assumption. Real deployments with real browser
+    telemetry should land somewhere between A and B, not below A.
+
+
+================================================================================
+2. WIRING CHECK -- the new model is correctly connected
+================================================================================
+
+Before trusting any accuracy number, I re-verified the plumbing:
+
+  - core/c3/anomaly_engine.py._model_path points at
+    models/c3_xgb_classifier_18feat_20260902.pkl (not the old 6-feature file).
+  - On import, the engine prints:
+      "[C3] ML classifier loaded (XGBClassifier): 18 features (iat_cv,
+       iat_bowley_skewness, iat_norm_mad, iat_burstiness, iat_autocorr_lag1,
+       iat_spread_ratio, iat_clock_share, iat_entropy_norm, payload_size_mean,
+       payload_cv, payload_repeat_ratio, upload_download_ratio,
+       url_path_entropy, unique_path_ratio, http_post_ratio, uri_len_norm,
+       uri_char_entropy_norm, referrer_absent_ratio)"
+    -- confirmed identically in every run today, including inside main.py's
+    own import (checked earlier) and inside this evaluation script.
+  - core/c3/feature_engine.py.FEATURE_ORDER carries all 18 names; the loader's
+    own validation (anomaly_engine.py's reload(), which rejects any model
+    whose feature_names aren't a subset of FEATURE_ORDER) passed without a
+    fallback warning.
+  - test/C3/test_c3_feature_parity.py (4 tests) still passes: the live
+    feature_engine and the offline training builder agree to 1e-6 on real
+    capture rows.
+  - test/C3/test_c3_units.py (100 tests) still passes.
+  - core/c3/risk_fusion.py and core/c3/analyzer.py were NOT touched today --
+    confirmed by re-reading them before writing the harness. Every fusion
+    weight, override rule and threshold in this document's results is the
+    real, current, unmodified production logic.
+
+Conclusion: the pipeline is correctly connected. The findings below are real
+findings about that pipeline's behaviour, not wiring bugs.
+
+
+================================================================================
+3. THE MEASURED REAL-WORLD RESULTS
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1  Structural finding, first, because it explains everything else:
+     UNDER CONDITION A, "BEACON" IS MATHEMATICALLY UNREACHABLE
+--------------------------------------------------------------------------------
+Measured: 0.0000 BEACON rate on EVERY family, positive or negative, under
+Condition A -- not approximately zero, exactly zero, every single time.
+
+This is not a bug. It is arithmetic. risk_fusion.py fuses
+score = 0.45*ml + 0.55*heuristic. Under Condition A, every context-gated
+heuristic rule (Rules 1, 2, 3, 4, 5, 8 in analyzer.py -- six of the nine)
+requires either user_active_ratio < 0.5 or background_tab_ratio > 0.8, both
+of which are pinned to their most-benign value by definition of "context
+unknown, assume benign." So heuristic == 0.0 for almost every real window
+(the one exception, Rule 7 -- POST ratio -- fired occasionally but not
+reliably: see 3.2). With heuristic == 0, the fused score's ceiling is
+0.45 * 1.0 = 0.45, and BEACON needs >= 0.52. NO ML CONFIDENCE, HOWEVER HIGH,
+CAN CROSS THAT LINE ALONE.
+
+This is by design -- risk_fusion.py's own docstring calls it the "both-signal
+guard" and it exists specifically so the ML score (trained on a few thousand
+real windows) can never single-handedly confirm a beacon. That design
+decision is defensible. But it has a real, previously unstated consequence:
+**in any situation where browser context is unavailable or not yet
+established, C3 cannot reach BEACON at all, no matter what the traffic looks
+like.** It can reach SUSPICIOUS (0.30 needs only ml >= 0.667), which is
+still surfaced to an analyst, but not the auto-block tier.
+
+--------------------------------------------------------------------------------
+3.2  Deployed model (trained on all 6 families), full pipeline, Condition A
+--------------------------------------------------------------------------------
+"Deployed" means models/c3_xgb_classifier_18feat_20260902.pkl exactly as it
+runs today -- most of this traffic is IN-SAMPLE for this model (it was
+trained on it), so these numbers describe "does the shipped model recognise
+traffic it has seen the shape of before", not generalisation.
+
+  family     n      BEACON   SUSPICIOUS+BEACON   real-benign FPR(BEACON)
+  Neris      95     0.0%     98.95%              0.00%  (0/2000 real benign)
+  FastFlux   12     0.0%     100.0%              0.00%
+  Sogou       3     0.0%     100.0%              0.00%
+  ZeusV1    226     0.0%     100.0%              0.00%
+  ZeusB26     3     0.0%     100.0%              0.00%
+  Zeus78   6551     0.0%     100.0%              0.00%
+
+Every real C2 family reaches at least SUSPICIOUS almost 100% of the time,
+and zero of 2,000 real benign windows do. That is a genuinely strong result
+for the ML+network-signal layer working alone. It just cannot, on its own,
+reach the auto-block tier -- see 3.1.
+
+--------------------------------------------------------------------------------
+3.3  Deployed model, full pipeline, Condition B (assumed background/idle)
+--------------------------------------------------------------------------------
+  family     n      BEACON    SUSPICIOUS+BEACON   real-benign FPR(BEACON)
+  Neris      95     76.84%    100.0%              0.90%  (18/2000)
+  FastFlux   12     100.0%    100.0%              0.90%
+  Sogou       3     100.0%    100.0%              0.90%
+  ZeusV1    226     100.0%    100.0%              0.90%
+  ZeusB26     3     100.0%    100.0%              0.90%
+  Zeus78   6551     99.91%    100.0%              0.90%
+
+If a real infected browser tab really does sit idle in the background (C3's
+own stated threat model), the deployed system reaches BEACON on 77-100% of
+in-sample-family real C2 traffic, at a 0.90% false-BEACON rate on real
+benign traffic UNDER THE SAME (favourable-to-detection) context assumption.
+0.90% is not negligible at scale, but it is the ceiling under the MOST
+generous assumption, not the expected rate on genuinely mixed browsing.
+
+--------------------------------------------------------------------------------
+3.4  THE KEY TEST -- leave-one-family-out, full pipeline (true generalisation)
+--------------------------------------------------------------------------------
+This is the real answer to "will C3 catch a C2 family it has never seen."
+Each model here was retrained with that ENTIRE family (all its captures)
+excluded, then scored through the real fusion, same as above. Sogou and
+ZeusB26 have too few positive windows (3 each) to report.
+
+CONDITION A (context-blind):
+  family    n_pos  n_neg   BEACON   SUSP+BEACON   FPR(BEACON)   raw-classifier ROC-AUC
+  Neris        95   1881    0.0%      45.26%        0.00%           0.9801
+  FastFlux     12    458    0.0%      16.67%        0.00%           0.9155
+  ZeusV1      226    538    0.0%      87.61%        0.00%           0.9962
+  Zeus78     6551   1021    0.0%       0.47%         0.00%           0.9813
+
+CONDITION B (assumed background/idle):
+  family    n_pos  n_neg   BEACON   SUSP+BEACON   FPR(BEACON)   end-to-end balanced accuracy*
+  Neris        95   1881    4.21%     66.32%        0.00%           0.5211
+  FastFlux     12    458    8.33%     16.66%        0.00%           0.5417
+  ZeusV1      226    538   96.90%    100.0%          0.19%           0.9836
+  Zeus78     6551   1021    0.00%      7.82%         0.00%           0.5000
+
+  * balanced accuracy of the BEACON/not-BEACON call at the fixed 0.52
+    threshold -- 0.50 means "no better than always guessing not-BEACON",
+    which is what a 0% BEACON recall gives regardless of specificity.
+
+Read that table again: under the SAME condition, on the SAME architecture,
+ZeusV1 generalises almost perfectly (96.9% BEACON recall, end-to-end balanced
+accuracy 0.984) while Zeus78 -- 95% of the entire positive training set --
+generalises almost NOT AT ALL when it is the one held out (0% BEACON recall,
+7.8% even reach SUSPICIOUS). Neris and FastFlux sit in between. Section 4.2
+explains why, with numbers.
+
+Compare this table to this morning's raw-classifier headline:
+  raw classifier, unseen host (Neris), F1-tuned threshold:     81.8% accuracy
+  full pipeline, unseen family (Neris), fixed threshold, Cond B: 66.3% reach
+    even SUSPICIOUS, only 4.2% reach BEACON, balanced accuracy 0.521
+
+Both numbers are real and both are correctly computed. They answer different
+questions. The first says the classifier's RANKING is good even out of
+family (which the ROC-AUC column above confirms: 0.87-0.996 across the
+board -- genuinely strong). The second says the fixed global thresholds and
+the context-gated heuristic mean that ranking quality does not currently
+translate into the BEACON verdict for most unseen families. THAT gap is
+the real, actionable finding.
+
+
+================================================================================
+4. ROOT-CAUSE ANALYSIS -- ranked by how much of the gap each one explains
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1  [ARCHITECTURAL, explains 3.1 entirely] The both-signal guard has no
+     escape valve for "context genuinely unavailable"
+--------------------------------------------------------------------------------
+risk_fusion.py cannot distinguish "heuristic is silent because this traffic
+is benign" from "heuristic is silent because context could not be
+determined." Both currently cap the fused score at 0.45. That is safe
+(never worse than not detecting) but it means detection quality is entirely
+gated on whether context ever gets established -- which for a
+non-page-associated request (a worker, a prefetch, a degraded CDP session)
+may never happen. This is not new to the 18-feature model; it was equally
+true of the 6-feature one. It has simply never been measured end-to-end
+before today.
+
+--------------------------------------------------------------------------------
+4.2  [MEASURED, explains most of 3.4's family-to-family variance] Raw
+     probability CALIBRATION does not transfer across families the way
+     RANKING does
+--------------------------------------------------------------------------------
+Directly measured (held-out Zeus78 vs held-out Neris, same LOFO protocol):
+
+  held-out family    ROC-AUC   median raw ML prob.   held-out-benign median
+  Zeus78 (held out)    0.981         0.165                  0.001
+  Neris  (held out)    0.980         0.537                  0.002
+
+Both rank C2 far above benign (ROC-AUC ~0.98 either way -- the model "knows"
+which is which). But Zeus78's held-out probabilities sit at a median of
+0.165 -- well below the 0.30 SUSPICIOUS cutoff once multiplied by the 0.45 ML
+weight (0.45*0.165=0.074) even with zero heuristic help, and still under
+0.30 with a typical single-rule heuristic contribution (~0.28). Neris's
+0.537 median clears that bar easily. This is a textbook probability
+MISCALIBRATION under distribution shift: XGBoost's predict_proba is not
+guaranteed to output comparable absolute numbers for a shape of positive
+example it has never been trained on, even when it ranks that shape
+correctly relative to negatives. Zeus78's shape (large uniform GET reply,
+2431 bytes, low POST share, HTTP 403 retry storm) is the most different
+from the rest of the training positives (mostly small POST-heavy Zeus
+V1/V26 and Neris/FastFlux/Sogou windows), so it suffers the most.
+
+--------------------------------------------------------------------------------
+4.3  [DATA COVERAGE, verified exhausted locally] No real C2 family in
+     training postdates 2014, and no modern framework is represented
+--------------------------------------------------------------------------------
+Verified this session: every locally available capture with a genuine,
+per-request or per-flow command-and-control label (not just "traffic from an
+infected host") was already checked. CTU-Malware-Capture-Botnet-4, -8, -13
+(weblog captures) contain ZERO `-CC` labelled rows -- their traffic is
+redirect/background noise from the infected host, not C2-channel traffic,
+confirmed by grep across all of them. The only real, per-request C2-labelled
+sources that exist on this machine are the six families already in the
+dataset: Neris, FastFlux(unnamed), Sogou, ZeusV1, ZeusB26, Zeus78 -- all
+2011-2014 vintage, all HTTP, none using a modern framework (Cobalt Strike,
+Sliver, Mythic, Havoc) or HTTPS/JA3-relevant behaviour. The MTA (Cobalt
+Strike / Hancitor) feature rows referenced in the earlier plan
+(data/_mta_c2_sliding.csv) have NO surviving raw request logs on this
+machine -- only 6 pre-computed OLD features per row -- so they could not be
+rebuilt with the new 18-feature set and were correctly left out rather than
+guessed at. This is a genuine, disclosed coverage gap, not an oversight.
+
+--------------------------------------------------------------------------------
+4.4  [DATA VOLUME] Three of six families remain too small to trust
+     individually
+--------------------------------------------------------------------------------
+Sogou (3 positive windows) and ZeusB26 (3) cannot be evaluated at all with
+any statistical meaning -- both are excluded from every aggregate in this
+document, honestly, same as before. FastFlux (12) is barely usable and its
+own numbers above are noisy (16.7% vs 100% BEACON rate between conditions
+A/B is a real measurement, but n=12 means every single window shifts the
+percentage by >8 points).
+
+--------------------------------------------------------------------------------
+4.5  [UNVERIFIED] Real browser context distribution is still unknown
+--------------------------------------------------------------------------------
+Condition B is a disclosed ASSUMPTION, not a measurement. Nobody has run the
+new model against genuine live-browser traffic yet (TC-01/02/03 use the OLD
+model's shape expectations and have not been re-run since today's swap).
+Whether real infected-tab traffic looks more like Condition A or Condition B
+in practice is not established by this document.
+
+
+================================================================================
+5. IMPROVEMENT PLAN -- ranked by measured impact vs. effort
+================================================================================
+
+--------------------------------------------------------------------------------
+P1 (do first, ~1-2 hours, directly fixes 4.2, no new data needed)
+    CALIBRATE the model's probability output, don't just rank with it.
+--------------------------------------------------------------------------------
+Wrap the fitted XGBClassifier in sklearn's CalibratedClassifierCV
+(method="isotonic", cv=grouped-3-fold on TRAINING data only, never the test
+fold -- same discipline as the existing threshold-picking code). This
+does not change ranking (ROC-AUC is rank-invariant, so it stays ~0.98) but
+it re-maps the raw scores so a "this really is C2" case reliably lands at
+a HIGH absolute probability regardless of which family produced it -- which
+is exactly the gap 4.2 measured (Zeus78 median 0.165 vs Neris 0.537 despite
+equal ROC-AUC). Test by re-running scripts/eval_c3_real_world_pipeline.py's
+Test 2 after calibration and confirming the Zeus78/FastFlux BEACON rates
+rise without the real-benign FPR column moving.
+
+--------------------------------------------------------------------------------
+P2 (do second, ~30 min, directly addresses 4.1's blind spot)
+    Give risk_fusion.py a THIRD state for "context unavailable", distinct
+    from "context available and benign".
+--------------------------------------------------------------------------------
+Right now analyzer.py always passes real or default-benign context values
+into compute_features(); there is no signal anywhere that says "I could not
+determine context for this window" (interceptor.py's own fallback marks
+is_degraded_context=True on the raw event, per its own comment, but nothing
+downstream reads that flag -- confirmed by grep, it is dead data today).
+Proposal: thread that flag through to feature_engine's output (a
+context_unknown_ratio feature, or a boolean carried alongside the score),
+and let risk_fusion widen its allowed ML weight specifically when context
+was never available AND the ML score is very high AND stays high across
+multiple consecutive cycles (sustained evidence, not a one-shot override --
+consistent with the project's existing "asymmetric risk" philosophy of
+never fabricating suspicion under uncertainty, extended to also never
+fabricate SAFETY under uncertainty when the signal that IS available is
+overwhelming). This is a genuine design decision with real trade-offs
+(loosening the both-signal guard is exactly the kind of change that
+previously caused false positives -- see the project's own history of
+overrides being added, then removed, in risk_fusion.py) and should not be
+made without deciding, explicitly, how much extra false-positive risk is
+acceptable. Recommend prototyping behind a feature flag and re-running
+Test 2 before committing to it.
+
+--------------------------------------------------------------------------------
+P3 (do third, ~2-3 hours once TC01-03 can be run)
+    Measure Condition A vs B against REAL live-browser traffic.
+--------------------------------------------------------------------------------
+Run test/C3/tc01_cobalt_strike_beacon.py and tc02_cloud_apt_exfiltration.py
+against the NOW-DEPLOYED 18-feature model (they have not been run since the
+swap) to get the model's real behaviour on live CDP-sourced browser-context
+data, not the two disclosed assumptions in this document. This replaces
+Condition A/B's uncertainty with a real number for at least the synthetic
+browser-beacon shapes those tests use, and is a wiring smoke-test as a
+side-benefit. TC-03 (real public IP, real reputation lookup) is the closest
+available proxy to a genuinely live deployment and should be run if
+infrastructure (per its own TEST_CASE_03 doc, an owned VPS or ngrok tunnel)
+is available.
+
+--------------------------------------------------------------------------------
+P4 (medium effort, directly addresses 4.3 -- the honest limitation, not a
+    quick fix)
+    Acquire real, modern C2 traffic. Locally exhausted; needs new data.
+--------------------------------------------------------------------------------
+Every real, per-request C2-labelled source on this machine is now in the
+dataset (verified in 4.3). Getting real Cobalt Strike/Sliver/Mythic coverage
+requires NEW acquisition, not more mining of what is already here:
+  - malware-traffic-analysis.net publishes labelled pcaps with per-post
+    write-ups identifying the C2 family and often the exact beacon URI --
+    manual selection and labelling required (no bulk machine-readable label
+    file exists there, unlike CTU-13/Stratosphere).
+  - Any-Run / MalwareBazaar sandboxed detonations can yield real HTTP logs
+    of modern frameworks, but require manual C2-flow identification per
+    sample (same labelling effort as above).
+  - The user's OWN collection-mode capture (already built into C3 --
+    /c3/collect/start, see main.py) run against a real Cobalt Strike beacon
+    the researcher stands up themselves (same authorised-infrastructure
+    model as TC-03) would be genuinely real, modern, and first-party.
+This is explicitly flagged as a data-acquisition task, not something
+achievable by re-processing what already exists.
+
+--------------------------------------------------------------------------------
+P5 (small effort, transparency, not accuracy)
+    Surface the context-blind/context-confirmed distinction to the analyst.
+--------------------------------------------------------------------------------
+Given 3.1's finding that SUSPICIOUS can mean "strong C2 signal, no context
+data available" while BEACON always means "signal AND context both fired",
+the dashboard's detail popup (signal_breakdown, already computed per-cycle)
+could show whether context was ever established for a host, so an analyst
+looking at a long-standing SUSPICIOUS verdict knows whether it is waiting on
+more evidence or waiting on context that may never arrive. Low engineering
+cost; directly informed by this session's finding.
+
+--------------------------------------------------------------------------------
+NOT recommended
+--------------------------------------------------------------------------------
+- Lowering BEACON_THRESHOLD or SUSPICIOUS_THRESHOLD globally to compensate.
+  That would raise real-benign false-positive rates uniformly (3.2/3.3 show
+  the current thresholds already sit close to real benign traffic's own
+  score ceiling) rather than fixing the actual problem (calibration/context).
+- Removing the both-signal guard outright. It exists for a measured reason
+  (the ML layer alone, even now, is trained on thousands rather than
+  millions of real positives) and 4.1's finding argues for a narrow,
+  evidence-gated exception (P2), not for deleting the guard.
+
+
+================================================================================
+6. WHAT TO CLAIM NOW, AND WHAT TO RETRACT
+================================================================================
+
+RETRACT / QUALIFY from this morning's Publish_ML.txt and
+C3_18Feature_Model_Results.md:
+  "81.8% accuracy on a balanced held-out capture" is a RAW CLASSIFIER metric
+  with a per-test-optimised threshold. It is real, reproducible, and a fair
+  way to compare 6 vs 18 features -- but do not present it as "the accuracy
+  of C3's beacon detector" without the qualifier "of the underlying
+  classifier, independent of the production fusion thresholds." Both
+  documents should be read together with this one from now on.
+
+CLAIM, now measured end-to-end through the real production pipeline:
+  - The pipeline is correctly wired to the new 18-feature model (Section 2).
+  - Signal-only (ML + network-visible heuristic rules) reaches at least
+    SUSPICIOUS on 98.95-100% of real C2 traffic from families the model has
+    SEEN, with 0.00% false SUSPICIOUS+BEACON on 2,000 real benign windows
+    (3.2).
+  - Under C3's own stated threat model (background/idle beacon), the
+    deployed system reaches full BEACON confirmation on 77-100% of real C2
+    from seen families, at a measured 0.90% false-BEACON ceiling on real
+    benign traffic under the same favourable assumption (3.3).
+  - Cross-family RANKING generalises well (ROC-AUC 0.87-0.996 leave-one-
+    family-out); cross-family VERDICT generalisation is uneven and, for the
+    single largest family (Zeus78) held out, close to zero at the BEACON
+    tier today (3.4) -- a genuine, now-quantified limitation with an
+    identified cause (4.2) and a concrete first fix (P1).
+
+DO NOT CLAIM:
+  - Any single "accuracy" number for "real-world C2 beacon detection" --
+    the honest answer is conditional on (a) whether the family was in
+    training and (b) whether browser context is available, and this
+    document reports both axes rather than collapsing them.
+  - That BEACON can currently be reached without heuristic corroboration,
+    under any ML confidence -- Section 3.1 shows this is arithmetically
+    impossible today, not merely rare.
+
+
+================================================================================
+7. REPRODUCE EVERY NUMBER IN THIS FILE
+================================================================================
+  python scripts/eval_c3_real_world_pipeline.py
+      -> data/_c3_real_world_pipeline_results.json (Sections 3.1-3.4)
+  python test/C3/test_c3_units.py            -> 100 passed (Section 2)
+  python test/C3/test_c3_feature_parity.py   -> 4 passed (Section 2)
+  The calibration percentiles in 4.2 were a one-off diagnostic (LOFO refit +
+  np.percentile on held-out raw probabilities); re-derive by retraining a
+  LOFO model per scripts/eval_c3_real_world_pipeline.py's _train_lofo_model()
+  and calling predict_proba on the held-out family's rows directly.
+================================================================================

@@ -1,0 +1,801 @@
+================================================================================
+UPDATE 2026-09-02, LATER THE SAME DAY - READ Publish_ML_improve.txt FIRST
+================================================================================
+Everything below this line was measured on the RAW CLASSIFIER (predict_proba
+with a per-test-optimised threshold). That is real and useful for comparing
+6 vs 18 features, but it is NOT what the deployed system outputs end-to-end.
+A second, later evaluation ran real captured traffic through the actual
+production fusion pipeline (feature_engine -> anomaly_engine -> analyzer's
+heuristic rules -> risk_fusion) and found the real end-to-end BEACON recall on
+genuinely unseen malware families is much lower than the 81.8% figure below --
+0% to 97% depending on the family, because of a fixed-threshold /
+probability-calibration gap the raw-classifier numbers don't surface. Full
+findings, root causes, and a ranked improvement plan: Publish_ML_improve.txt.
+Read it before quoting any number from this file as "C3's accuracy."
+
+================================================================================
+UPDATE 2026-09-02 - THIS PLAN WAS EXECUTED. THESE ARE MEASURED NUMBERS,
+NOT ESTIMATES. Full write-up: C3_18Feature_Model_Results.md
+================================================================================
+
+WHAT WAS BUILT
+  data/c3_18feat_dataset.csv        68,464 non-overlapping windows of real HTTP
+                                    requests, 6,890 of them real C2, from 6
+                                    malware families across 22 real captures.
+                                    NO SYNTHETIC DATA.
+  scripts/build_c3_18feat_dataset.py    the builder
+  scripts/train_c3_18feat.py            training + honest evaluation
+  models/c3_xgb_classifier_18feat_20260902.pkl    the trained model
+  test/C3/test_c3_feature_parity.py     train/serve parity on real rows
+  core/c3/backup_ml_20260902/           backup of the old model + C3 code
+
+MEASURED ACCURACY  (balanced held-out captures, so accuracy is a real number)
+  unseen C&C server (ZeusV1)             100.0 %      (6-feature: 94.6 %)
+  unseen capture AND unseen host (Neris)  81.8 %      (6-feature: 77.0 %)
+  unseen capture, same server (Zeus78)    99.95 %     (6-feature: 99.0 %)
+  ---------------------------------------------------------------
+  mean over the three scenarios           93.9 %      (6-feature: 90.2 %)
+
+  HEADLINE TO QUOTE: 81.8 % - the hardest of the three, unseen capture and
+  unseen infected host. The 93.9 % mean is fine to quote as well, as long as
+  the three scenarios are shown separately (they are, in the results file).
+
+HARDEST TEST - completely unseen malware family (leave-one-family-out)
+                                      18 features     6 features
+  mean ROC-AUC                            0.8213         0.5605
+  mean recall @ 1 % false-positive rate   0.2908         0.1243
+  mean balanced accuracy                  0.6215         0.5579
+
+  BE HONEST HERE: against a family the model has never seen, balanced accuracy
+  is about 62 %, NOT above 75 %. Quote ROC-AUC (0.82) and recall-at-fixed-FPR
+  for this test, never accuracy. Saying so is what makes the 81.8 % credible.
+
+FALSE POSITIVES ON REAL HUMAN BROWSING (held-out CTU-Normal captures)
+  18 features: 0.00 % / 0.06 % / 0.00 %      6 features: 0.89 % / 0.44 % / 0.13 %
+  The new model is more sensitive to C2 AND quieter on real browsing.
+
+IS IT ONE LUCKY FEATURE? No - ablation, same folds:
+  18 features                     ROC 0.8213   held-out ACC 93.9 %
+  minus the top feature (17)      ROC 0.7593   held-out ACC 91.6 %
+  timing features only (8)        ROC 0.6011   held-out ACC 54.3 %
+  original 6 features             ROC 0.5605   held-out ACC 90.2 %
+  Removing the strongest feature still leaves the model far ahead of the
+  6-feature baseline. Timing alone is not enough - which supports C3's own
+  argument for the browser-context layer.
+
+THE LIVE SYSTEM NOW USES IT
+  Real Zeus C2 requests  -> ML 0.9505 -> fused 0.593 = BEACON
+  Real human browsing    -> ML 0.0063 -> fused 0.168 = SAFE
+  (The old 6-feature model scored 0.028 on that same real C2 window and could
+   never confirm a beacon at any threshold. That was the real defect.)
+  Tests: 100 C3 units + 4 new parity tests + 13 C1 + 28 C2 - all pass.
+  risk_fusion.py, analyzer.py, the heuristic rules and the thresholds are
+  UNCHANGED. Rollback instructions: core/c3/backup_ml_20260902/README.txt
+
+ONE BUG WORTH KNOWING ABOUT
+  The Stratosphere weblog tail is not consistently pipe-separated, and the
+  user-agent itself contains '|'. Splitting on '|' silently read the user agent
+  as the referrer and set referrer_absent_ratio to 0 for every Zeus C2 row.
+  After fixing it, ZeusV1's cross-family ROC-AUC went from 0.329 (ranked C2
+  BELOW benign) to 0.795. Always check a new feature against the raw file.
+
+CORRECTION TO SECTION 1 BELOW (found on 2026-09-02 while executing this plan)
+  The figure "leave-one-group-out mean PR-AUC 0.5597 / F1 0.518" for
+  data/c3_final_expanded_dataset.csv is INFLATED and must NOT go in the paper.
+  6 of its 13 "reliable" folds (the MTA Cobalt Strike / Hancitor ones) contain
+  ONLY positive windows - zero negatives - so PR-AUC and precision are 1.0 by
+  construction on those folds and drag the mean up. Verified directly in
+  data/_xgb_expanded4600_loso_results.json: those folds have tn=0 and fp=0.
+  The new dataset built by this plan (data/c3_18feat_dataset.csv) has both
+  classes in every fold, which is why its numbers are lower and trustworthy.
+  Use the measured numbers at the top of this file instead.
+
+The plan below is what was followed. Where it says "expected", the measured
+value is above.
+
+================================================================================
+Publish_ML.txt
+HOW TO GO FROM 6 FEATURES TO 18 FEATURES, AND HOW TO GET AN HONEST NUMBER
+ABOVE 75% - C3 BEACON DETECTOR
+Written: 2026-09-02
+================================================================================
+
+READ THIS FIRST - THE SHORT VERSION
+--------------------------------------------------------------------------------
+Your panel said: "only 6 features, how can you do that with 6 features?"
+
+They are right, but they are only half right. You have TWO problems, and the
+second one is bigger than the first:
+
+  Problem 1 (the one they saw):  the model reads only 6 features.
+  Problem 2 (the real one):      the model was trained on only 110 positive
+                                 windows of real C2 traffic.
+
+110 examples is why the model is weak. If you add 12 more features but keep
+110 examples, the model will get WORSE, not better - too many knobs, too few
+examples. So the plan below fixes both at once:
+
+  6 features  -> 18 features
+  110 real C2 windows -> 4,610 real C2 windows (you ALREADY built this file)
+  1 malware family group -> 4+ families (Neris, Zeus, Cobalt Strike, Hancitor)
+
+Good news: you do not need to download anything new. Everything is already on
+your D: drive and in your data/ folder. No synthetic data anywhere.
+
+Realistic time: 3 to 4 hours of work. Sections 6 and 7 are copy-paste code.
+
+
+================================================================================
+1. WHERE YOU ARE RIGHT NOW (measured, not guessed)
+================================================================================
+
+The model that is running today:
+  file        : models/c3_xgb_classifier.pkl
+  features    : 6
+      iat_cv, iat_bowley_skewness, payload_size_mean, payload_size_std,
+      url_path_entropy, http_post_ratio
+  trained on  : 51,963 windows, of which only 110 are real C2
+  honest score: leave-one-scenario-out mean PR-AUC 0.158, F1 0.096,
+                recall 0.280, precision 0.061
+  (source: the model file's own honest_loso_aggregate field, and
+   data/_xgb_regularized_cadence_results.json)
+
+The dataset you already built on 31 August, but never deployed:
+  file        : data/c3_final_expanded_dataset.csv
+                (+ ..._provenance.csv, which has group and family columns)
+  rows        : 61,063 windows
+  real C2     : 4,610 windows  <-- 42 TIMES more positives than the live model
+  families    : Neris (CTU-13 1/2/9), fast-flux (CTU-13 5/13), Sogou (CTU-13 7),
+                Zeus (Botnet-25-1, Botnet-26), Cobalt Strike (MTA 2021 captures),
+                Hancitor (MTA 2021 captures)
+  features    : still only the same 6
+  honest score: leave-one-group-out over 13 folds
+                mean PR-AUC 0.5597, precision 0.502, recall 0.628, F1 0.518
+                random (grouped) split ROC-AUC 0.9259
+  (source: data/_xgb_expanded4600_loso_results.json)
+
+Look at those two blocks again. Just by using the bigger dataset - with the SAME
+6 features - your F1 goes from 0.096 to 0.518 and your recall from 0.28 to 0.63.
+
+So: STEP ZERO, before any feature work, is to switch to the bigger dataset. If
+you run out of time today, do only that and you already have a much better
+paper.
+
+
+================================================================================
+2. WHY MORE FEATURES WILL HELP NOW (and why they did not before)
+================================================================================
+
+A rough rule people use in ML: you want at least about 10 positive examples per
+feature.
+
+   110 positives  / 6 features  = 18 per feature   -> already thin
+   110 positives  / 18 features = 6 per feature    -> would overfit badly
+   4,610 positives / 18 features = 256 per feature -> very comfortable
+
+So the bigger dataset is what MAKES the extra features safe. Do not add features
+to the small dataset.
+
+Second reason the current 6 are weak: three of them are ABSOLUTE numbers
+(payload_size_mean, payload_size_std) or entropy of paths, and absolute byte
+sizes from a 2011 capture do not mean the same thing as bytes in a 2026 browser.
+Most of the new features below are RATIOS - numbers between 0 and 1 - which
+transfer much better between an old capture and a live browser.
+
+
+================================================================================
+3. THE 18 FEATURES
+================================================================================
+
+Rules I used to pick them (all three must be true, or the feature is out):
+  (a) It can be computed from the log files you already have on D:.
+  (b) It can be computed live in the browser from what interceptor.py already
+      records (url, method, status, size_bytes, request_size, request_headers,
+      timestamp). Nothing needs a new browser permission.
+  (c) It is a ratio or a shape number, not a raw byte count, wherever possible.
+
+I deliberately did NOT include User-Agent features: the log files have many
+different user agents, but a real browser only ever has one. A model that learns
+"weird user agent = malware" would score 0 in your live system. That is a trap,
+avoid it.
+
+--------------------------------------------------------------------------------
+GROUP A - TIMING (8 features, computed from the request timestamps only)
+--------------------------------------------------------------------------------
+A1  iat_cv                (KEEP - you already have it)
+    std(gaps) / mean(gaps). 0 = perfect clock. Browsing is 0.5 to 1.5.
+
+A2  iat_bowley_skewness   (KEEP - you already have it)
+    Quartile-based skew of the gaps. Says whether gaps lean short or long.
+
+A3  iat_norm_mad          (NEW)
+    MAD(gaps) / median(gaps).
+    Same idea as iat_cv but outlier-proof. One long pause (user closed the
+    laptop) destroys iat_cv but barely moves this. This is the single best
+    "jitter-tolerant regularity" feature, and it directly answers the reviewer
+    question "your detector dies at 5% jitter".
+
+A4  iat_burstiness        (NEW)
+    (std - mean) / (std + mean). Always between -1 and +1.
+    -1 = perfectly regular, 0 = random (Poisson), +1 = bursty.
+    This is a standard, citable measure (Goh and Barabasi, 2008), which is
+    useful for the paper.
+
+A5  iat_autocorr_lag1     (NEW)
+    Correlation of the gap sequence with itself shifted by one.
+    A beacon with jitter still has gaps that hover around one value, so this
+    stays near 0; page-loading traffic has strong structure (short, short,
+    short, long) and gives a clear non-zero value.
+
+A6  iat_spread_ratio      (NEW)
+    (p90(gaps) - p10(gaps)) / median(gaps).
+    A robust "how wide is the timing spread" number. Small for beacons even
+    when a couple of gaps are odd.
+
+A7  iat_clock_share       (NEW)
+    Fraction of gaps that fall within +/-10% of the median gap.
+    Plain English: "how many of the requests landed on the clock."
+    A 5%-jitter beacon still scores near 1.0 here, while iat_cv already looks
+    bad. THIS is the feature that fixes your jitter problem.
+
+A8  iat_entropy_norm      (NEW)
+    Put the gaps into 10 log-spaced buckets, take Shannon entropy, divide by
+    log2(10) so it lands in 0..1.
+    0 = all gaps the same size, 1 = gaps all over the place.
+
+--------------------------------------------------------------------------------
+GROUP B - SIZE / VOLUME (4 features)
+--------------------------------------------------------------------------------
+B1  payload_size_mean     (KEEP)
+    Mean response size in bytes. Keep it, but see the warning in section 9.
+
+B2  payload_cv            (NEW - replaces payload_size_std)
+    std(sizes) / mean(sizes).
+    payload_size_std on its own is meaningless without knowing the mean; the
+    ratio is the real signal. Beacon check-ins are almost the same size every
+    time, so this is near 0.
+
+B3  payload_repeat_ratio  (NEW)
+    1 - (number of distinct response sizes / number of requests).
+    Near 1 = the server keeps returning byte-identical replies (a beacon that
+    gets "no tasks" back). Near 0 = every response is a different size (normal
+    web content).
+
+B4  upload_download_ratio (NEW)
+    mean(request bytes) / (1 + mean(response bytes)).
+    Normal browsing pulls far more than it pushes, so this is tiny. A beacon
+    that uploads stolen data pushes back. This is your exfiltration signal, and
+    it is free - both numbers are already in the logs and in the browser.
+
+--------------------------------------------------------------------------------
+GROUP C - URL AND HTTP SHAPE (5 features)
+--------------------------------------------------------------------------------
+C1  url_path_entropy      (KEEP - you already have it)
+C2  http_post_ratio       (KEEP - you already have it)
+
+C3  unique_path_ratio     (NEW)
+    distinct paths / number of requests.
+    A beacon hits one endpoint, so this is near 0 (or exactly 1/n). Normal
+    browsing hits many, so it is near 1. It is simpler and more stable than the
+    entropy version, and the two together are stronger than either alone.
+
+C4  uri_len_norm          (NEW)
+    min(mean length of the path+query / 200, 1.0).
+    C2 that carries data in the URL has long URLs; a plain check-in has "/".
+
+C5  uri_char_entropy_norm (NEW)
+    Average Shannon entropy of the characters in the path+query, divided by 6
+    so it sits in 0..1.
+    Base64 or hex-encoded C2 data in the URL gives high character entropy;
+    /images/logo.png gives low.
+
+--------------------------------------------------------------------------------
+GROUP D - REQUEST BEHAVIOUR (1 feature)
+--------------------------------------------------------------------------------
+D1  referrer_absent_ratio (NEW)
+    Fraction of requests with no Referer header.
+    A page-driven request almost always carries a Referer. A beacon fired by a
+    timer almost never does. I checked this on your data: the referrer field is
+    filled in 74% of rows of CTU-13 scenario 9's http.log, so the feature is
+    real and not empty. In the browser it is already available -
+    interceptor.py:500 stores request_headers.
+
+--------------------------------------------------------------------------------
+TOTAL: 18 ML features (5 kept + 13 new)
+--------------------------------------------------------------------------------
+
+TWO OPTIONAL EXTRAS (add only if you want to say 20):
+  E1  query_param_ratio   - fraction of requests containing "?"
+  E2  error_status_ratio  - fraction of non-2xx responses among requests where
+                            the status is known.
+      WARNING on E2: status_code is only filled in about 53% of CTU-13's
+      http.log rows. If you use it, count only the known ones and also add a
+      "status_known_ratio" feature, otherwise the model can learn "this capture
+      has missing statuses" instead of "this traffic is malicious".
+
+--------------------------------------------------------------------------------
+AND THE 6 BROWSER FEATURES STAY WHERE THEY ARE
+--------------------------------------------------------------------------------
+avg_idle_time_ms, user_active_ratio, background_tab_ratio,
+extension_origin_ratio, same_site_ratio, script_initiator_ratio
+
+These stay in the heuristic rule layer, because no public dataset contains them.
+That is not a weakness - it is your paper's whole argument. So in the paper you
+now say:
+
+   "24 features in total: 18 supervised, 6 browser-context rules."
+
+instead of "14 features, 6 of which the model reads". That answers the panel
+directly.
+
+
+================================================================================
+4. WHICH DATASETS (all real, all already downloaded)
+================================================================================
+
+  1. CTU-13 Zeek http.log       D:\CTU-13-HTTP\scenario_{1,2,5,7,9,13}_http.log
+     Labels come from the matching .binetflow file in D:\CTU-13-Dataset\{n}\ ,
+     using the "-CC<n>-" flow label, which marks the real command-and-control
+     channel. Your builder already does this correctly.
+     Families: Neris, an unnamed fast-flux family, Sogou.
+
+  2. Stratosphere malware HTTP captures   D:\CTU-Malware-Captures-HTTP\
+     Botnet-25-1 (Zeus V1, per-request "-CC1/2/3" labels) and Botnet-26.
+     Format is the pipe-separated weblog, not Zeek - your parser
+     scripts/build_c3_c2_traffic_dataset.py already reads it.
+     DO NOT use Botnet-78-1 / 78-2: their C2 server was taken down before the
+     capture, so 99% of those rows are HTTP 403 retry storms, not beaconing.
+
+  3. malware-traffic-analysis.net captures (already extracted into
+     data/_mta_c2_sliding.csv and data/_mta_c2_sliding_batch2.csv)
+     Families: Cobalt Strike, Hancitor. These are the most modern and the most
+     realistic C2 you have.
+
+  4. Benign side: D:\CTU-Normal-HTTP\ (16 CTU-Normal captures) plus the
+     From-Normal hosts inside CTU-13 (147.32.84.134 / .164 / .170).
+
+  5. OPTIONAL external test only (do not train on it):
+     CIC-IDS2017 Friday afternoon botnet slice. Use it as a final "we tested on
+     a corpus we never trained on" paragraph. Skip it if time is short.
+
+Citations you will need in the paper:
+  CTU-13     : Garcia et al., Computers & Security 45:100-123, 2014  (you have)
+  IoT-23     : Parmisano, Garcia, Erquiaga, Stratosphere Laboratory, 2020
+  CIC-IDS2017: Sharafaldin, Lashkari, Ghorbani, ICISSP 2018
+  malware-traffic-analysis.net: cite as a public capture archive, list the
+               capture dates you used.
+
+
+================================================================================
+5. THE PLAN FOR TODAY (with times)
+================================================================================
+
+  STEP 1  (20 min)  Recover the builder, extend it to 18 features.
+  STEP 2  (30 min)  Rebuild the dataset from the raw logs.
+  STEP 3  (30 min)  Train + evaluate with leave-one-group-out.
+  STEP 4  (20 min)  Build a BALANCED test set so "accuracy" means something.
+  STEP 5  (30 min)  Mirror the 18 features in the live feature_engine.py.
+  STEP 6  (20 min)  Run the test suite, make sure nothing broke.
+  STEP 7  (60 min)  Write the numbers into the paper.
+
+If you are running out of time, the order to sacrifice is:
+  drop STEP 5 and 6 (say in the paper that the extended model is evaluated
+  offline and deployment is next), then drop STEP 4, never drop STEP 3.
+
+
+================================================================================
+6. STEP 1 AND 2 - CODE FOR THE NEW FEATURES
+================================================================================
+
+Get the old builder back (it is deleted in your working tree but safe in git):
+
+    git show HEAD:scripts/build_ctu13_http_dataset.py > scripts/build_c3_18feat_dataset.py
+
+Then replace its window_features() function with the one below. Everything else
+in that script - the labelling, the (source, destination) pair grouping, the
+50-request window, the n_flows >= 4 filter - stays exactly the same. Do not
+change the windowing, or your numbers stop being comparable to the old ones.
+
+--------------------------------------------------------------------------------
+import numpy as np
+from urllib.parse import urlparse
+from collections import Counter
+
+def _shannon(values):
+    """Shannon entropy of a list of items, in bits."""
+    if len(values) == 0:
+        return 0.0
+    n = len(values)
+    return float(-sum((c / n) * np.log2(c / n) for c in Counter(values).values()))
+
+def _char_entropy(text):
+    if not text:
+        return 0.0
+    return _shannon(list(text))
+
+def _pct(sorted_vals, p):
+    return float(np.percentile(sorted_vals, p)) if len(sorted_vals) else 0.0
+
+def window_features(sub):
+    """18 real features from one window of HTTP requests.
+    `sub` must have columns: ts_f, method, uri, request_body_len,
+    response_body_len, referrer.  All are already parsed by load_http_log()."""
+    n = len(sub)
+    ts   = sub["ts_f"].to_numpy(dtype=float)
+    resp = sub["response_body_len"].to_numpy(dtype=float)
+    req  = sub["request_body_len"].to_numpy(dtype=float)
+    uris = [str(u) for u in sub["uri"].tolist()]
+    methods = [str(m).upper() for m in sub["method"].tolist()]
+    refs = [str(r) for r in sub.get("referrer", ["-"] * n)]
+
+    # ---------- GROUP A : timing ----------
+    gaps = np.diff(ts) * 1000.0
+    gaps = gaps[gaps >= 0.0]
+    if len(gaps) >= 1:
+        g_mean   = float(np.mean(gaps))
+        g_std    = float(np.std(gaps)) if len(gaps) > 1 else 0.0
+        g_median = float(np.median(gaps))
+        g_mad    = float(np.median(np.abs(gaps - g_median)))
+        srt      = np.sort(gaps)
+    else:
+        g_mean = g_std = g_median = g_mad = 0.0
+        srt = np.array([])
+
+    iat_cv       = round(g_std / g_mean, 6) if g_mean > 0 else 0.0
+    iat_norm_mad = round(g_mad / g_median, 6) if g_median > 0 else 0.0
+    iat_burst    = round((g_std - g_mean) / (g_std + g_mean), 6) if (g_std + g_mean) > 0 else 0.0
+
+    if len(gaps) >= 3:
+        a, b = gaps[:-1], gaps[1:]
+        sa, sb = np.std(a), np.std(b)
+        iat_autocorr = round(float(np.mean((a - a.mean()) * (b - b.mean())) / (sa * sb)), 6) \
+                       if sa > 0 and sb > 0 else 0.0
+    else:
+        iat_autocorr = 0.0
+
+    iat_spread = round((_pct(srt, 90) - _pct(srt, 10)) / g_median, 6) if g_median > 0 else 0.0
+    iat_clock  = round(float(np.mean(np.abs(gaps - g_median) <= 0.10 * g_median)), 6) \
+                 if (len(gaps) and g_median > 0) else 0.0
+
+    if len(gaps) >= 2:
+        pos = gaps[gaps > 0]
+        if len(pos):
+            bins = np.histogram(np.log10(pos + 1.0), bins=10)[0]
+            bins = bins[bins > 0]
+            tot  = bins.sum()
+            ent  = float(-sum((c / tot) * np.log2(c / tot) for c in bins))
+            iat_entropy = round(ent / np.log2(10), 6)
+        else:
+            iat_entropy = 0.0
+    else:
+        iat_entropy = 0.0
+
+    # ---------- GROUP B : size ----------
+    p_mean = float(np.mean(resp)) if n else 0.0
+    p_std  = float(np.std(resp)) if n > 1 else 0.0
+    payload_cv     = round(p_std / p_mean, 6) if p_mean > 0 else 0.0
+    payload_repeat = round(1.0 - (len(set(resp.tolist())) / n), 6) if n else 0.0
+    up_down        = round(float(np.mean(req)) / (1.0 + p_mean), 6)
+
+    # ---------- GROUP C : URL and HTTP shape ----------
+    url_entropy  = round(_shannon(uris), 6)
+    unique_path  = round(len(set(uris)) / n, 6) if n else 0.0
+    post_ratio   = round(sum(1 for m in methods if m == "POST") / n, 6) if n else 0.0
+    uri_len      = round(min(float(np.mean([len(u) for u in uris])) / 200.0, 1.0), 6) if n else 0.0
+    uri_char_ent = round(min(float(np.mean([_char_entropy(u) for u in uris])) / 6.0, 1.0), 6) if n else 0.0
+
+    # ---------- GROUP D : behaviour ----------
+    ref_absent = round(sum(1 for r in refs if r in ("-", "", "(empty)", "nan", "None")) / n, 6) if n else 0.0
+
+    return {
+        "iat_cv":                iat_cv,
+        "iat_bowley_skewness":   round(_bowley_skewness(gaps.tolist()), 6),
+        "iat_norm_mad":          iat_norm_mad,
+        "iat_burstiness":        iat_burst,
+        "iat_autocorr_lag1":     iat_autocorr,
+        "iat_spread_ratio":      iat_spread,
+        "iat_clock_share":       iat_clock,
+        "iat_entropy_norm":      iat_entropy,
+        "payload_size_mean":     round(p_mean, 4),
+        "payload_cv":            payload_cv,
+        "payload_repeat_ratio":  payload_repeat,
+        "upload_download_ratio": up_down,
+        "url_path_entropy":      url_entropy,
+        "unique_path_ratio":     unique_path,
+        "http_post_ratio":       post_ratio,
+        "uri_len_norm":          uri_len,
+        "uri_char_entropy_norm": uri_char_ent,
+        "referrer_absent_ratio": ref_absent,
+        # bookkeeping, never used as model inputs
+        "n_flows":         n,
+        "window_start_ts": float(ts[0]),
+    }
+--------------------------------------------------------------------------------
+
+Then run it, and do the same for the Zeus weblog captures and the MTA captures
+by pointing the same function at those parsers (they produce the same column
+names once parsed - your build_c3_c2_traffic_dataset.py already normalises
+them). Keep the `group` and `family` columns, exactly like
+data/c3_final_expanded_dataset_provenance.csv has them - you need them for
+honest evaluation.
+
+Target output: data/c3_18feat_dataset.csv, about 61,000 rows, about 4,600
+positives, 18 feature columns + C2_beacon + group + family.
+
+
+================================================================================
+7. STEP 3 - TRAINING AND EVALUATION (the part the panel will read)
+================================================================================
+
+Start from scripts/train_c3_expanded4600_loso.py - it already does grouped
+leave-one-out correctly. Change only three things:
+
+    DATASET  = REPO_ROOT / "data" / "c3_18feat_dataset.csv"
+    FEATURES = [ ...the 18 names above, in order... ]
+    MONOTONE = (-1, 0, -1, -1, 0, -1, +1, -1,
+                 0, -1, +1, 0,
+                -1, -1, 0, 0, 0, +1)
+
+About the monotone constraints (this is a quality point the reviewers like):
+you are telling XGBoost "more regular timing can only ever increase the beacon
+score, never decrease it". -1 means "lower feature value = more suspicious",
++1 means "higher value = more suspicious", 0 means "let the model decide".
+This makes the model behave sensibly on inputs it has never seen, which is
+exactly the generalisation problem in your paper. If it hurts your numbers,
+loosen the doubtful ones to 0 - but keep -1 on iat_cv and iat_norm_mad and +1
+on iat_clock_share.
+
+Evaluation rules - DO NOT BREAK THESE, this is where papers get rejected:
+
+  R1. NEVER use a plain random train/test split. Windows from the same capture
+      overlap and will appear on both sides. Split by `group` (capture) always.
+  R2. Report leave-one-GROUP-out, not leave-one-scenario-out only, and say how
+      many folds had enough positives to be meaningful (you use >= 10).
+  R3. Also report leave-one-FAMILY-out. This is the strongest claim you can
+      make: "the model detects a malware family it has never seen".
+  R4. Never report plain accuracy on the imbalanced set. Always-say-benign
+      scores 92.5% there. If a reviewer notices you quoted that, you are done.
+
+Run this and write down: per-fold and mean ROC-AUC, PR-AUC, precision, recall,
+F1, balanced accuracy, recall at 1% false-positive rate.
+
+
+================================================================================
+8. HOW TO HONESTLY GET A NUMBER ABOVE 75%
+================================================================================
+
+This is the important section. There are three legitimate ways to report a
+figure above 75%, and one illegitimate way. Use all three legitimate ones.
+
+--------------------------------------------------------------------------------
+WAY 1 - ACCURACY ON A BALANCED TEST SET  (this is your "accuracy" number)
+--------------------------------------------------------------------------------
+Plain accuracy is only meaningful when the two classes are about equal. So
+build the test set that way:
+
+  - Hold out whole captures (never rows). For example, hold out
+    Zeus-Botnet-25-1 and the Cobalt Strike captures.
+  - Take ALL the C2 windows from those held-out captures - say 2,200.
+  - Randomly sample the SAME number of benign windows from held-out benign
+    captures - 2,200.
+  - Score the model on those 4,400 rows and report plain accuracy.
+
+Now "accuracy" is a real, honest number, and you can write:
+
+  "On a class-balanced held-out test set drawn from captures the model never
+   saw during training, accuracy is XX%."
+
+Expected: 82% to 92%. This is your headline number, and it is defensible.
+Say clearly in the paper that the set is balanced by construction and why.
+
+--------------------------------------------------------------------------------
+WAY 2 - BALANCED ACCURACY ON THE FULL IMBALANCED SET
+--------------------------------------------------------------------------------
+Balanced accuracy = (recall on C2 + recall on benign) / 2.
+
+It is the accepted way to give an "accuracy-like" number on imbalanced data,
+and always-say-benign scores exactly 0.50 on it, so it cannot be gamed.
+
+    from sklearn.metrics import balanced_accuracy_score
+    balanced_accuracy_score(y_true, y_pred)
+
+Expected on your data with 18 features: 0.78 to 0.86 across folds. Report the
+mean and the range.
+
+--------------------------------------------------------------------------------
+WAY 3 - ROC-AUC
+--------------------------------------------------------------------------------
+Your 6-feature model already reaches ROC-AUC 0.9259 on a grouped random split.
+With 18 features expect 0.93 to 0.96 there, and 0.88 to 0.94 under
+leave-one-group-out.
+
+BUT be careful how you word it. ROC-AUC is NOT "accuracy". Write:
+
+  "ROC-AUC 0.9X, i.e. given one real C2 window and one benign window, the model
+   ranks the C2 window higher 9X% of the time."
+
+Never write "9X% detection accuracy" for a ROC-AUC. Your own project notes flag
+this as a mistake that was made before.
+
+--------------------------------------------------------------------------------
+THE ILLEGITIMATE WAY - DO NOT DO THIS
+--------------------------------------------------------------------------------
+Do not report plain accuracy on the imbalanced dataset (it will show ~93-98%
+and it is meaningless - guessing "benign" every time gets that). Do not report
+the random-split number as your main result without also showing the grouped
+one. Do not report the in-sample number at all except to dismiss it. Every one
+of these is checkable in ten minutes by a reviewer with your repository.
+
+--------------------------------------------------------------------------------
+THREE EXTRA THINGS THAT PUSH THE NUMBERS UP, ALL LEGITIMATE
+--------------------------------------------------------------------------------
+T1. Tune the decision threshold, do not leave it at 0.5.
+    Collect out-of-fold predicted probabilities, then pick the threshold that
+    maximises balanced accuracy (or F1) on the TRAINING folds only, and apply
+    that fixed threshold to the test fold. Typical gain: +5 to +10 points of F1.
+    Say in the paper how the threshold was chosen. Choosing it on the test fold
+    is cheating - do not.
+
+T2. Family-balanced sample weights.
+    Zeus has thousands of windows, Hancitor has 39. Without weighting, the model
+    just learns Zeus. Give every family the same total weight:
+        w_i = 1 / (number of windows in that family)
+    then normalise. Your train_c3_expanded4600_loso.py already has a
+    family-balancing switch - turn it on and report both.
+
+T3. Calibrate the probabilities.
+    Wrap the fitted model in sklearn's CalibratedClassifierCV (method="isotonic")
+    fitted on the training folds. This does not change the ranking (ROC-AUC is
+    unchanged) but it makes the 0.45-weighted fusion in risk_fusion.py behave
+    sensibly, and it makes your reliability claim stronger.
+
+--------------------------------------------------------------------------------
+BE HONEST ABOUT WHAT WILL NOT REACH 75%
+--------------------------------------------------------------------------------
+I am not going to promise you numbers I cannot see. Based on your own measured
+runs:
+
+  Very likely above 75%: balanced-set accuracy, balanced accuracy, ROC-AUC.
+  Probably NOT above 75%: F1 and precision on the natural imbalanced set,
+  under leave-one-FAMILY-out. Expect F1 in the 0.55-0.70 range. That is normal
+  and publishable - just report it as F1 and do not call it accuracy.
+
+If a fold comes out badly (Hancitor has only 39 windows, CTU-13 scenario 7 only
+71), say so and exclude it from the mean with a stated rule - you already use
+"at least 10 positives", keep using it and state it.
+
+
+================================================================================
+9. TRAPS TO AVOID (each of these has bitten this project before)
+================================================================================
+
+  W1. Sliding windows leak. If you emit a window every 5 requests from a
+      50-request stream, neighbouring rows share 45 of 50 requests. Never let
+      those land on both sides of a split. Split by capture, always.
+
+  W2. payload_size_mean can encode "which capture is this". 2011 HTTP pages are
+      a different size from 2026 ones. After training, check the feature
+      importance: if payload_size_mean is number 1 by a wide margin, train a
+      second model without it and report both. If the numbers barely move,
+      say so - that is a strong robustness statement.
+
+  W3. Do not add user_agent features. Real browser has one UA. See section 3.
+
+  W4. Do not add features the browser cannot see. Every one of the 18 above can
+      be computed from what interceptor.py already collects. Adding, say,
+      TCP window size or TLS JA3 would make the offline number look great and
+      the live system score 0.
+
+  W5. Do not use Botnet-78-1 / 78-2 as C2 positives - dead server, retry storms.
+
+  W6. No synthetic rows. Every row must come from a real capture. Keep the
+      provenance CSV so you can prove it.
+
+  W7. Keep the deployed model file untouched until you have decided. Write to a
+      new path such as models/c3_xgb_classifier_18feat_20260902.pkl, exactly
+      the way your earlier comparison scripts did.
+
+
+================================================================================
+10. STEP 5 - MAKING THE LIVE SYSTEM MATCH (do not skip if you have time)
+================================================================================
+
+If the paper says the deployed system uses 18 features, the code must too.
+Three small edits:
+
+  E1. core/c3/feature_engine.py
+      Add the 13 new features to compute_features() and to FEATURE_ORDER, using
+      the same formulas as section 6. The events already carry everything you
+      need:
+         timestamp      -> all Group A
+         size_bytes     -> B1, B2, B3
+         request_size   -> B4
+         url            -> C1, C3, C4, C5
+         method         -> C2
+         request_headers-> D1   (read the "Referer" / "referer" key)
+      FEATURE_ORDER then goes from 16 names to 29 (18 ML + 11 heuristic/context).
+
+  E2. core/c3/anomaly_engine.py
+      Set ML_FEATURE_SUBSET to the 18 names, in the same order as training.
+      The loader validates the model's feature names against FEATURE_ORDER, so
+      both files must agree or the model will be refused at start-up - that
+      safety check is already written, let it do its job.
+
+  E3. core/c3/interceptor.py (optional, one line)
+      Carry mime_type through into the final event dict if you decide to add a
+      content-type feature later. Not needed for the 18 above.
+
+  Then run the tests:
+      python -m pytest test/C3/test_c3_units.py -q
+  There are 100 unit tests. If some fail because they assert 16 feature names,
+  update those assertions - that is expected and fine.
+
+
+================================================================================
+11. WHAT TO WRITE IN THE PAPER
+================================================================================
+
+Replace the Table I caption and Section III-B with something like:
+
+  "The system computes 24 features per host over a rolling 50-request window.
+   Eighteen are supervised by the classifier: eight timing-shape statistics,
+   four size statistics, five URL and method statistics, and the
+   referrer-absence ratio. Six are browser-execution-context features - idle
+   time, user-active ratio, background-tab ratio, extension origin, same-site
+   ratio and script-initiator ratio - which no network capture contains and
+   which are therefore consumed by a deterministic rule layer rather than a
+   trained model."
+
+Replace Section IV with:
+
+  "The supervised model is trained on 61,063 windows containing 4,610 real
+   command-and-control windows drawn from four malware families across N
+   captures: Neris, an unnamed fast-flux family and Sogou from CTU-13; Zeus V1
+   from the Stratosphere malware archive; and Cobalt Strike and Hancitor from
+   public 2021 captures. No synthetic traffic is used at any stage. Because
+   windows from one capture are correlated, all evaluation is grouped: we
+   report leave-one-capture-out and leave-one-family-out, and we discard folds
+   with fewer than ten positive windows."
+
+Then give one results table with these columns:
+
+   Fold / family | ROC-AUC | PR-AUC | Precision | Recall | F1 | Bal. acc.
+
+plus one sentence with the balanced-test-set accuracy from section 8, Way 1.
+
+And keep the negative result - it is the most interesting thing in the paper.
+The honest version is now:
+
+  "With 110 positive windows and six features the model was not usable
+   (F1 0.096). With 4,610 positive windows from four families and eighteen
+   features it becomes usable offline (F1 0.5X, balanced accuracy 0.8X), but
+   the browser-context features that carry live detection still cannot be
+   supervised by any public corpus. Scaling the training data closes part of
+   the gap; it does not close the domain gap."
+
+That is a much better paper than either "our model is great" or "our model does
+nothing".
+
+
+================================================================================
+12. IF YOU ONLY HAVE ONE HOUR
+================================================================================
+
+Do exactly this and nothing else:
+
+  1. python scripts/train_c3_expanded4600_loso.py     (already written, 6 feats)
+  2. Take the numbers from data/_xgb_expanded4600_loso_results.json:
+       leave-one-group-out, 13 reliable folds:
+         mean PR-AUC 0.5597, precision 0.502, recall 0.628, F1 0.518
+       grouped random split: ROC-AUC 0.9259, PR-AUC 0.6424, recall 0.844
+  3. Build the balanced held-out set from section 8 Way 1 and compute plain
+     accuracy on it - that is a 15-line script and gives you your >75% number.
+  4. In the paper, replace the 0.158 / 0.096 numbers with these, and say the
+     dataset was expanded from 110 to 4,610 real C2 windows across four
+     families.
+  5. Add one sentence: "the model consumes six of the sixteen features; an
+     eighteen-feature extension is evaluated in ongoing work."
+
+That alone answers most of what the panel said, is completely honest, and takes
+about an hour.
+================================================================================
