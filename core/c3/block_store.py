@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -47,6 +48,18 @@ class C3BlockStore:
     def path(self) -> str:
         return str(self._path)
 
+    @contextmanager
+    def _connect(self):
+        # Same as alert_store.py: commit (or roll back) as sqlite3's own
+        # "with conn:" does, then also close the connection, which that
+        # context manager never does.
+        conn = sqlite3.connect(self._path)
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
+
     def add_block(self, host: str, reason: str = "", score: float = 0.0) -> dict:
         """Persist a block, refreshing its 24h expiry from now. Upsert -- a
         host that is blocked again (e.g. a repeat manual click, or auto-block
@@ -62,7 +75,7 @@ class C3BlockStore:
             "reason": reason,
             "score": float(score),
         }
-        with sqlite3.connect(self._path) as conn:
+        with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO c3_blocked_hosts(host, blocked_at, expires_at, reason, score)
@@ -79,13 +92,13 @@ class C3BlockStore:
 
     def remove_block(self, host: str) -> None:
         host = self._clean_host(host)
-        with sqlite3.connect(self._path) as conn:
+        with self._connect() as conn:
             conn.execute("DELETE FROM c3_blocked_hosts WHERE host = ?", (host,))
 
     def is_blocked(self, host: str) -> bool:
         host = self._clean_host(host)
         now_iso = datetime.now(timezone.utc).isoformat()
-        with sqlite3.connect(self._path) as conn:
+        with self._connect() as conn:
             row = conn.execute(
                 "SELECT 1 FROM c3_blocked_hosts WHERE host = ? AND expires_at > ?",
                 (host, now_iso),
@@ -95,7 +108,7 @@ class C3BlockStore:
     def list_active(self) -> list[dict]:
         """Blocks whose 24h window has not yet expired -- reapplied on startup."""
         now_iso = datetime.now(timezone.utc).isoformat()
-        with sqlite3.connect(self._path) as conn:
+        with self._connect() as conn:
             rows = conn.execute(
                 "SELECT host, blocked_at, expires_at, reason, score FROM c3_blocked_hosts "
                 "WHERE expires_at > ? ORDER BY blocked_at DESC",
@@ -107,7 +120,7 @@ class C3BlockStore:
         """Blocks whose 24h window has passed but the row has not been
         cleaned up yet -- polled by the analyzer loop to auto-unblock."""
         now_iso = datetime.now(timezone.utc).isoformat()
-        with sqlite3.connect(self._path) as conn:
+        with self._connect() as conn:
             rows = conn.execute(
                 "SELECT host, blocked_at, expires_at, reason, score FROM c3_blocked_hosts "
                 "WHERE expires_at <= ?",
@@ -116,7 +129,7 @@ class C3BlockStore:
         return [self._row_to_dict(r) for r in rows]
 
     def _init_db(self) -> None:
-        with sqlite3.connect(self._path) as conn:
+        with self._connect() as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS c3_blocked_hosts (
@@ -144,7 +157,7 @@ c3_block_store = C3BlockStore()
 
 
 # =============================================================================
-# WHAT THIS FILE DOES — plain English summary
+# WHAT THIS FILE DOES -- plain English summary
 # =============================================================================
 #
 # This file remembers which hosts C3 has blocked, on disk, so the block

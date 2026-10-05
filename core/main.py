@@ -1197,19 +1197,6 @@ _TEST_PAGES: dict = {
 <article><h2>Article Title</h2><p>Some content here.</p></article>
 <footer><p>Copyright 2024 My Blog</p></footer>
 </body></html>""",
-
-    "c3-beacon": """<!DOCTYPE html><html><head><title>Beacon Test</title></head><body>
-<h2>C3 Beacon Simulation Test</h2>
-<p>This page simulates C2 beacon behavior for testing purposes.</p>
-<script>
-// Simulate regular beacon requests (for test visualization only)
-let seq = 0;
-function sendBeacon() {
-  console.log('[C3-TEST] Beacon seq=' + seq++);
-}
-setInterval(sendBeacon, 5000);
-</script>
-</body></html>""",
 }
 
 # Realistic C2 test pages live on disk in test/C2/pages/ (built from the real mrd0x
@@ -1615,49 +1602,489 @@ async def _tc_c2_benign_login():
             "browser_url": test_url}
 
 
-async def _tc_c3_beacon_iat():
+# ══════════════════════════════════════════════════════════════════════════════
+# C3: beacon detection, on real traffic
+# ══════════════════════════════════════════════════════════════════════════════
+# Every C3 row runs the PRODUCTION objects: core/c3/feature_engine.py, the
+# deployed XGBoost model (core/c3/ml_classifier.py), analyzer.py's heuristic
+# rules and risk_fusion.py. Nothing re-implements their logic. Inputs are real
+# wherever real traffic exists:
+#   * 120 genuine captured requests: Zeus V1 command-and-control from
+#     CTU-Malware-Capture-Botnet-25-1 and human browsing from CTU-Normal-30
+#     (test/C3/fixtures/parity_sample_real.csv, the train/serve parity fixture);
+#   * the most beacon-like hosts of a real 60-minute browsing session recorded
+#     on this machine (data/_c3_false_positive_run.json).
+# A network capture carries no browser context, so a row that needs one says
+# which it assumes. The two beacons that have to be generated say so in their
+# label, and the [Browser] row sends a real beacon through the live pipeline.
+_C3_FIXTURE = os.path.join(_REPO_ROOT, "test", "C3", "fixtures", "parity_sample_real.csv")
+_C3_FP_RUN = os.path.join(_REPO_ROOT, "data", "_c3_false_positive_run.json")
+# A script injected into a page the user left open: the tab is visible, nobody
+# has touched it for minutes, and page JavaScript sends the requests. This is
+# condition C of scripts/eval_c3_real_world_pipeline.py.
+_C3_CTX_AWAY = {"idle_time_ms": 200_000, "user_was_active": False,
+                "is_background_tab": False, "is_extension_origin": False,
+                "initiator_type": "script"}
+
+
+def _c3_real_requests(sample: str, context: dict) -> list:
+    """One real captured request sequence, as the event dicts
+    core/c3/interceptor.py records (the conversion test_c3_feature_parity.py
+    pins against the training builder)."""
+    import csv
+    with open(_C3_FIXTURE, newline="", encoding="utf-8") as fh:
+        rows = [r for r in csv.DictReader(fh) if r["sample"] == sample]
+    assert rows, f"real sample {sample!r} is missing from {_C3_FIXTURE}"
+    events = []
+    for r in rows:
+        ref = (r["referrer"] or "").strip()
+        events.append({
+            "timestamp": float(r["ts"]), "size_bytes": float(r["resp_bytes"]),
+            "request_size": float(r["req_bytes"]),
+            "url": "https://capture.invalid" + (r["uri"] or "/"),
+            "host": "capture.invalid", "method": (r["method"] or "GET").upper(),
+            "request_headers": {} if ref in ("", "-", "(empty)") else {"Referer": ref},
+            "status": r["status"], **context,
+        })
+    return events
+
+
+def _c3_score(features: dict) -> dict:
+    """Score one window the way analyzer._analyze_once() does once a host's
+    timing sample has matured (20+ requests). The live loop also waits for
+    10 requests and 3 sustained observations before it confirms; the
+    [Browser] row and test/C3/test_c3_units.py exercise that part."""
+    from .c3.analyzer import C3Analyzer
+    from .c3.ml_classifier import c3_ml_engine
+    from .c3.risk_fusion import c3_risk_fusion
+    raw, _ = c3_ml_engine.score(features)
+    assert raw is not None, "the deployed ML model is not loaded (models/c3_beacon_classifier.pkl)"
+    ml = c3_ml_engine.decision_score(raw)
+    heuristic, flags = C3Analyzer._heuristic_score(features)
+    fused = c3_risk_fusion.fuse(ml, None, heuristic,
+                                float(features.get("degraded_context_ratio") or 0.0))
+    return {"raw": raw, "ml": ml, "heuristic": heuristic, "flags": flags,
+            "score": fused["score"], "verdict": fused["verdict"], "detail": fused["detail"]}
+
+
+def _c3_line(s: dict) -> str:
+    return (f"ML {s['ml']:.0%}, heuristic {s['heuristic']:.0%}, "
+            f"risk {s['score']:.0%} {s['verdict']}")
+
+
+def _c3_has_rhythm(flags) -> bool:
+    return any("rhythm" in f or "clockwork" in f for f in flags)
+
+
+async def _tc_c3_real_c2():
     from .c3.feature_engine import compute_features
-    import time as _t
-    now = _t.time()
-    events = [{"timestamp": now + i * 5.0, "url": "http://c2.evil/beacon",
-               "method": "GET", "size_bytes": 256, "idle_time_ms": 4800,
-               "user_was_active": False, "is_background_tab": True, "is_extension_origin": False}
-              for i in range(20)]
-    feats = compute_features(events)
-    assert feats["iat_cv"] < 0.10, f"Beacon IAT CV too high: {feats['iat_cv']}"
-    assert feats["background_tab_ratio"] == 1.0
-    return {"detail": f"20 regular beacons @5s → IAT-CV={feats['iat_cv']:.4f} BG-ratio={feats['background_tab_ratio']:.2f}"}
+    events = _c3_real_requests("zeus_c2_real", _C3_CTX_AWAY)
+    await _step("Loaded 60 real Zeus V1 command-and-control requests "
+                "(CTU-Malware-Capture-Botnet-25-1): one config download, then a check-in "
+                "to the same URI every 317 s. The traffic is real; where it runs is assumed: "
+                "a script in a page the user left open")
+    steady = _c3_score(compute_features(events[:50]))
+    await _step(f"The first 50 requests, the window size the live interceptor keeps: "
+                f"{_c3_line(steady)}")
+    assert steady["ml"] >= 0.50, f"the model did not call real Zeus C2 traffic C2: {_c3_line(steady)}"
+    assert _c3_has_rhythm(steady["flags"]), f"no rhythm found in a real 317 s C2 timer: {steady['flags']}"
+    assert steady["verdict"] == "BEACON", f"real Zeus C2 was not confirmed: {_c3_line(steady)}"
+    changed = _c3_score(compute_features(events[-50:]))
+    await _step(f"The last 50 requests, after the bot's sleep changed from 317 s to about "
+                f"120 s: {_c3_line(changed)}. Still flagged; confirmation waits until the new "
+                f"rhythm is steady")
+    assert changed["ml"] >= 0.50 and changed["verdict"] != "SAFE", \
+        f"real C2 read as SAFE after its sleep changed: {_c3_line(changed)}"
+    return {"detail": f"317 s timer: {_c3_line(steady)} ({', '.join(steady['flags'])}). "
+                      f"After its sleep changed mid-window: {_c3_line(changed)}"}
 
-async def _tc_c3_human_iat():
+
+async def _tc_c3_real_browsing():
     from .c3.feature_engine import compute_features
-    import time as _t
-    now = _t.time()
-    urls = ["https://github.com", "https://google.com", "https://stackoverflow.com",
-            "https://wikipedia.org", "https://news.ycombinator.com"]
-    events = [{"timestamp": now + sum(range(i + 1)) * (3 + i % 7),
-               "url": urls[i % len(urls)], "method": "GET", "size_bytes": 50000 + i * 1200,
-               "idle_time_ms": 100, "user_was_active": True, "is_background_tab": False,
-               "is_extension_origin": False}
-              for i in range(15)]
+    events = _c3_real_requests("ctu_normal_browsing_real", _C3_CTX_AWAY)
+    await _step("Loaded 60 real human browsing requests (CTU-Normal-30). Worst case assumed: "
+                "the user was away, so the idle-user rule is free to fire")
+    s = _c3_score(compute_features(events[-50:]))
+    assert s["heuristic"] == 0.0, f"a beacon rhythm was found in human browsing: {s['flags']}"
+    assert s["ml"] < 0.50, f"the model called human browsing C2: {_c3_line(s)}"
+    assert s["verdict"] == "SAFE", f"real human browsing was flagged: {_c3_line(s)}"
+    return {"detail": f"real browsing, user assumed away: {_c3_line(s)}, no timing rhythm"}
+
+
+async def _tc_c3_real_session():
+    with open(_C3_FP_RUN, encoding="utf-8") as fh:
+        run = json.load(fh)
+    hosts = run.get("flagged") or []
+    assert hosts, f"no hosts are recorded in {_C3_FP_RUN}"
+    await _step(f"A real browsing session recorded on this machine on {str(run.get('generated_at'))[:10]}: "
+                f"{float(run.get('duration_minutes') or 0):.0f} minutes, {run.get('distinct_hosts')} hosts. "
+                f"Re-scoring the {len(hosts)} that looked most beacon-like, from their captured features")
+    rows = []
+    for h in hosts:
+        s = _c3_score(h["features"])
+        rows.append(f"{h['host']} {s['score']:.0%} {s['verdict']}")
+        assert s["verdict"] != "BEACON", f"false BEACON on real browsing: {h['host']}, {_c3_line(s)}"
+    return {"detail": f"{len(hosts)} most beacon-like of {run.get('distinct_hosts')} real hosts, "
+                      f"none BEACON: " + "; ".join(rows)}
+
+
+async def _tc_c3_jitter_beacon():
+    import random
+    from .c3.feature_engine import compute_features
+    # Cobalt Strike's "sleep 5 20" waits 5 s minus a random share of up to 20 %
+    # between check-ins. Seeded, so every run scores the same window.
+    rng = random.Random(20260914)
+    t, events = 1_757_800_000.0, []
+    for _ in range(50):
+        events.append({"timestamp": t, "size_bytes": 48, "request_size": 0,
+                       "url": "https://cdn-updates.example/__utm.gif",
+                       "host": "cdn-updates.example", "method": "GET",
+                       "request_headers": {}, "status": 200, **_C3_CTX_AWAY})
+        t += 5.0 * (1.0 - rng.uniform(0.0, 0.20)) + rng.uniform(0.0, 0.08)
     feats = compute_features(events)
-    assert feats["iat_cv"] > 0.10, f"Human browsing IAT CV too low: {feats['iat_cv']}"
-    assert feats["user_active_ratio"] == 1.0
-    return {"detail": f"15 human browsing events → IAT-CV={feats['iat_cv']:.4f} (irregular, >0.10)"}
+    await _step(f"Generated 50 check-ins spaced like Cobalt Strike's 'sleep 5 20': one GET "
+                f"endpoint, 48-byte replies, no Referer. Timing spread (iat_cv) "
+                f"{feats['iat_cv']:.3f}, too uneven for the clockwork rule")
+    s = _c3_score(feats)
+    assert feats["iat_cv"] >= 0.05, "the jitter did not break clockwork regularity (test input is wrong)"
+    assert "steady rhythm despite jitter" in s["flags"], f"the jittered rhythm was missed: {s['flags']}"
+    assert s["ml"] >= 0.50, f"the model did not call the beacon C2: {_c3_line(s)}"
+    assert s["verdict"] == "BEACON", f"the jittered beacon was not confirmed: {_c3_line(s)}"
+    return {"detail": f"sleep 5 s, 20 % jitter (iat_cv {feats['iat_cv']:.3f}): {_c3_line(s)} "
+                      f"({', '.join(s['flags'])})"}
 
-async def _tc_c3_fusion_beacon():
-    from .c3.risk_fusion import C3RiskFusion
-    fusion = C3RiskFusion()
-    result = fusion.fuse(ml=0.8, reputation=0.9, heuristic=0.7)
-    assert result["verdict"] == "BEACON", f"Expected BEACON, got {result['verdict']}"
-    assert result["score"] >= 0.6
-    return {"detail": f"ml=0.8 rep=0.9 heuristic=0.7 → verdict={result['verdict']} score={result['score']:.2f}"}
 
-async def _tc_c3_fusion_safe():
-    from .c3.risk_fusion import C3RiskFusion
-    fusion = C3RiskFusion()
-    result = fusion.fuse(ml=0.0, reputation=0.0, heuristic=0.0)
-    assert result["verdict"] == "SAFE", f"Expected SAFE, got {result['verdict']}"
-    return {"detail": f"all signals=0 → verdict={result['verdict']} score={result['score']:.2f}"}
+async def _tc_c3_fusion_rules():
+    from .c3.risk_fusion import (BEACON_THRESHOLD, BOTH_SIGNAL_FLOOR, HEURISTIC_WEIGHT,
+                                 ML_CONFIRM_FLOOR, ML_WEIGHT, c3_risk_fusion)
+    cases = {"ML alone": (0.97, 0.0), "rhythm, ML below its C2 line": (0.30, 0.90),
+             "both agree": (0.80, 0.60)}
+    out = {}
+    for name, (ml, h) in cases.items():
+        r = c3_risk_fusion.fuse(ml, None, h)
+        out[name] = r
+        # Each case crosses the BEACON line on the weighted sum alone, so the
+        # verdict below is decided by the both-signal rule, not by low inputs.
+        assert ML_WEIGHT * ml + HEURISTIC_WEIGHT * h >= BEACON_THRESHOLD, name
+        for rep in (0.0, 1.0):
+            r2 = c3_risk_fusion.fuse(ml, rep, h)
+            assert (r2["score"], r2["verdict"]) == (r["score"], r["verdict"]), \
+                f"reputation {rep:.0%} moved the score ({name})"
+    assert out["ML alone"]["verdict"] != "BEACON", out["ML alone"]
+    assert out["rhythm, ML below its C2 line"]["verdict"] != "BEACON", out["rhythm, ML below its C2 line"]
+    assert out["both agree"]["verdict"] == "BEACON", out["both agree"]
+    return {"detail": "; ".join(f"{n}: {out[n]['score']:.0%} {out[n]['verdict']}" for n in cases)
+                      + f". BEACON at {BEACON_THRESHOLD:.0%} needs ML at or above "
+                        f"{ML_CONFIRM_FLOOR:.0%} and a timing rhythm (heuristic "
+                        f"{BOTH_SIGNAL_FLOOR:.0%}+). Reputation 0 % or 100 %: same score"}
+
+
+def _c3_backend_port() -> int:
+    """Port this backend serves on; the live beacon page is fetched from it.
+    The app starts uvicorn with --port 8765 (electron/main.js, run.bat)."""
+    argv = list(sys.argv)
+    for i, arg in enumerate(argv):
+        if arg == "--port" and i + 1 < len(argv):
+            return int(argv[i + 1])
+        if arg.startswith("--port="):
+            return int(arg.split("=", 1)[1])
+    return 8765
+
+
+async def _tc_c3_live_beacon():
+    """End to end through the live pipeline: nothing mocked, nothing replayed."""
+    if not pw_session.is_running and not _session_starting:
+        await session_start()                 # the app's own path: browser + C3
+    for _ in range(120):
+        if pw_session.is_running and c3_interceptor.running and c3_analyzer.running:
+            break
+        await asyncio.sleep(0.5)
+    assert pw_session.is_running and c3_interceptor.running and c3_analyzer.running, \
+        "C3 is not attached to a live browser session; restart the session from Settings"
+    # A fresh *.localhost name per run (Chromium resolves it to this machine):
+    # a new "C2 server" every time, so no earlier run's window, cooldown or
+    # block can affect this one, and a block can never touch 127.0.0.1, which
+    # serves the C2 and C4 test pages.
+    host = f"c3-beacon-{int(_time.time())}.localhost"
+    url = f"http://{host}:{_c3_backend_port()}/c3/test/beacon-page?interval=3000&method=POST"
+    started = datetime.now().isoformat()
+    await _step(f"Opening a beacon page in a second tab, behind the page you are on. Its script "
+                f"POSTs to one fixed endpoint every 3 s with no Referer, the way a compromised page "
+                f"or extension checks in. Host: {host}")
+    await pw_session.open_background_tab(url)
+    row, said = None, set()
+    try:
+        deadline = _time.time() + 180
+        while _time.time() < deadline:
+            await asyncio.sleep(2)
+            row = next((h for h in c3_analyzer.hosts() if h.get("host") == host), None)
+            if not row:
+                continue
+            if "capture" not in said and row.get("request_count"):
+                said.add("capture")
+                await _step(f"The CDP interceptor is capturing the tab's requests "
+                            f"({row.get('request_count')} so far), each with its browser context")
+            if row.get("verdict") == "SUSPICIOUS" and "suspicious" not in said:
+                said.add("suspicious")
+                await _step(f"SUSPICIOUS at {float(row.get('score') or 0):.0%}. C3 now needs "
+                            f"10 requests and 3 observations in a row before it confirms")
+            if row.get("verdict") == "BEACON":
+                break
+        assert row and row.get("verdict") == "BEACON", (
+            f"not confirmed within 3 minutes: {(row or {}).get('verdict')} "
+            f"{float((row or {}).get('score') or 0):.0%} after "
+            f"{(row or {}).get('request_count')} requests")
+        sig = row.get("signal_breakdown") or {}
+        rules = str((row.get("signal_detail") or {}).get("heuristic") or "")
+        assert float(sig.get("ml") or 0.0) >= 0.50, f"ML did not call the live beacon C2: {sig}"
+        assert "rhythm" in rules or "clockwork" in rules, f"no timing rhythm found: {rules}"
+        assert int(row.get("persistence_streak") or 0) >= int(row.get("persistence_required") or 3), row
+        # The alert is written in the same analyzer step as the verdict, after
+        # the threat-intel check; allow a few seconds in case that check is slow.
+        alert = None
+        for _ in range(20):
+            alert = next((a for a in c3_alert_store.list_alerts(50)
+                          if a.get("host") == host and str(a.get("timestamp") or "") >= started), None)
+            if alert:
+                break
+            await asyncio.sleep(0.5)
+        assert alert, "BEACON was confirmed but no alert reached the alert log"
+        blocked = c3_interceptor.is_blocked(host)
+        await _step(f"Confirmed BEACON at {float(row['score']):.0%}, alert #{alert.get('id')} written"
+                    + (". Auto-block blocked the host as designed" if blocked else ""))
+        return {"detail": f"{host}: BEACON at {float(row['score']):.0%} after {row.get('request_count')} "
+                          f"requests (ML {float(sig.get('ml') or 0):.0%}, heuristic "
+                          f"{float(sig.get('heuristic') or 0):.0%}), alert #{alert.get('id')} written"
+                          + ("; auto-block engaged and was lifted after the test" if blocked else ""),
+                "browser_url": url}
+    finally:
+        # Stop the beacon: close only the tab this test opened.
+        for page in list(getattr(pw_session, "_background_pages", [])):
+            if host in (page.url or ""):
+                try:
+                    await page.close()
+                except Exception:
+                    pass
+                pw_session._background_pages.remove(page)
+        if c3_interceptor.is_blocked(host):
+            await c3_interceptor.unblock_host(host)
+
+
+# TC-C3-03, the only C3 case whose beacon leaves this machine. The two rows
+# above beacon to *.localhost, so core/c3/reputation_engine.py's
+# _is_private_or_local() guard skips the threat-intel lookup entirely and that
+# half of the pipeline is never exercised. Here the beacon goes to a real,
+# publicly resolvable ngrok address, so the AbuseIPDB / VirusTotal lookup
+# genuinely runs and its answer is attached to the alert as analyst evidence.
+#
+# Everything is owned by this test: it starts the inert mimicry server
+# (test/C3/tc03_mimicry_server.py) and the tunnel itself, and stops both in its
+# finally block. Nothing harmful is exchanged -- every check-in gets the same
+# fixed, inert reply; see TEST_CASE_03's ethics section.
+#
+# Until 2026-09-17 this scenario existed only behind Detection Lab's "Run Test"
+# button, which shells out to test_c3_real_world_beacon.bat in its own console
+# window, so the Live Test Runner had no row for it. That launcher still works
+# and is unchanged; this row is the same scenario run in-process, so C3's test
+# cases are complete in the runner like C1, C2 and C4's are.
+_C3_NGROK_PORT = 8080
+_C3_NGROK_INTERVAL_MS = 1500   # matches test_c3_real_world_beacon.bat
+_C3_NGROK_JITTER_PCT = 2       # see that file for the measured reason
+
+
+def _c3_find_ngrok() -> Optional[str]:
+    import shutil
+    found = shutil.which("ngrok")
+    if found:
+        return found
+    winget = os.path.join(
+        os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WinGet", "Packages",
+        "Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe", "ngrok.exe")
+    return winget if os.path.isfile(winget) else None
+
+
+def _c3_ngrok_public_url(port: int) -> Optional[str]:
+    """The https address ngrok is currently exposing for `port`.
+
+    Matched on the tunnel's own addr rather than taking tunnels[0], so a tunnel
+    somebody else already had open cannot be mistaken for this one.
+    """
+    from urllib import request as _rq
+    for api_port in (4040, 4041, 4042):
+        try:
+            with _rq.urlopen(f"http://127.0.0.1:{api_port}/api/tunnels", timeout=2) as r:
+                tunnels = json.loads(r.read().decode()).get("tunnels", [])
+        except Exception:
+            continue
+        for t in tunnels:
+            addr = str((t.get("config") or {}).get("addr") or "")
+            if t.get("proto") == "https" and t.get("public_url") and addr.endswith(f":{port}"):
+                return t["public_url"]
+    return None
+
+
+async def _tc_c3_ngrok_beacon():
+    """TC-C3-03: a real beacon over a public tunnel, with a live threat-intel lookup."""
+    ngrok_exe = _c3_find_ngrok()
+    if not ngrok_exe:
+        # An absent optional tool is not a C3 defect, so this reports rather
+        # than fails: a stock machine running "Run All Tests" should not go red
+        # because ngrok was never installed.
+        return {"detail": "not run: ngrok is not installed. Install it with "
+                          "'winget install Ngrok.Ngrok', then authenticate once with "
+                          "'ngrok config add-authtoken <your token>', and this case will "
+                          "deploy a real tunnelled beacon and check the threat-intel lookup."}
+    if not pw_session.is_running and not _session_starting:
+        await session_start()
+    for _ in range(120):
+        if pw_session.is_running and c3_interceptor.running and c3_analyzer.running:
+            break
+        await asyncio.sleep(0.5)
+    assert pw_session.is_running and c3_interceptor.running and c3_analyzer.running, \
+        "C3 is not attached to a live browser session; restart the session from Settings"
+
+    server_proc = ngrok_proc = None
+    host = url = None
+    quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+             "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+    try:
+        await _step(f"Starting the inert C2 mimicry server on port {_C3_NGROK_PORT}. It answers every "
+                    f"check-in with the same fixed reply and never contacts anyone itself")
+        server_proc = subprocess.Popen(
+            [sys.executable, os.path.join(_REPO_ROOT, "test", "C3", "tc03_mimicry_server.py"),
+             "--port", str(_C3_NGROK_PORT), "--interval-ms", str(_C3_NGROK_INTERVAL_MS),
+             "--jitter-pct", str(_C3_NGROK_JITTER_PCT)],
+            cwd=_REPO_ROOT, **quiet)
+        import socket
+        for _ in range(40):
+            await asyncio.sleep(0.5)
+            with socket.socket() as s:
+                s.settimeout(1)
+                if s.connect_ex(("127.0.0.1", _C3_NGROK_PORT)) == 0:
+                    break
+        else:
+            raise AssertionError(
+                f"the mimicry server did not come up on port {_C3_NGROK_PORT} within 20 s "
+                f"(is something else already using that port?)")
+
+        await _step("Opening a public ngrok tunnel to it, so the beacon's destination is a real "
+                    "address on the internet rather than this machine")
+        ngrok_proc = subprocess.Popen([ngrok_exe, "http", str(_C3_NGROK_PORT), "--log=stdout"],
+                                      cwd=_REPO_ROOT, **quiet)
+        for _ in range(30):
+            await asyncio.sleep(1)
+            url = _c3_ngrok_public_url(_C3_NGROK_PORT)
+            if url:
+                break
+        assert url, ("ngrok did not open a tunnel within 30 s. The usual causes are that it has "
+                     "not been authenticated ('ngrok config add-authtoken <your token>') or that "
+                     "another ngrok session is already running (the free plan allows one).")
+        host = (_re.sub(r"^https?://", "", url)).strip("/")
+        # A freshly registered tunnel can report itself up a second or two
+        # before it actually carries traffic.
+        await asyncio.sleep(5)
+
+        await _step(f"Sending the monitored browser to the tunnel: {host}. Its page checks in with a "
+                    f"small fixed POST every {_C3_NGROK_INTERVAL_MS / 1000:g} s, no Referer, "
+                    f"{_C3_NGROK_JITTER_PCT}% jitter, the shape of a Cobalt Strike beacon")
+        started = datetime.now().isoformat()
+        # navigate() (not a background tab) is the capture path this scenario is
+        # built on, and it is what adds ngrok's skip-browser-warning header.
+        await pw_session.navigate(url)
+
+        row, said = None, set()
+        deadline = _time.time() + 210
+        while _time.time() < deadline:
+            await asyncio.sleep(2)
+            row = next((h for h in c3_analyzer.hosts() if h.get("host") == host), None)
+            if not row:
+                continue
+            if "capture" not in said and row.get("request_count"):
+                said.add("capture")
+                await _step(f"Capturing the tunnel's traffic ({row.get('request_count')} requests so far), "
+                            f"each with its browser context")
+            if row.get("verdict") == "SUSPICIOUS" and "suspicious" not in said:
+                said.add("suspicious")
+                await _step(f"SUSPICIOUS at {float(row.get('score') or 0):.0%}. C3 still needs 10 requests "
+                            f"and 3 observations in a row before it will confirm")
+            if row.get("verdict") == "BEACON":
+                break
+        assert row and row.get("verdict") == "BEACON", (
+            f"not confirmed within 3.5 minutes: {(row or {}).get('verdict')} "
+            f"{float((row or {}).get('score') or 0):.0%} after {(row or {}).get('request_count')} requests")
+
+        sig = row.get("signal_breakdown") or {}
+        detail_map = row.get("signal_detail") or {}
+        rules = str(detail_map.get("heuristic") or "")
+        assert float(sig.get("ml") or 0.0) >= 0.50, f"ML did not call the tunnelled beacon C2: {sig}"
+        assert "rhythm" in rules or "clockwork" in rules, f"no timing rhythm found: {rules}"
+
+        # The lookup runs inside the same analyzer step that confirms the
+        # verdict, so give it a few cycles to land on the host row.
+        local_skips = {"", "pending beacon confirmation", "empty host",
+                       "local host - skipped", "local host — skipped",
+                       "Runs once a beacon is confirmed"}
+        rep = ""
+        for _ in range(30):
+            fresh = next((h for h in c3_analyzer.hosts() if h.get("host") == host), None)
+            rep = str(((fresh or {}).get("signal_detail") or {}).get("reputation") or "")
+            if rep and rep not in local_skips:
+                row = fresh or row
+                break
+            await asyncio.sleep(2)
+        # main.py imports only the key setters from this module, not the engine.
+        from .c3.reputation_engine import c3_reputation_engine
+        ti_on = c3_reputation_engine.ti_available()
+        if ti_on:
+            assert rep not in local_skips, (
+                f"the threat-intel lookup did not run for a public host (got {rep!r}); "
+                f"this is the one case that should not take the local-host skip")
+            assert rep.startswith("Clean") or rep.startswith("FLAGGED"), (
+                f"the threat-intel lookup returned no usable source result: {rep!r}")
+
+        alert = next((a for a in c3_alert_store.list_alerts(50)
+                      if a.get("host") == host and str(a.get("timestamp") or "") >= started), None)
+        assert alert, "BEACON was confirmed but no alert reached the alert log"
+
+        blocked = c3_interceptor.is_blocked(host)
+        score = float(row.get("score") or 0)
+        from .c3.analyzer import AUTO_BLOCK_SCORE_FLOOR
+        if c3_analyzer.status().get("auto_block_enabled"):
+            # Auto-block acts only at or above its floor, so the rule is what is
+            # checked here, not the block itself.
+            assert blocked == (score >= AUTO_BLOCK_SCORE_FLOOR), (
+                f"auto-block did not follow its own rule: score {score:.0%}, "
+                f"floor {AUTO_BLOCK_SCORE_FLOOR:.0%}, blocked={blocked}")
+        await _step(f"Confirmed BEACON at {score:.0%} on a public address, alert #{alert.get('id')} written"
+                    + (f", threat intel: {rep}" if rep else ""))
+        return {"detail": f"{host}: BEACON at {score:.0%} after {row.get('request_count')} requests "
+                          f"(ML {float(sig.get('ml') or 0):.0%}, heuristic "
+                          f"{float(sig.get('heuristic') or 0):.0%}); threat-intel lookup "
+                          + (f"ran on the public address: {rep}" if ti_on else
+                             "not configured, so it was skipped (add a key in Detection Lab)")
+                          + f"; alert #{alert.get('id')} written"
+                          + ("; auto-block engaged and was lifted after the test" if blocked else ""),
+                "browser_url": url}
+    finally:
+        try:
+            await pw_session.navigate("about:blank")
+        except Exception:
+            pass
+        if host and c3_interceptor.is_blocked(host):
+            await c3_interceptor.unblock_host(host)
+        for proc in (ngrok_proc, server_proc):
+            if proc and proc.poll() is None:
+                try:
+                    proc.terminate()
+                    for _ in range(20):
+                        if proc.poll() is not None:
+                            break
+                        await asyncio.sleep(0.1)
+                    if proc.poll() is None:
+                        proc.kill()
+                except Exception:
+                    pass
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # C4 — real-world forensic case
@@ -2394,10 +2821,13 @@ _ALL_TEST_CASES = [
     {"id":"c2_scenario_compromised","component":"c2","label":"Scenario: BitB kit on a compromised legit domain (clean URL) → PHISHING","fn":_tc_c2_scenario_compromised},
     {"id":"c2_runtime_keylogger","component":"c2","label":"[Browser] Keylogger + off-origin credential exfil → L6 fires, block overlay shown","fn":_tc_c2_runtime_keylogger,"browser":True},
     {"id":"c2_benign_login","component":"c2","label":"[Browser] Realistic legitimate bank login → stays SAFE (no false positive)","fn":_tc_c2_benign_login,"browser":True},
-    {"id":"c3_beacon_iat","component":"c3","label":"Beacon events: IAT-CV < 0.10 (clockwork timing)","fn":_tc_c3_beacon_iat},
-    {"id":"c3_human_iat", "component":"c3","label":"Human browsing: IAT-CV > 0.10 (irregular)","fn":_tc_c3_human_iat},
-    {"id":"c3_fusion_beacon","component":"c3","label":"Risk fusion: BEACON verdict at high signals","fn":_tc_c3_fusion_beacon},
-    {"id":"c3_fusion_safe","component":"c3","label":"Risk fusion: SAFE verdict at zero signals","fn":_tc_c3_fusion_safe},
+    {"id":"c3_real_c2",      "component":"c3","label":"Real Zeus C2 traffic (CTU Botnet-25-1): 317 s timer → BEACON, still flagged after its sleep changes","fn":_tc_c3_real_c2},
+    {"id":"c3_real_browsing","component":"c3","label":"Real human browsing (CTU-Normal-30), user assumed away → SAFE","fn":_tc_c3_real_browsing},
+    {"id":"c3_real_session", "component":"c3","label":"Real 60-minute browsing session: its most beacon-like hosts stay below BEACON","fn":_tc_c3_real_session},
+    {"id":"c3_jitter_beacon","component":"c3","label":"Cobalt Strike-style beacon (sleep 5 s, 20 % jitter) → steady-rhythm rule + ML → BEACON","fn":_tc_c3_jitter_beacon},
+    {"id":"c3_fusion_rules", "component":"c3","label":"Risk fusion: BEACON needs both engines, reputation never moves the score","fn":_tc_c3_fusion_rules},
+    {"id":"c3_live_beacon",  "component":"c3","label":"[Browser] TC-02 Live beacon in a real tab (POST every 3 s, no Referer) → captured and confirmed BEACON","fn":_tc_c3_live_beacon,"browser":True},
+    {"id":"c3_ngrok_beacon", "component":"c3","label":"[Browser] TC-03 Real-world beacon over a public ngrok tunnel → BEACON with a live AbuseIPDB/VirusTotal lookup","fn":_tc_c3_ngrok_beacon,"browser":True},
     {"id":"c4_live_hist", "component":"c4","label":"[Browser] Auto-launches browser, tours 15 real sites (incl. Sri Lanka), reads history back","fn":_tc_c4_live_history,"browser":True},
     {"id":"c4_live_dl",   "component":"c4","label":"[Browser] Real file download → sha256 hashed off disk","fn":_tc_c4_live_download,"browser":True},
     {"id":"c4_live_mal",  "component":"c4","label":"[Browser] EICAR test file downloaded live → C4's dangerous-download rule fires for real","fn":_tc_c4_live_malware_download,"browser":True},
@@ -2554,7 +2984,7 @@ async def get_pending_installs():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  C3 — Browser Execution-Aware C2 Beacon Detector
+#  C3: Browser Execution-Aware C2 Beacon Detector
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/c3/status")
@@ -2565,6 +2995,36 @@ async def c3_status():
 @app.get("/c3/alerts")
 async def c3_alerts(limit: int = 50):
     return c3_alert_store.list_alerts(limit)
+
+
+# ── Analyst feedback loop (the 2026-09-11 hardening pass, step 8) ─────────
+# Literal paths MUST be registered before /c3/alerts/{alert_id} would match
+# them. There is no such catch-all route on C3 today, but C2's ARCHITECTURE.md
+# records this exact bug biting that component ("Route order matters"), so the
+# ordering is kept deliberately rather than by luck.
+@app.get("/c3/alerts/feedback/stats")
+async def c3_feedback_stats():
+    return c3_alert_store.feedback_stats()
+
+
+@app.get("/c3/alerts/feedback/export")
+async def c3_feedback_export():
+    rows = c3_alert_store.export_feedback()
+    return {"export_type": "c3_analyst_feedback", "export_version": 1,
+            "generated_at": datetime.now().isoformat(),
+            "total_events": len(rows), "events": rows}
+
+
+@app.post("/c3/alerts/{alert_id}/feedback")
+async def c3_set_feedback(alert_id: int, body: dict | None = None):
+    body = body or {}
+    try:
+        return c3_alert_store.set_feedback(
+            alert_id, str(body.get("verdict") or ""), str(body.get("note") or ""))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/c3/hosts")
@@ -2674,11 +3134,26 @@ async def c3_test_beacon_page(interval: int = 30000, method: str = "GET"):
         // heuristic's "same endpoint" rule and the ML model's URL-diversity
         // feature -- i.e. it would make this demo LESS representative of a
         // real beacon, not more realistic.
+        // referrerPolicy 'no-referrer' is REQUIRED for this to represent a
+        // real beacon, not optional realism polish. A real C2 implant is a
+        // process, not a document: it has no referring page, so it sends no
+        // Referer header. A fetch() from this page sends one by default.
+        //
+        // That single header decides the verdict. referrer_absent_ratio is the
+        // model's highest-weighted feature (0.318 importance -- more than all
+        // eight timing features combined, which sum to ~0.30). Measured
+        // 2026-09-11 without this line: a textbook beacon (iat_cv 0.0016,
+        // url_path_entropy 0.0, payload_repeat_ratio 0.98 -- metronomic, one
+        // endpoint, identical replies) scored ML 0.126 and fused to 0.3078,
+        // i.e. SUSPICIOUS, never BEACON. The detector was not wrong; it was
+        // being shown traffic no real beacon produces.
+        // See the 2026-09-11 hardening pass, step 5.
         const res = await fetch('/c3/test/beacon-target', {{
           method: '{method}',
           headers: {headers},
           body: {body},
-          cache: 'no-store'
+          cache: 'no-store',
+          referrerPolicy: 'no-referrer'
         }});
         log.textContent = new Date().toLocaleTimeString() + ' beacon -> ' + res.status + '\\n' + log.textContent;
       }} catch (err) {{
@@ -2740,7 +3215,7 @@ async def c3_test_real_world_beacon():
         "pid": _c3_realworld_proc.pid,
         "detail": "Real-world C2 beacon test launched in a new console window. "
                   "It deploys an ngrok-tunnelled mimicry beacon and drives the "
-                  "live browser to it -- watch the C3 dashboard for detection.",
+                  "live browser to it. Watch the C3 dashboard for detection.",
     }
 
 
@@ -3000,6 +3475,26 @@ async def session_navigate(req: NavigateReq):
     if not pw_session.is_running:
         raise HTTPException(status_code=400, detail="Playwright session not running")
     return {"url": await pw_session.navigate(url)}
+
+
+# Background tabs (the 2026-09-11 hardening pass, step 7). The session drove
+# a single page until 2026-09-11, so background_tab_ratio was structurally 0.0
+# and the background-tab beacon scenario could not be exercised at all.
+@app.post("/session/background_tab")
+async def session_background_tab(req: NavigateReq):
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url required")
+    if not pw_session.is_running:
+        raise HTTPException(status_code=400, detail="Playwright session not running")
+    return await pw_session.open_background_tab(url)
+
+
+@app.post("/session/background_tab/close_all")
+async def session_close_background_tabs():
+    if not pw_session.is_running:
+        raise HTTPException(status_code=400, detail="Playwright session not running")
+    return await pw_session.close_background_tabs()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

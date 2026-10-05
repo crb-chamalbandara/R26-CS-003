@@ -25,7 +25,7 @@ set "MIMIC_PORT=8080"
 :: requested ~3-minute mark while cutting total request volume by ~35%.
 set "INTERVAL_MS=1500"
 :: 2% -- lowered from 5%% on 2026-09-08 after auto-block was measured to only
-:: fire ~76%% of runs at 5%%. Direct probing of the live model
+:: fire ~76%% of runs at 5%%. Direct probing of the model deployed at the time
 :: (models/c3_xgb_scoped_calibrated_20260903.pkl) via core/c3/feature_engine.py
 :: + analyzer.py's real heuristic rules found the cause: at 5%% jitter, the
 :: 50-event window's SAMPLE iat_cv averages right on top of Rule 1's
