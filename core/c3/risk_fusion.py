@@ -1,15 +1,15 @@
 """
 C3 risk fusion.
 
-Combines the two detection signals — the ML (XGBoost) classifier score and the
-heuristic rule score — into one final risk number (0–1) and a verdict:
+Combines the two detection signals -- the ML (XGBoost) classifier score and the
+heuristic rule score -- into one final risk number (0–1) and a verdict:
 SAFE, SUSPICIOUS, or BEACON.
 
-Design rules (fixed, by explicit decision — not learned from data; there is no
+Design rules (fixed, by explicit decision -- not learned from data; there is no
 labelled fusion-outcome dataset in this project to calibrate against):
 
   1. The score is ALWAYS   0.55 * ML  +  0.45 * heuristic.
-     Nothing else moves it — no overrides, no reputation term.
+     Nothing else moves it -- no overrides, no reputation term.
 
      CHANGED 2026-09-03, 0.45/0.55 -> 0.55/0.45, on measurement rather than
      preference. scripts/tune_c3_fusion_weights.py swept the ML weight from
@@ -28,15 +28,26 @@ labelled fusion-outcome dataset in this project to calibrate against):
      0.55 is the maximum; past it precision falls faster than recall rises.
      The cost is small and disclosed: SUSPICIOUS-or-above F1 drifts 0.9451 ->
      0.9384 across the same change. Rolling back means restoring 0.45/0.55
-     here AND pointing anomaly_engine.py at the pre-calibration model — the
+     here AND pointing ml_classifier.py at the pre-calibration model -- the
      two were changed together.
 
-  2. BOTH signals must be involved before a BEACON is confirmed. A single
-     signal on its own is not enough: if the blended score reaches the BEACON
-     threshold but either the ML score or the heuristic score is essentially
-     absent (< BOTH_SIGNAL_FLOOR), the score is held just below the threshold
-     until the missing signal shows up. This is symmetric — it guards against
-     "ML alone" and against "heuristic alone" equally.
+  2. BOTH signals must agree before a BEACON is confirmed. If the blended
+     score reaches the BEACON threshold but either side does not, the score is
+     held just below the threshold until it does:
+       - ML must be at or above ML_CONFIRM_FLOOR (0.50) - i.e. the model itself
+         classifies the window as C2. The ML score arrives on the model's
+         decision scale (ml_classifier.to_decision_scale), where 0.50 is
+         exactly its own threshold.
+       - the heuristic must be at least BOTH_SIGNAL_FLOOR (0.10). Since
+         2026-09-14 the heuristic only scores when the timing has a beacon
+         rhythm (analyzer._heuristic_score), so this means "a rhythm was seen".
+
+     CHANGED 2026-09-14, ML side 0.10 -> 0.50 together with the decision
+     scale. Measured on held-out real windows (LOFO, scripts/
+     eval_c3_real_world_pipeline.py) and real live windows: the decision scale
+     alone made the real Real-World Beacon Test confirmable but also turned an
+     ad-verification CDN into a false BEACON; requiring the model's own "yes"
+     plus a timing rhythm kept every real beacon confirmed and removed it.
 
      MEASURED CONSEQUENCE, 2026-09-03: this guard, not the weight split, is
      what makes BEACON unreachable when no browser context is available. A
@@ -56,7 +67,7 @@ labelled fusion-outcome dataset in this project to calibrate against):
      argument for call-site compatibility, but ignores it for scoring.
 
   4. When there is no ML score at all yet (model not loaded, or the timing
-     window is too small for the model — see analyzer.py), fusion falls back
+     window is too small for the model -- see analyzer.py), fusion falls back
      to heuristic-only. The analyzer's own 10-request confirmation bar and
      timing-maturity ramp gate that path.
 """
@@ -65,7 +76,7 @@ from __future__ import annotations
 
 # Verdict thresholds. These are named constants rather than inline literals
 # because the both-signal guard below MUST stay strictly under BEACON_THRESHOLD
-# to do its job — when the threshold was lowered 0.60 -> 0.52 the old hardcoded
+# to do its job -- when the threshold was lowered 0.60 -> 0.52 the old hardcoded
 # cap of 0.59 silently stopped blocking anything, since 0.59 >= 0.52. Deriving
 # the cap from the threshold makes that class of bug impossible.
 BEACON_THRESHOLD = 0.52
@@ -73,11 +84,31 @@ SUSPICIOUS_THRESHOLD = 0.30
 # Score assigned just below BEACON when one of the two signals is missing.
 UNCONFIRMED_CAP = round(BEACON_THRESHOLD - 0.01, 4)
 
-# A signal contributing less than this is treated as "not really present", so
-# the other signal cannot single-handedly carry the score to BEACON. 0.10 is
-# carried over from the previous ML-only guard (which capped when the heuristic
-# was < 0.10); it is now applied symmetrically to the ML side as well.
+# A heuristic score below this is treated as "not really present", so ML
+# cannot single-handedly carry the score to BEACON. With the rhythm-gated
+# heuristic (analyzer._heuristic_score) the smallest score it can give when a
+# rhythm IS present is 0.20 * 0.70 = 0.14, so in practice this floor reads
+# "the timing has a beacon rhythm".
 BOTH_SIGNAL_FLOOR = 0.10
+
+# The ML side's floor, on the model's decision scale (0.50 = the model's own
+# C2 threshold). Below it the model does not call the window C2, so a strong
+# heuristic cannot carry it to BEACON on its own. See rule 2 above.
+ML_CONFIRM_FLOOR = 0.50
+
+# Share of a window's events whose browser context had to be substituted with
+# benign defaults (interceptor.py's CDP-enrichment fallback) before the verdict
+# is labelled "context unavailable". Added 2026-09-11, Section 8 Step 3.
+#
+# 0.50 = a majority of the window's context is substituted rather than
+# measured, at which point the heuristic score is mostly derived from values
+# nobody observed. Below that the ratio is still reported, so partial
+# degradation stays visible; it just is not called out as a verdict caveat.
+#
+# THIS IS A LABEL, NOT A THRESHOLD ON THE SCORE. Nothing in fuse() changes the
+# number because of it -- Step 3 is explicitly "honesty and visibility", and
+# the scoring change that builds on it is Step 4.
+DEGRADED_CONTEXT_LABEL_THRESHOLD = 0.50
 
 # Fusion weights. Both signals always contribute. The split is no longer a
 # bare design choice: 0.55/0.45 is the measured optimum of a 0.45-0.70 sweep
@@ -97,9 +128,12 @@ _WEIGHT_SUMMARY_LABELS = {
 # Plain-language translation for each internal guard tag appended to detail.
 _OVERRIDE_LABELS = {
     "ml-only cap: awaiting heuristic confirmation":
-        "held just below confirmed — the ML score alone is not enough without a heuristic rule also firing",
+        "held just below confirmed: the ML score alone is not enough, the timing shows no beacon rhythm",
     "heuristic-only cap: awaiting ml confirmation":
-        "held just below confirmed — the heuristic score alone is not enough without ML agreement",
+        "held just below confirmed: the ML model does not classify this traffic as C2 (below its 50% line)",
+    "context-blind bypass: sustained high-confidence ML":
+        "confirmed WITHOUT browser-context evidence: the context could not be measured, "
+        "and the ML score stayed above 0.95 across several consecutive observations",
 }
 
 
@@ -115,6 +149,8 @@ class C3RiskFusion:
         ml: float | None,
         reputation: float | None,
         heuristic: float | None,
+        degraded_context_ratio: float = 0.0,
+        allow_context_blind_beacon: bool = False,
     ) -> dict:
         heuristic_value = float(heuristic or 0.0)
         has_ml = ml is not None
@@ -134,20 +170,31 @@ class C3RiskFusion:
         overrides: list[str] = []
 
         # Both-signal requirement. Only applies when an ML score exists at all
-        # (has_ml). If the blended score reaches BEACON but one side is
-        # essentially absent, hold it just below the threshold and name the
-        # missing signal, so the verdict never rests on a single value.
+        # (has_ml). If the blended score reaches BEACON but one side does not
+        # agree, hold it just below the threshold and name the missing signal,
+        # so the verdict never rests on a single value.
         if has_ml and score >= BEACON_THRESHOLD:
-            if float(ml) < BOTH_SIGNAL_FLOOR:
+            if float(ml) < ML_CONFIRM_FLOOR:
                 score = min(score, UNCONFIRMED_CAP)
                 overrides.append("heuristic-only cap: awaiting ml confirmation")
             elif heuristic_value < BOTH_SIGNAL_FLOOR:
-                score = min(score, UNCONFIRMED_CAP)
-                overrides.append("ml-only cap: awaiting heuristic confirmation")
+                # The one documented exception to the both-signal rule, and it
+                # is OFF unless the analyzer explicitly grants it per window.
+                # The analyzer only grants it when ALL THREE hold: the browser
+                # context was genuinely unavailable (Step 3 made that knowable),
+                # the ML score is >= 0.95, and that has persisted for N
+                # consecutive observations (Step 4). See
+                # analyzer.CONTEXT_BLIND_BYPASS_ENABLED, which is False by
+                # default -- this is a product decision, not a tuning one.
+                if allow_context_blind_beacon:
+                    overrides.append("context-blind bypass: sustained high-confidence ML")
+                else:
+                    score = min(score, UNCONFIRMED_CAP)
+                    overrides.append("ml-only cap: awaiting heuristic confirmation")
 
         score = max(0.0, min(1.0, float(score)))
         # BEACON threshold lowered 0.60 -> 0.52 on 2026-08-27, together with the
-        # RF -> XGBoost swap in anomaly_engine.py. Measured out-of-fold against
+        # RF -> XGBoost swap in ml_classifier.py. Measured out-of-fold against
         # real CTU-13 + IoT-23 C2 windows and 1,200 adversarial benign windows
         # (SPA background sync, third-party analytics, video streaming,
         # extension filter updates, push keepalives):
@@ -159,48 +206,66 @@ class C3RiskFusion:
         # this threshold is ONLY safe with an XGBoost model. Reverting to RF
         # requires restoring 0.60 here. See C3_FullPipeline_XGB_Results.md.
         #
-        # RE-VALIDATED 2026-08-28 after anomaly_engine.py's model swap from the
+        # RE-VALIDATED 2026-08-28 after ml_classifier.py's model swap from the
         # NetFlow-scale XGBoost to the HTTP-scale retrain: max fused score under
         # the new model was 0.5138 on the same 1,200-draw hard-negative sweep --
         # 0.52 is still safely above it. See C3_XGB_HTTP_Deployment_Results.md.
         verdict = ("BEACON" if score >= BEACON_THRESHOLD
                    else "SUSPICIOUS" if score >= SUSPICIOUS_THRESHOLD else "SAFE")
         # Plain-language explanation for end users (shown directly in the
-        # dashboard's Alerts/Host Analysis reasoning text) — internal weight-
+        # dashboard's Alerts/Host Analysis reasoning text) -- internal weight-
         # table keys ("ml") are translated to their display names ("ML") here
         # so the UI never has to know about the underlying key names.
         detail = _WEIGHT_SUMMARY_LABELS.get(_weights_key(weights), "Heuristic rules only")
         if overrides:
             detail += "; " + "; ".join(_OVERRIDE_LABELS.get(o, o) for o in overrides)
 
+        # Context-quality caveat (Step 3). Purely additive text plus a reported
+        # number -- the score and verdict above are already final and are NOT
+        # touched here. When browser context could not be measured, the
+        # heuristic side was computed from substituted benign defaults, which
+        # pushes it toward 0; BOTH_SIGNAL_FLOOR then caps the fused score below
+        # BEACON however confident ML is. That ceiling is a deliberate design
+        # choice when context is genuinely absent, but hitting it by accident
+        # via a transient CDP failure used to be completely invisible. Now it
+        # says so.
+        degraded = max(0.0, min(1.0, float(degraded_context_ratio or 0.0)))
+        if degraded >= DEGRADED_CONTEXT_LABEL_THRESHOLD:
+            detail += (f"; context unavailable for {degraded:.0%} of this window, "
+                       f"browser-context evidence was substituted, not measured")
+
         return {
             "score": round(score, 4),
             "verdict": verdict,
             "detail": detail,
             "weights": weights,
+            "context_degraded_ratio": round(degraded, 4),
+            "context_unavailable": bool(degraded >= DEGRADED_CONTEXT_LABEL_THRESHOLD),
         }
 
 
 c3_risk_fusion = C3RiskFusion()
 
 # =============================================================================
-# WHAT THIS FILE DOES — plain English summary
+# WHAT THIS FILE DOES -- plain English summary
 # =============================================================================
 #
-# This module merges the two detection signals — the ML classifier score and
-# the heuristic rule score — into one final risk number and a verdict:
+# This module merges the two detection signals -- the ML classifier score and
+# the heuristic rule score -- into one final risk number and a verdict:
 # SAFE, SUSPICIOUS, or BEACON.
 #
 # The score is always  0.55 * ML  +  0.45 * heuristic. Nothing else changes it.
 #
-# A confirmed BEACON needs BOTH signals: if the blended score reaches the
-# threshold but one signal is essentially absent, the score is held just below
-# the threshold until the other signal appears. When there is no ML score yet
+# A confirmed BEACON needs BOTH signals to agree: the ML model must itself
+# call the traffic C2 (50% or more - the ML score is shown on the model's
+# decision scale), and the heuristic must have found a beacon rhythm in the
+# timing. If the blended score reaches the threshold without both, it is held
+# just below the threshold until the other side agrees. When there is no ML score yet
 # (model not loaded, or too small a timing window), fusion falls back to
 # heuristic-only and the analyzer's own request-count bar gates it.
 #
 # Threat-intelligence reputation is looked up separately once a BEACON is
-# confirmed and shown to the analyst as evidence — it is not part of this
+# confirmed and shown to the analyst as evidence -- it is not part of this
 # score.
 #
 # The result includes the final score (0–1), the text verdict, a short

@@ -175,8 +175,9 @@ _MIN_CHECKIN_REPLY = b'{"ok":true}'
 # HISTORICAL. Everything above was derived against models/c3_xgb_classifier.pkl,
 # the 6-feature model that is no longer deployed, and it leaned on
 # payload_size_std, which is not even in the current ML feature set. The
-# deployed model is the isotonic-calibrated 18-feature
-# c3_xgb_scoped_calibrated_20260903.pkl.
+# model deployed at that time was the isotonic-calibrated 18-feature
+# c3_xgb_scoped_calibrated_20260903.pkl (since 2026-09-12 it is
+# c3_beacon_classifier.pkl).
 #
 # Re-probed against the DEPLOYED model using a real 35-event run of this
 # server, sweeping payload_size_mean with every other feature held at its
@@ -223,7 +224,7 @@ def _landing_page_html(interval_ms: int, jitter_pct: int) -> str:
     # 31.8%. So the old page was mimicking C2 *badly* on the one signal that
     # matters most.
     #
-    # Measured against the DEPLOYED model (c3_xgb_scoped_calibrated_20260903)
+    # Measured against the model deployed at the time (c3_xgb_scoped_calibrated_20260903)
     # on a real 35-event local run of this exact server, holding every other
     # feature at its genuinely observed value:
     #     referrer_absent_ratio 0.029 (Referer sent)  -> ML 0.3305

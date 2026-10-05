@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
+from datetime import datetime
 from urllib.parse import urlparse
 
 from .block_store import c3_block_store
@@ -20,7 +21,7 @@ from .context_tagger import c3_tagger
 _SKIP_SCHEMES = {"about", "chrome", "devtools", "data", "blob", "file"}
 
 # Per-host windows are capped by count (deque maxlen=50) but that alone does not
-# expire events by age — a host that goes quiet for hours and then gets a couple
+# expire events by age -- a host that goes quiet for hours and then gets a couple
 # of unrelated new requests would otherwise still mix hours-old and fresh events
 # into the same feature computation. host_events()/host_snapshots() additionally
 # exclude anything older than this from what they return, so scoring only ever
@@ -46,6 +47,12 @@ _HOST_HISTORY_MAX = 10_000
 # enough while keeping the added SQLite query cheap and infrequent.
 _EXPIRY_SWEEP_INTERVAL_S = 300.0
 
+# How often evict_idle_hosts() walks the per-host stores looking for hosts that
+# have gone silent. Eviction only ever removes hosts whose newest request is
+# already older than _MAX_EVENT_AGE_S, so they have been unscoreable for at
+# least half an hour by then and one sweep per minute is ample.
+_IDLE_EVICT_INTERVAL_S = 60.0
+
 
 class C3Interceptor:
     def __init__(self) -> None:
@@ -60,10 +67,10 @@ class C3Interceptor:
         self._pending_requests: dict[str, dict] = {}
         self._pending_responses: dict[str, dict] = {}
         self._pending_finished: dict[str, dict] = {}
-        # Per-host rolling windows — each host gets a deque that holds the last 50
+        # Per-host rolling windows -- each host gets a deque that holds the last 50
         # requests so the feature engine always works on a recent, fixed-size sample.
         self._host_windows: dict[str, deque] = {}
-        # Full per-host capture log (see _HOST_HISTORY_MAX) — every request to a
+        # Full per-host capture log (see _HOST_HISTORY_MAX) -- every request to a
         # host until it is blocked, for the Host Analysis view. Not used for
         # scoring; the 50-entry _host_windows above stays the scoring window.
         self._host_history: dict[str, deque] = {}
@@ -73,6 +80,7 @@ class C3Interceptor:
         self._requests_captured = 0      # lifetime counter shown in the status panel
         self._last_purge = time.time()   # timestamp of the last stale-entry cleanup
         self._last_expiry_sweep = 0.0    # throttles sweep_expired_blocks() to once per _EXPIRY_SWEEP_INTERVAL_S
+        self._last_idle_evict = 0.0      # throttles evict_idle_hosts() to once per _IDLE_EVICT_INTERVAL_S
 
     @property
     def running(self) -> bool:
@@ -102,7 +110,7 @@ class C3Interceptor:
         await self._reapply_persisted_blocks()
 
     async def _reapply_persisted_blocks(self) -> None:
-        # Deliberately calls _apply_live_block(), NOT block_host() — this
+        # Deliberately calls _apply_live_block(), NOT block_host() -- this
         # only re-establishes the live route/CDP mechanics for a block that
         # already exists on disk; it must NOT call add_block() again, which
         # would refresh blocked_at/expires_at and silently reset the 24h
@@ -120,12 +128,12 @@ class C3Interceptor:
     async def stop(self) -> None:
         """Detach all CDP sessions and clear state.  Called on session/backend shutdown.
 
-        Clears per-host windows, the live-monitor feed, and blocked-host state too —
+        Clears per-host windows, the live-monitor feed, and blocked-host state too --
         not just the CDP plumbing. Playwright route handlers registered via
         block_host() are bound to self._context, which is torn down along with the
         browser on session stop; if _blocked_hosts/_blocked_routes survived into a
         new session, the dashboard would keep showing hosts as "blocked" while the
-        new context has no route registered for them at all — a false sense of
+        new context has no route registered for them at all -- a false sense of
         protection. Likewise, leaving _host_windows/_recent_requests populated would
         let a fresh session's analysis mix in a previous session's request history.
         """
@@ -163,7 +171,7 @@ class C3Interceptor:
             session = await self._context.new_cdp_session(page)
             # Enable the Network domain so CDP starts firing network events.
             await session.send("Network.enable")
-            # A fresh CDP session starts with no blocked-URL list of its own —
+            # A fresh CDP session starts with no blocked-URL list of its own --
             # push the current one immediately so a newly-opened tab is
             # covered by existing blocks from the first request, not just
             # future ones (Playwright's own context.route() already covers
@@ -189,7 +197,7 @@ class C3Interceptor:
         Block a host confirmed as a beacon for 24 hours, persisted so the
         block survives a restart and expires automatically (see
         block_store.py). This is the public entry point (dashboard manual
-        block, auto-block, and anywhere else in the app) — it both applies
+        block, auto-block, and anywhere else in the app) -- it both applies
         the live block AND (re)persists it, refreshing the 24h window. Use
         _apply_live_block() directly (not this method) when re-establishing
         an already-persisted block on startup, where the original expiry
@@ -207,12 +215,12 @@ class C3Interceptor:
         Registers the actual traffic-blocking mechanics for one host: a
         Playwright context.route() abort handler (primary) plus CDP
         Network.setBlockedURLs on every attached page session (secondary,
-        defense-in-depth — operates at the Chrome network-stack level rather
+        defense-in-depth -- operates at the Chrome network-stack level rather
         than Playwright's own request-interception layer, so it can still
         block a request even if a route() handler is ever bypassed). Neither
         mechanism guarantees interception of traffic that never goes through
-        this browser context at all (e.g. a native OS process, or — per
-        Playwright's own documented limitation — some Service Worker
+        this browser context at all (e.g. a native OS process, or -- per
+        Playwright's own documented limitation -- some Service Worker
         traffic); this blocks what C3 can see and route, which is the
         browser-routed traffic C3's own threat model is about.
         Returns False (and does nothing else) if already live-blocked or if
@@ -228,7 +236,7 @@ class C3Interceptor:
             except Exception:
                 pass
 
-        # Register two URL patterns — one without a port and one with any port.
+        # Register two URL patterns -- one without a port and one with any port.
         patterns = [f"**://{host}/**", f"**://{host}:*/**"]
         registered: list[str] = []
         for pattern in patterns:
@@ -252,7 +260,7 @@ class C3Interceptor:
 
     async def unblock_host(self, host: str) -> None:
         """Remove the traffic block for a host (manual dashboard action, or
-        the automatic 24h expiry sweep — see sweep_expired_blocks())."""
+        the automatic 24h expiry sweep -- see sweep_expired_blocks())."""
         host = self._clean_host(host)
         patterns = self._blocked_routes.pop(host, [])
         for pattern in patterns:
@@ -282,7 +290,7 @@ class C3Interceptor:
             try:
                 await self.unblock_host(host)
                 unblocked.append(host)
-                print(f"[C3] Auto-unblocked {host} — 24h block window expired")
+                print(f"[C3] Auto-unblocked {host}: its 24h block window expired")
             except Exception as exc:
                 print(f"[C3] Failed to auto-unblock {host}: {exc}")
         return unblocked
@@ -313,7 +321,7 @@ class C3Interceptor:
             "running": self._running,
             "hosts_monitored": len(self._host_windows),
             "requests_captured": self._requests_captured,
-            # Full records (host, blocked_at, expires_at, reason, score) —
+            # Full records (host, blocked_at, expires_at, reason, score) --
             # sourced from the persisted store, not just the in-memory
             # _blocked_hosts set, so the dashboard can show real time-until-
             # auto-unblock instead of just a bare hostname.
@@ -322,18 +330,59 @@ class C3Interceptor:
         }
 
     def host_snapshots(self) -> dict[str, list[dict]]:
-        """Return every host's rolling window, age-filtered — used by the analyzer loop."""
+        """Return every host's rolling window, age-filtered -- used by the analyzer loop."""
         return {host: self.host_events(host) for host in self._host_windows}
 
+    def evict_idle_hosts(self, keep: set[str] | None = None, force: bool = False) -> list[str]:
+        """
+        Forget hosts that have gone silent, and report which ones were dropped.
+
+        Nothing here expires on its own: _host_windows and _host_history are
+        created on a host's first request and, until this ran, were only ever
+        cleared by stop(). A normal browsing session touches hundreds of hosts,
+        and each one kept its last 50 requests (about 550 bytes each) plus its
+        capture log for the rest of the session -- measured at roughly 38 MB for
+        800 long-dead hosts, none of which can be scored any more because
+        host_events() already filters their events out by age. The Hosts tab
+        listed all of them too, which is the part a user actually notices.
+
+        A host is dropped only when its newest request is older than
+        _MAX_EVENT_AGE_S, so it has already been invisible to scoring for at
+        least that long. `keep` is the analyzer's set of hosts worth holding on
+        to regardless (blocked hosts, whose log is deliberately frozen at the
+        block boundary, and hosts still showing a live verdict).
+
+        Throttled to one real pass per _IDLE_EVICT_INTERVAL_S; `force` skips the
+        throttle for tests.
+        """
+        now = time.time()
+        if not force and now - self._last_idle_evict < _IDLE_EVICT_INTERVAL_S:
+            return []
+        self._last_idle_evict = now
+        cutoff = now - _MAX_EVENT_AGE_S
+        protected = set(keep or ()) | self._blocked_hosts
+        dropped = []
+        for host in list(self._host_windows):
+            if host in protected:
+                continue
+            window = self._host_windows.get(host)
+            newest = float(window[-1].get("timestamp") or 0.0) if window else 0.0
+            if newest >= cutoff:
+                continue
+            self._host_windows.pop(host, None)
+            self._host_history.pop(host, None)
+            dropped.append(host)
+        return dropped
+
     def hosts_summary(self) -> list[dict]:
-        """One summary row per host — used by the Hosts tab in the dashboard."""
+        """One summary row per host -- used by the Hosts tab in the dashboard."""
         rows = []
         for host, window in self._host_windows.items():
             last = window[-1] if window else {}
             rows.append({
                 "host": host,
                 # Total captured for this host (full log), not just the 50-entry
-                # scoring window — so the Hosts table matches the Host Analysis
+                # scoring window -- so the Hosts table matches the Host Analysis
                 # detail count. window_count keeps the scoring-window size visible.
                 "request_count": self.host_total_count(host),
                 "window_count": len(window),
@@ -347,7 +396,7 @@ class C3Interceptor:
     def host_events(self, host: str) -> list[dict]:
         """
         Stored requests for a single host, excluding anything older than
-        _MAX_EVENT_AGE_S — used for both scoring (via host_snapshots) and the
+        _MAX_EVENT_AGE_S -- used for both scoring (via host_snapshots) and the
         dashboard detail view, so a score is never shown alongside events that
         were not actually part of the window that produced it.
         """
@@ -359,7 +408,7 @@ class C3Interceptor:
         """Every request captured for a host since it was first seen, up to the
         point it was blocked (see _HOST_HISTORY_MAX). Used by the Host Analysis
         detail view. Unlike host_events() this is NOT age-filtered and NOT
-        capped at the 50-entry scoring window — it is the full capture log."""
+        capped at the 50-entry scoring window -- it is the full capture log."""
         return list(self._host_history.get(self._clean_host(host), []))
 
     def host_total_count(self, host: str) -> int:
@@ -372,7 +421,7 @@ class C3Interceptor:
         return len(self._host_windows.get(h, []))
 
     def recent_requests(self, limit: int = 50) -> list[dict]:
-        """The most recent requests across all hosts — used by the Live Monitor tab."""
+        """The most recent requests across all hosts -- used by the Live Monitor tab."""
         return list(self._recent_requests)[:limit]
 
     # ── CDP event handlers ────────────────────────────────────────────────────
@@ -454,8 +503,36 @@ class C3Interceptor:
         self._pending_responses.pop(request_id, None)
         self._pending_finished.pop(request_id, None)
 
-        # Prefer the actual on-wire size; fall back to Content-Length or request body size.
-        size = int(done.get("encoded_size") or resp.get("response_size") or req.get("request_size") or 0)
+        # Response size for the payload features.  Content-Length FIRST, by
+        # deliberate choice -- this is a train/serve parity requirement, not a
+        # preference.
+        #
+        # The payload features (payload_size_mean, payload_cv,
+        # payload_repeat_ratio, upload_download_ratio -- 4 of the model's 20
+        # inputs) were trained on Zeek's resp_bytes: the response BODY length,
+        # uncompressed, headers excluded.  Content-Length is that same quantity.
+        # CDP's encodedDataLength is NOT: it is bytes on the wire, so it is
+        # post-compression AND includes the response headers.  Preferring
+        # encodedDataLength here meant every size feature was computed on a
+        # systematically different scale at serving time than at training time.
+        # test/C3/test_c3_feature_parity.py pins the intended definition -- it
+        # feeds capture resp_bytes in as size_bytes.
+        #
+        # encodedDataLength stays as the fallback for responses that declare no
+        # Content-Length (chunked transfer, some compressed responses).  Small
+        # fixed-size beacon check-ins -- the case that matters here -- almost
+        # always declare one.
+        # Changed 2026-09-11 by the hardening pass, step 2.
+        content_length = int(resp.get("response_size") or 0)
+        encoded_length = int(done.get("encoded_size") or 0)
+        request_body = int(req.get("request_size") or 0)
+        size = content_length or encoded_length or request_body or 0
+        # Record WHICH source produced the number, so a window built from mixed
+        # sources is auditable instead of invisible.
+        size_source = ("content_length" if content_length
+                       else "encoded_length" if encoded_length
+                       else "request_size" if request_body
+                       else "none")
 
         # Ask the context tagger to enrich this request with user-activity information.
         try:
@@ -473,7 +550,7 @@ class C3Interceptor:
             # otherwise-normal traffic. This matches the asymmetric-risk
             # philosophy already used elsewhere in C3 (the early-window cap
             # and the known-safe-host cap both withhold suspicion under
-            # uncertainty rather than manufacture it) — a degraded event
+            # uncertainty rather than manufacture it) -- a degraded event
             # should at worst fail to contribute evidence, never fabricate it.
             context = {
                 "idle_time_ms": 0,
@@ -484,8 +561,12 @@ class C3Interceptor:
                 "initiator_url": "",
                 "page_url": "",
                 "last_event_type": "",
-                "is_degraded_context": True,  # visible for dashboard/debugging;
-                                               # not yet consumed by compute_features()
+                # CONSUMED since 2026-09-11 (Section 8, Step 3): compute_features()
+                # aggregates this into degraded_context_ratio, and the analyzer
+                # labels a window whose context is mostly substituted rather
+                # than letting the benign defaults below pass as measurement.
+                # Until then this field was written and read by nothing.
+                "is_degraded_context": True,
             }
 
         # Build the final event record that goes into the host's rolling window.
@@ -496,6 +577,16 @@ class C3Interceptor:
             "method": req["method"],
             "status": int(resp.get("status") or 0),
             "size_bytes": size,
+            "size_source": size_source,   # which measurement size_bytes came from
+            # BOTH raw measurements are kept alongside the chosen one, so the
+            # train/serve scale question can be re-checked on live traffic at
+            # any time instead of being taken on trust. Step 2's stated
+            # verification ("log both values for a real browsing session, then
+            # compare the resulting payload_size_mean distribution against the
+            # training distribution") needs exactly this pair.
+            # Two ints per request; scripts/verify_c3_payload_scale.py reads them.
+            "content_length": content_length,   # response BODY bytes (what training used)
+            "encoded_length": encoded_length,   # on-wire bytes: compressed, +headers
             "request_size": int(req.get("request_size") or 0),
             "request_headers": req.get("headers") or {},
             "timestamp": float(req["timestamp"]),   # when the request was sent (Unix time)
@@ -507,7 +598,7 @@ class C3Interceptor:
         window = self._host_windows.setdefault(event["host"], deque(maxlen=50))
         window.append(event)
         # Also append to the full per-host capture log for the Host Analysis
-        # view — UNLESS the host is already blocked, in which case the log is
+        # view -- UNLESS the host is already blocked, in which case the log is
         # frozen at the block boundary (a blocked host should produce no new
         # real traffic, and the analyzer likewise stops re-scoring it).
         if event["host"] not in self._blocked_hosts:
@@ -557,7 +648,6 @@ class C3Interceptor:
     @staticmethod
     def _iso(ts: float) -> str:
         """Convert a Unix timestamp to a human-readable ISO string."""
-        from datetime import datetime
         return datetime.fromtimestamp(ts).isoformat()
 
 
@@ -565,18 +655,18 @@ c3_interceptor = C3Interceptor()
 
 
 # =============================================================================
-# WHAT THIS FILE DOES — plain English summary
+# WHAT THIS FILE DOES -- plain English summary
 # =============================================================================
 #
 # This file is the "ears" of C3.  It plugs into the browser using the Chrome
-# DevTools Protocol (CDP) — the same protocol that browser developer tools use —
+# DevTools Protocol (CDP) -- the same protocol that browser developer tools use --
 # and listens to every HTTP request the browser sends, without slowing the
 # browser down or blocking any traffic.
 #
 # For each open tab, it registers three event listeners:
-#   1. requestWillBeSent  — browser is about to send a request
-#   2. responseReceived   — server replied with headers
-#   3. loadingFinished    — all response bytes have arrived
+#   1. requestWillBeSent -- browser is about to send a request
+#   2. responseReceived  -- server replied with headers
+#   3. loadingFinished   -- all response bytes have arrived
 #
 # Once all three events for a given request have arrived, the interceptor
 # combines them into one complete record and stores it in a "rolling window"
@@ -584,7 +674,7 @@ c3_interceptor = C3Interceptor()
 # host.  The analyzer reads these windows every 10 seconds and looks for
 # beacon-like patterns.
 #
-# The interceptor can also BLOCK a host once a BEACON verdict is confirmed —
+# The interceptor can also BLOCK a host once a BEACON verdict is confirmed --
 # it registers a Playwright route handler that aborts every future request to
 # that host.
 # =============================================================================

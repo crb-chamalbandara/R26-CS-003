@@ -53,10 +53,10 @@ class C3ContextTagger:
         # If left as 0, idle_time_ms = now_ms - 0 = unix epoch offset (huge), which
         # makes every request before the first user interaction appear idle-fired.
         self._last_interaction_ms = int(time.time() * 1000)
-        # Per-origin last-interaction time — lets us tell the difference between
+        # Per-origin last-interaction time -- lets us tell the difference between
         # "user clicked on beacon tab" and "user clicked on a different tab".
         self._last_interaction_by_origin: dict[str, int] = {}
-        self._last_event_type = ""   # "click", "keydown", etc. — stored for debugging
+        self._last_event_type = ""   # "click", "keydown", etc. -- stored for debugging
 
     async def setup(self, context) -> None:
         """Install interaction tracking for future and already-restored tabs."""
@@ -133,13 +133,13 @@ class C3ContextTagger:
 
         A navigation is caused by the user (typed URL, clicked a link, submitted
         a form) even though it fires no click/keydown/scroll event on the *new*
-        page — without this, the burst of page-load sub-requests that follows a
+        page -- without this, the burst of page-load sub-requests that follows a
         navigation was wrongly scored as idle-fired, which was a real source of
         false positives on ordinary sites (e.g. Google/YouTube) immediately
         after navigating to them.
 
         Deliberately scoped to the navigated origin only, via the same
-        per-origin map enrich_request() already reads — it must NOT touch the
+        per-origin map enrich_request() already reads -- it must NOT touch the
         global _last_interaction_ms, otherwise a navigation on one site could
         incorrectly mark an unrelated background beacon on a different origin
         as user-driven.
@@ -241,7 +241,7 @@ c3_tagger = C3ContextTagger()
 
 
 # =============================================================================
-# WHAT THIS FILE DOES — plain English summary
+# WHAT THIS FILE DOES -- plain English summary
 # =============================================================================
 #
 # This file answers the question: "Was a real person driving this request,
@@ -249,29 +249,29 @@ c3_tagger = C3ContextTagger()
 #
 # It works in two parts:
 #
-# Part 1 — the JavaScript tracker
+# Part 1 -- the JavaScript tracker
 #   A tiny script is injected into every browser tab.  It listens for clicks,
 #   key presses, scrolls, and touch events and reports each one back to Python
 #   along with the current page URL and whether the tab is visible.
 #
-# Part 2 — enrich_request()
+# Part 2 -- enrich_request()
 #   Every time the interceptor captures a network request, it calls this method
 #   to attach three extra labels:
 #
-#   • idle_time_ms        — how many milliseconds have passed since the user
+#   • idle_time_ms       -- how many milliseconds have passed since the user
 #                           last interacted WITH THIS SPECIFIC SITE.  A C2
 #                           beacon fires even after the user has been idle for
 #                           hours; normal page resources do not.
 #
-#   • user_was_active     — True only if the user interacted in the last 30
+#   • user_was_active    -- True only if the user interacted in the last 30
 #                           seconds AND the tab was visible at the time.
 #
-#   • is_background_tab   — True if the tab is hidden or minimised.  Real C2
+#   • is_background_tab  -- True if the tab is hidden or minimised.  Real C2
 #                           beacons almost always run from background tabs so
 #                           the user does not notice them.
 #
 # The key insight that makes C3 unique: the idle clock is tracked PER WEBSITE.
 # If the user is typing in Google but the beacon tab has been silent for
-# 2 hours, the beacon request is correctly labelled as idle-fired — something
+# 2 hours, the beacon request is correctly labelled as idle-fired -- something
 # a network-level IDS cannot know.
 # =============================================================================

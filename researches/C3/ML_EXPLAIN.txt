@@ -1,0 +1,2565 @@
+===============================================================================
+ C3 COMPONENT — DEEP ANALYSIS FOR RESEARCH / VIVA PANEL
+ Component: C3 — Browser-Execution-Aware C2 Beacon Detector
+ Project:   WebSentinel (4-component browser security suite)
+ Basis:     Actual source code, the training script, the deployed model
+            pickle, tests, and result documents in this repo. Nothing invented.
+ Written:   2026-08-31. Fully rewritten 2026-09-13 against the FINAL deployed
+            model (models/c3_beacon_classifier.pkl) — every number below was
+            re-verified against the current source, not carried over from the
+            previous version of this file. Updated 2026-09-17 for the final
+            pass (see "WHAT CHANGED" immediately below); no measured number
+            changed, because the model itself did not change.
+===============================================================================
+
+WHAT CHANGED IN THE FINAL PASS (2026-09-17)
+  Naming and packaging only. The model is the same model, verified tree for
+  tree, and every threshold and weight is unchanged, so every figure in this
+  document still stands.
+
+    core/c3/anomaly_engine.py   ->  core/c3/ml_classifier.py
+        The old name described the Isolation Forest design C3 dropped on
+        2026-08-27. The file holds a supervised classifier, so the name was
+        misleading. If a panel member greps for the old name, this is why it
+        is gone.
+
+    models/c3_xgb_final_20260912.pkl  ->  models/c3_beacon_classifier.pkl
+        Renamed to match how C2 names its models. Verified by comparing all
+        300 trees and by scoring all 52,909 training windows through both
+        files: identical.
+
+    core/c3/ML_Publish.ipynb + 01_xgboost_model.ipynb  ->  C3_ML_Train.ipynb
+        One notebook now. It trains the model from the CSV, proves the result
+        is the deployed model tree for tree, and computes every number it
+        shows (including a five-classifier comparison with model size and
+        per-window scoring speed). The two old notebooks are archived; the
+        older of them still described the retired 18-feature calibrated model.
+
+    Live Test Runner
+        TC-03 (the real-world beacon over a public ngrok tunnel, the only C3
+        case that exercises the live threat-intel lookup) is now a row in the
+        runner alongside the other six, instead of only being reachable from
+        Detection Lab's separate Run Test button. Verified live on
+        2026-09-17: BEACON at 61% after 42 requests in 72 s, ML 82%,
+        heuristic 36%, AbuseIPDB and VirusTotal both queried and both clean.
+
+    Runtime performance
+        Two measured fixes, neither of which changes a verdict: an unchanged
+        host is no longer re-scored every cycle, and hosts that have gone
+        silent are forgotten instead of accumulating for the whole session.
+===============================================================================
+
+HOW TO READ THIS FILE
+  Section 1  – What the component actually does
+  Section 2  – Input -> Processing -> Output (with flow diagram)
+  Section 3  – Data & features (real numbers from the dataset)
+  Section 4  – The ML model (traced to the actual .pkl and trainer)
+  Section 5  – Evaluation (real metrics from the training script's own output)
+  Section 6  – Design justification
+  Section 7  – Real-world behaviour (normal / suspicious / unknown / bypass)
+  Section 8  – Performance & practicality
+  Section 9  – Security & research validity
+  Section 10 – Panel questions with short answers
+  Section 11 – FINAL OUTPUT
+       A) Detailed technical explanation
+       B) Simple viva explanation
+       C) Flow diagram
+       D) Key facts to memorise
+       E) Top 15 likely panel questions + answers
+       F) 10 tricky panel questions + answers
+       G) Weaknesses to honestly admit
+  Section 12 – Extra Q&A session (ML deep-dive)
+
+  Short glossary of terms used:
+    CDP        – Chrome DevTools Protocol. A built-in Chrome interface that
+                 lets a program watch every network request the browser makes.
+    Beacon     – A hidden program "phoning home" to an attacker on a fixed
+                 timer (e.g. one request every 30 seconds).
+    C2 / C&C   – Command and Control. The attacker's server the beacon talks to.
+    IAT        – Inter-Arrival Time. The gap between two requests.
+    iat_cv     – Coefficient of variation of the gaps = std / mean. Near 0 means
+                 the gaps are almost identical -> machine-timed -> beacon-like.
+    XGBoost    – A supervised machine-learning model (boosted decision trees).
+    Heuristic  – A hand-written if/then rule (not learned from data).
+    LOFO       – Leave-One-Family-Out. Train on some malware families, test on
+                 a family the model has NEVER seen at all (every capture that
+                 family appears in is held out). The headline protocol here.
+    LOPO       – Leave-One-Pair-Out. Train on some C&C (source, destination)
+                 pairs, test on a held-out pair — the SAME malware family may
+                 still be in training. An easier, secondary protocol.
+    Fusion     – Combining the ML score and the heuristic score into one number.
+    eTLD+1     – The registrable domain, e.g. "mail.google.com" -> "google.com".
+
+
+===============================================================================
+ SECTION 1 — WHAT THE COMPONENT ACTUALLY DOES
+===============================================================================
+
+1.1 ONE-LINE PURPOSE
+    C3 sits inside the WebSentinel browser and watches every outgoing network
+    request. For each destination host it asks one question:
+        "Is this a human browsing, or a hidden program phoning home on a timer?"
+    If the evidence is strong enough, and stays strong enough across several
+    separate observations, it raises a BEACON alert and (optionally) blocks
+    that host's traffic for 24 hours.
+
+1.2 THE PROBLEM IT SOLVES
+    Modern C2 malware that lives in the browser (a bad extension, an injected
+    script on a hacked page, a rogue service worker) talks to the attacker over
+    normal HTTPS to trusted domains (Discord, GitHub, Google, Firebase, etc.).
+      - Blocklists fail: the domain is legitimate.
+      - Reputation filters fail: the IP/domain is clean.
+      - Network IDS (Zeek/Suricata) fail: on the wire it looks like normal web
+        traffic, and the IDS cannot see browser state — was the user active?
+        was the tab hidden? did an extension make the request?
+    C3's answer: detect the *behaviour* from *inside* the browser — machine-like
+    timing PLUS browser-execution context (idle user, hidden tab, extension
+    origin, script-initiated, same-site or not).
+
+1.3 ROLE IN THE 4-COMPONENT PROJECT (WebSentinel)
+    C1 – (teammate) URL / phishing analysis
+    C2 – (teammate) Browser-in-the-Browser phishing detection (6-layer pipeline)
+    C3 – THIS ONE. Runtime C2 beacon detection from live browser traffic.
+    C4 – (teammate) Forensic correlation engine (browser artifacts + MITRE).
+    All four share ONE FastAPI backend (core/main.py, port 8765) and ONE
+    Electron dashboard (frontend/dashboard.html). C3 is the only component that
+    monitors *live outgoing network behaviour* in real time. It contributes its
+    alerts to the shared dashboard; it does not depend on C1/C2/C4 to run.
+    (Verified: core/c3/*.py imports nothing from core/c1, core/c2, core/c4.)
+
+1.4 WHY IT IS NECESSARY
+    Without C3, the suite can tell you a page is phishing (C2) or a URL is bad
+    (C1) or reconstruct an incident afterwards (C4) — but nothing watches the
+    browser make a quiet, regular request to an attacker every 30 seconds while
+    you work. C3 is the live "is something phoning home right now?" layer.
+
+
+===============================================================================
+ SECTION 2 — INPUT -> PROCESSING -> OUTPUT
+===============================================================================
+
+2.1 INPUT
+    Source:  The live Playwright/Chromium browser session that WebSentinel
+             drives. C3 attaches a CDP "Network" session to every open tab
+             (core/c3/interceptor.py -> attach_page()).
+    What is captured per request (interceptor.py, _try_finalize()):
+        - url, host, method (GET/POST/...)
+        - status code
+        - size_bytes — chosen with a deliberate priority order: the response's
+          Content-Length header FIRST, falling back to CDP's on-wire
+          encodedDataLength, then to the request body size. This matters: the
+          ML model was TRAINED on Zeek's resp_bytes (uncompressed response
+          BODY length), and Content-Length is that same quantity, while
+          encodedDataLength is post-compression AND includes headers — a
+          silent train/serve scale mismatch if preferred by default. Fixed
+          2026-09-11 (Final_Publish_Plan.txt Section 8, Step 2). Both raw
+          numbers are kept on the event too, so the choice can be re-verified
+          on live traffic at any time (scripts/verify_c3_payload_scale.py).
+        - timestamp (Unix seconds, when the request was sent)
+        - initiator info (script / parser / preload / other) from CDP
+      Then enriched by core/c3/context_tagger.py -> enrich_request():
+        - idle_time_ms   – how long since the user last interacted WITH THIS
+                           tab's origin (per-origin idle clock — key idea:
+                           clicks on google.com do NOT reset evil.com's clock)
+        - user_was_active – recent interaction AND tab visible
+        - is_background_tab – tab hidden/minimised, or request from a worker
+        - is_extension_origin – request came from a chrome-extension:// origin
+        - page_url        – the page the user was on when the request fired
+    A tiny JavaScript snippet (_TRACKER_JS in context_tagger.py) is injected
+    into every tab; it reports click / keydown / scroll / touchstart events
+    back to Python so idle time is real, not guessed. A separate
+    record_navigation() hook fires on every real top-level browser navigation,
+    so the page-load burst right after clicking a link is not mistaken for an
+    idle-fired beacon.
+    Format inside C3: plain Python dicts. Per host, the last 50 requests are
+    kept in a deque (interceptor.py: deque(maxlen=50)) — the "scoring window".
+    A separate, larger log (up to 10,000) is kept only for the dashboard's
+    Host Analysis view; it is NOT used for scoring.
+
+2.2 PROCESSING — STEP BY STEP (core/c3/analyzer.py, _analyze_once())
+    The analyzer loop runs every 10 seconds:
+
+    STEP 0  Sweep expired blocks. Any host whose 24h block window has passed
+            is auto-unblocked (interceptor.sweep_expired_blocks()).
+
+    STEP 1  Get every host's current window (age-filtered: events older than
+            30 minutes are dropped — interceptor.host_events()).
+
+    For each host:
+    STEP 2  Skip conditions:
+              - fewer than 3 events                       -> skip
+              - host already blocked                      -> skip (freeze its
+                last score; do not re-alert on stale data)
+              - brand-new host, <15 events AND first seen <15s ago -> skip
+                (a page-load burst looks like a beacon).
+            Known analytics/CDN hosts (Google Analytics, doubleclick, jsdelivr,
+            fonts.gstatic, youtube.com, accounts.google.com, ...) are NOT
+            skipped — they are fully scored but need a much higher bar (0.85)
+            to be CONFIRMED, because they legitimately produce beacon-shaped
+            traffic (_SAFE_HOST_SUFFIXES, KNOWN_SAFE_CONFIRMATION_BAR).
+
+    STEP 3  Compute the 32 features from the window
+            (core/c3/feature_engine.py -> compute_features()).
+
+    STEP 4  Timing maturity weight w = _timing_confidence(n_events):
+              n <= 6   -> w = 0.0   (too few gaps to trust timing at all)
+              6 < n < 20 -> smooth "smoothstep" ramp 0 -> 1
+              n >= 20  -> w = 1.0
+            This makes the score CLIMB smoothly as evidence accumulates,
+            instead of jumping the instant an event-count threshold is crossed.
+            For n < 6 the timing features are neutralised (_strip_timing_features:
+            iat_cv set to 1.0 = "irregular/unknown", not 0.0 = "perfect beacon").
+
+    STEP 5  HEURISTIC score (analyzer.py -> _heuristic_score()), reworked
+            2026-09-14. RHYTHM FIRST: a beacon repeats on a timer, so nothing
+            is counted unless the timing has a beacon rhythm. (Before, "user
+            idle" alone scored +0.25 — that, plus a high ML score, confirmed an
+            ad-verification CDN with random timing as a BEACON on live traffic.)
+              Rhythm (one required; needs a real timing sample, user not
+              interacting, messages < 8 KB):
+                (+0.30) "clockwork timing (near-identical gaps)"  iat_cv < 0.05
+                (+0.20) "steady rhythm despite jitter"  NEW: iat_norm_mad <= 0.20,
+                        iat_spread_ratio <= 0.70, median gap >= 0.5 s — catches
+                        "sleep + jitter" beacons (limits from jitter maths:
+                        up to ~+/-40% jitter passes; not fitted to test data)
+              Supporting evidence (only with a rhythm):
+                (+0.25) "fires while the user is idle"   (foreground, idle > 30 s)
+                (+0.20) "runs in a background tab"      (+0.08 if an extension)
+                (+0.10) "extension traffic in the foreground"
+                (+0.05) "started by page scripts"
+                (+0.10) "same endpoint every time"  — measured WITHOUT the query
+                        string, so a cache-busting beacon still counts
+                (+0.08) "mostly POST check-ins"
+                (+0.08) "frequent requests (over 500/hour)"
+              (x0.70) "same-site sync (score reduced)" — SPA polling its own
+                        backend; applied last, never adds.
+            Output: a score 0..1 plus the plain-language names of the rules
+            that fired ("flags"), shown as-is in the dashboard.
+
+    STEP 6  ML score (core/c3/ml_classifier.py -> C3XGBoostEngine.score()).
+            Runs only if the model is loaded AND n_events >= 6.
+            Feeds 20 features to the XGBoost model -> raw P(C2) in 0..1, then
+            decision_score() moves it onto the DECISION SCALE: the model's own
+            threshold (0.137) becomes exactly 50%. Order never changes (all
+            ROC/PR figures stand); only the 50% mark moves to where the model
+            actually decides. This is the ML number the dashboard shows.
+
+    STEP 7  FUSION (core/c3/risk_fusion.py -> C3RiskFusion.fuse()).
+              score = 0.55 * ML + 0.45 * heuristic      (ALWAYS this formula)
+              If no ML score yet: score = heuristic only.
+              BOTH MUST AGREE: if the blended score reaches the BEACON
+              threshold (0.52) but the ML score is below 0.50 (the model does
+              not call it C2 — ML_CONFIRM_FLOOR) or the heuristic is below 0.10
+              (no rhythm — BOTH_SIGNAL_FLOOR), the score is held at 0.51
+              (UNCONFIRMED_CAP) and the detail text names the side that did
+              not agree. Neither signal alone can confirm a beacon.
+            Timing maturity: the displayed ML score, the displayed heuristic
+            score and the fused score are all multiplied by w, so the three
+            climb together and keep their proportion. At w = 1.0 nothing is
+            scaled.
+
+    STEP 8  VERDICT from the final score:
+              0.00 - 0.29  -> SAFE
+              0.30 - 0.51  -> SUSPICIOUS
+              0.52 - 1.00  -> BEACON
+            Extra gates, applied in this order:
+              - Never CONFIRM BEACON on fewer than 10 requests (drop to
+                SUSPICIOUS, but let the score keep climbing).
+              - Known-safe host below 0.85 -> capped at 0.51, verdict SUSPICIOUS.
+              - TEMPORAL PERSISTENCE GATE (added 2026-09-11): a BEACON verdict
+                also needs PERSISTENCE_CYCLES = 3 consecutive cycles in which
+                this host produced NEW traffic scoring at or above SUSPICIOUS.
+                A single unlucky window can no longer confirm a beacon; a real
+                beacon simply takes a little longer, while bursty
+                false-positive shapes (web-push keep-alives, extension
+                filter-list updates) that fire once and stop never accumulate
+                the streak. The streak advances only when genuinely new
+                traffic arrives — re-scoring a quiet host on an unchanged
+                window does not inflate it.
+            CONTEXT-BLIND BYPASS (CONTEXT_BLIND_BYPASS_ENABLED, OFF by
+            default): an opt-in mechanism that would let a BEACON confirm on
+            ML alone (>=0.95, sustained for 3 cycles) when browser context was
+            genuinely unmeasurable. Measured but not enabled by default — see
+            Section 4.7 and 6.7.
+
+    STEP 9  If verdict == BEACON  (analyzer.py -> _handle_beacon()):
+              - 60-second per-host cooldown (no alert spam).
+              - Run the THREAT-INTEL lookup NOW (only now, to save API quota):
+                AbuseIPDB (on the resolved IP) + VirusTotal (on the domain),
+                concurrently (core/c3/reputation_engine.py -> score_beacon()).
+                Result is attached to the alert as EVIDENCE. It does NOT change
+                the score or the verdict (already decided).
+              - Save the alert to SQLite (core/c3/alert_store.py,
+                ~/.websentinel/c3_alerts.db).
+              - If auto-block is ON and score >= 0.75: block the host — abort
+                every future request to it via Playwright route interception +
+                CDP Network.setBlockedURLs (interceptor.block_host()). Persisted
+                to ~/.websentinel/c3_blocks.db with a 24-hour auto-expiry.
+              - Broadcast the alert over WebSocket to the dashboard (pop-up).
+            An analyst can later mark a saved alert "correct" or
+            "false_positive" (+ a note) through the dashboard — see 2.3.
+
+2.3 OUTPUT
+    Per-host result dict (analyzer.py, stored in self._host_scores):
+        {
+          host, score (0..1), verdict (SAFE/SUSPICIOUS/BEACON), detail (text),
+          signal_breakdown: { ml, heuristic, reputation, reputation_sources },
+          signal_detail:    { ml, heuristic, reputation, fusion, context } (text),
+          features: {32 values}, request_count, timestamp,
+          context_degraded_ratio, context_unavailable,
+          persistence_streak, persistence_required
+        }
+    Exposed via FastAPI (core/main.py):
+        GET  /c3/status                    - counts, model loaded?, auto-block
+                                             state, live thresholds/weights
+        GET  /c3/hosts                     - all hosts ranked by score
+        GET  /c3/hosts/{host}              - full detail + event timeline
+        GET  /c3/alerts                    - saved BEACON alerts
+        GET  /c3/alerts/feedback/stats     - analyst-labelled correct/FP counts
+                                             and the measured FP rate over
+                                             LABELLED alerts only
+        GET  /c3/alerts/feedback/export    - every analyst-labelled alert, for
+                                             an offline audit
+        POST /c3/alerts/{id}/feedback      - analyst marks one alert
+                                             "correct" or "false_positive"
+                                             (+ optional note). EVIDENCE ONLY —
+                                             see 6.8; never feeds back into
+                                             scoring or retraining automatically
+        GET  /c3/requests?limit=80         - live request feed
+        POST /c3/hosts/{host}/block        - manual block
+        POST /c3/hosts/{host}/unblock
+        POST /c3/auto-block/enable | /disable
+        POST /c3/collect/start|stop|export   - label & export training rows
+        POST /c3/test/real-world-beacon      - launch the ngrok C2-mimic test
+    WebSocket messages: c3_status, c3_alert, c3_unblocked.
+
+    HOW OTHER COMPONENTS USE C3'S OUTPUT:
+    C3's alerts appear on the shared WebSentinel dashboard alongside C1/C2/C4.
+    There is NO code path where C1, C2, or C4 read C3's score programmatically —
+    integration is at the UI / shared-backend level, not a data dependency.
+    (If a panel asks "how do the components talk?": one FastAPI process, one
+    dashboard, one alert stream. C4 could correlate C3 alerts forensically, but
+    that wiring is not in the current C3 code.)
+
+
+===============================================================================
+ SECTION 3 — DATA & FEATURES
+===============================================================================
+
+3.1 THE TRAINING DATASET (used by the deployed ML model)
+    File:        data/c3_18feat_dataset.csv
+    Built by:    scripts/build_c3_18feat_dataset.py
+    Raw sources: CTU-13 (Stratosphere Laboratory, CTU University, Prague,
+                 2011) — real malware network captures, using the Zeek
+                 http.log files, NOT the NetFlow .binetflow byte totals —
+                 PLUS three further public Stratosphere Malware Capture
+                 Facility captures for additional Zeus-family diversity:
+                 Botnet-25-1 (ZeusV1), Botnet-26 (ZeusB26), Botnet-78-1/2
+                 (Zeus78). NO synthetic rows anywhere (matches the project's
+                 strict no-synthetic-data policy).
+
+    Corpus size (raw, after the n_flows>=4 filter, printed by the trainer):
+        Total windows:                62,321
+        C2-positive windows:           6,890
+        Benign windows:               55,431
+        Malware families represented:      6  (ZeusV1, Neris, FastFlux,
+                                               Sogou, ZeusB26, Zeus78)
+        CTU-13 scenarios used:      1, 2, 5, 7, 9, 13  (the 6 of 13 whose C2
+                                    channel rides over HTTP — the rest use
+                                    IRC/custom-TCP/RDP and would contribute
+                                    zero labelled rows to a Zeek http.log)
+
+    LABEL-INTEGRITY FIX (2026-09-12 — see 3.4 for the full story): the label
+    is "confirmed C&C" — a window is positive only if at least one of its
+    requests carries CTU-13/Stratosphere's own trusted "-CC<n>-" ground-truth
+    marker (ANY-based, not majority: a real check-in is often 1-2 requests
+    inside a larger window). This did NOT change what counts as positive — it
+    changed what is allowed to count as a NEGATIVE example (see 3.4).
+
+3.2 SCOPE: WHAT THE DEPLOYED MODEL ACTUALLY TRAINS AND IS MEASURED ON
+    Not every one of the 6,890 raw positive windows is used for the headline
+    numbers. The scope rule keeps only ACTIVE, PERIODIC C&C channels — ones
+    that were answered at least once (status_known_ratio > 0) and where at
+    least one answer succeeded (error_status_ratio < 1.0). This excludes dead
+    or never-answered channels whose timing looks nothing like a beacon (see
+    3.5) without being circular with the timing features used to detect one.
+
+        In scope:      310 C2 windows, 40 independent C&C (source,
+                       destination) pairs, 52,599 benign windows
+        Out of scope:  6,580 C2 windows (dead-channel / never-answered —
+                       reported separately in Section 5, not silently dropped)
+
+    Per-family split of the 310 in-scope positives:
+        ZeusV1     226      Neris       65      FastFlux    12
+        Sogou        3      ZeusB26      3      Zeus78       1
+    (The last three are EXCLUDED from every averaged metric by a
+    pre-declared rule — fewer than 10 test positives is not reliable — but
+    are still reported, never hidden. See Section 5.)
+
+    A per-pair cap (MAX_WINDOWS_PER_PAIR = 150) prevents one very active C&C
+    session from pseudo-replicating itself into the majority of the positive
+    class — an earlier dataset generation had 95% of its C2 windows from a
+    single (source, destination) pair.
+
+3.3 BALANCED OR IMBALANCED?
+    Heavily imbalanced: 310 in-scope positives vs 52,599 in-scope negatives
+    (~1 : 170). Handled by per-class and per-family re-weighting at training
+    time (WEIGHT_SCHEME = "equal_family" — see Section 4.5), NOT by
+    duplicating or inventing rows.
+
+3.4 THE LABEL-INTEGRITY DEFECT AND ITS FIX (the single biggest correction
+    behind this model, and the reason most of the accuracy gain was a
+    measurement fix, not a smarter model)
+    The dataset builder used to call a window "benign" unless it carried the
+    "-CC<n>-" tag. Everything ELSE the capture's own ground truth attributed
+    to the infected host — click-fraud polling, binary-download retries, spam
+    probes — was therefore handed to the model as an example of ordinary
+    HUMAN browsing.
+        source                       confirmed C&C     bot traffic called benign
+        CTU-13 s1/s2/s5/s7/s9/s13         3,957 flows         22,143 flows
+        Botnet-25-1 (ZeusV1)             11,228 rows          28,681 rows
+        Botnet-78-1/2 (Zeus78)                0 rows         371,151 rows
+        TOTAL requests reclassified as UNDETERMINED:                273,944
+    That traffic is periodic, referrer-less, single-endpoint — the exact
+    shape this detector exists to find. Scoring it as a false positive was
+    measuring how incomplete the capture's OWN labelling is, not how often the
+    detector is wrong. It is equally unsafe to call it positive (the ground
+    truth never confirmed a C&C channel there either), so it is now dropped as
+    UNDETERMINED and recorded in a new `botnet_noncc_ratio` diagnostic column.
+    This removes NEGATIVES only — the positive class did not move by a single
+    window (6,890 before and after the fix, exact per-family match). Three
+    captures turned out to contain no clean browsing at all: zeus-25-1 kept 1
+    of 1,065 "benign" windows, zeus-26 and zeus-78-1/2 kept none.
+    Measured effect, model held completely fixed, only the corpus swapped:
+        | config              | LOFO acc | precision | recall | F1     | AUC   |
+        | old corpus          | 0.7784   | 0.8071    | 0.8105 | 0.7872 | 0.9134|
+        | corrected corpus    | 0.8654   | 0.8185    | 0.9444 | 0.8761 | 0.9571|
+    +0.089 F1 and +0.044 AUC from the DATA fix alone. The detector was never
+    as weak as the old numbers said.
+    Checked before concluding the corpus was fixed in size: the unused CTU-13
+    scenarios (3,4,6,8,10,11,12) have ZERO port-80 "-CC" flows (their C&C is
+    IRC or a custom port — out of an HTTP detector's scope), and the unused
+    Stratosphere captures carry no "-CC" ground truth at all. 310 in-scope C2
+    windows is the real ceiling of what exists on disk; no synthetic traffic
+    was added to raise it.
+
+3.5 THE SCOPE-RULE FIX (a second, smaller correction, same date)
+    The scope rule used to be just "error_status_ratio < 1.0", meant to read
+    "this channel completed at least one exchange". But the feature that
+    computes error_status_ratio DEFAULTS it to 0.0 when NO response status was
+    seen at all — so a channel NOBODY EVER ANSWERED scored identically to a
+    perfectly healthy one and was wrongly kept in scope. Measured: 20 Neris
+    windows to 195.190.13.70/78 carry status "-" and zero response bytes on
+    all 445 of their requests — the server never replied. Adding
+    "status_known_ratio > 0" closes this, moving exactly 20 windows (all
+    Neris) out of scope, treated the same way Zeus78's all-403 dead channel
+    already was.
+
+3.6 THE 32 LIVE FEATURES (core/c3/feature_engine.py, FEATURE_ORDER)
+    Timing (from inter-arrival times, ms):
+      1  iat_mean_ms          average gap between requests
+      2  iat_cv               std/mean of the gaps. ~0 = metronome = beacon.
+      3  iat_bowley_skewness  quartile-based skew of the gaps (robust)
+      4  iat_mad_ms           median absolute deviation of the gaps (robust)
+    Rate / size / method:
+      5  requests_per_hour    extrapolated from the window span (60s floor)
+      6  payload_size_mean    average on-wire bytes
+      7  payload_size_std     variation in size
+      8  http_post_ratio      fraction of requests that are POST
+    Browser-execution context (C3's unique signals — a network IDS cannot get
+    these):
+      9  avg_idle_time_ms     average user idle time across the window
+      10 user_active_ratio    fraction of requests where user was active
+      11 background_tab_ratio fraction fired from a hidden tab
+      12 extension_origin_ratio fraction from a chrome-extension:// origin
+      13 degraded_context_ratio share of this window's events whose browser
+                              context could not be measured at all and was
+                              substituted with benign defaults (added
+                              2026-09-11). DIAGNOSTIC ONLY — labels verdict
+                              quality in risk_fusion.py; not read by the model.
+    URL / burst:
+      14 url_path_entropy     Shannon entropy over distinct URL paths+query.
+                              Same endpoint every time -> 0 (beacon-like).
+      15 request_burst_count  count of "3+ requests within 2s" bursts
+    Deterministic browser ground-truth ("Plane 2" — measured from CDP/DOM,
+    not learned):
+      16 same_site_ratio      fraction whose destination eTLD+1 == the page's
+                              eTLD+1 (uses the real public suffix list via
+                              tldextract, so .co.uk etc. are handled right)
+      17 script_initiator_ratio fraction whose CDP initiator.type == "script"
+    Scale-free "Plane 3" features (added 2026-09-02 for the supervised model —
+    ratios/shares/normalised entropies, deliberately NOT absolute byte counts
+    or intervals, because those do not transfer from a 2011 capture to a 2026
+    browser):
+      18 iat_norm_mad         MAD / median of the gaps — survives one long pause
+      19 iat_burstiness       (std-mean)/(std+mean): -1 regular, +1 bursty
+      20 iat_autocorr_lag1    correlation of the gap sequence with itself, lag 1
+      21 iat_spread_ratio     (p90-p10)/median of the gaps — robust spread
+      22 iat_clock_share      share of gaps within +/-10% of the median gap
+      23 iat_entropy_norm     normalised entropy of log-binned gaps
+      24 payload_cv           response-size std/mean (scale-free)
+      25 payload_repeat_ratio 1 - distinct response sizes/n — near 1 = identical
+      26 upload_download_ratio mean request bytes / mean response bytes
+      27 unique_path_ratio    distinct paths / n — near 0 = one endpoint
+      28 uri_len_norm         mean path+query length / 200, capped at 1
+      29 uri_char_entropy_norm mean character entropy of path+query / 6
+      30 referrer_absent_ratio share of requests with no Referer header
+    Cache-busting-evasion features (added 2026-09-11 — see 6.4):
+      31 path_only_entropy     url_path_entropy with the query string removed
+      32 unique_path_only_ratio unique_path_ratio with the query string removed
+
+    WHICH FEATURES ARE USED WHERE:
+      ML model reads 20 (ML_FEATURE_SUBSET, Section 4.2): iat_cv,
+        iat_bowley_skewness, iat_norm_mad, iat_burstiness, iat_autocorr_lag1,
+        iat_spread_ratio, iat_clock_share, iat_entropy_norm, payload_size_mean,
+        payload_cv, payload_repeat_ratio, upload_download_ratio,
+        url_path_entropy, unique_path_ratio, http_post_ratio, uri_len_norm,
+        uri_char_entropy_norm, referrer_absent_ratio, path_only_entropy,
+        unique_path_only_ratio.
+      Heuristic rules use: iat_cv, iat_mean_ms, user_active_ratio,
+        background_tab_ratio, extension_origin_ratio, url_path_entropy,
+        avg_idle_time_ms, payload_size_mean, http_post_ratio,
+        requests_per_hour, script_initiator_ratio, same_site_ratio.
+      Used to LABEL verdict quality, not to score: degraded_context_ratio.
+      Used by NEITHER directly: iat_mad_ms, payload_size_std,
+        request_burst_count — absolute-scale predecessors of iat_norm_mad /
+        payload_cv, or (request_burst_count) removed from the model in 2026
+        for acting as a near-binary cliff. Kept for the dashboard's
+        feature-detail display and dataset backward-compatibility.
+
+3.7 PREPROCESSING / FILTERING / THRESHOLDS
+    - Events sorted by timestamp before IAT computation.
+    - NaN / Inf rejected (feature_engine._safe_float) so one bad reading can't
+      crash the whole analyzer cycle.
+    - requests_per_hour denominator floored at 60s (stops a 2-second page-load
+      burst extrapolating to 36,000/hr).
+    - Age filter: events older than 30 min excluded from the scoring window.
+    - n_flows >= 4 filter on the training data (removes degenerate windows).
+    - Small-window handling: < 6 events -> timing features neutralised.
+    - Fixed thresholds: BEACON 0.52, SUSPICIOUS 0.30, auto-block 0.75,
+      confirmation needs >= 10 requests AND 3 consecutive sustained cycles,
+      known-safe bar 0.85; for BEACON the ML score must reach 0.50 on the
+      decision scale and the heuristic 0.10 (= a timing rhythm); the ML
+      model's own threshold is set by a 5% false-positive budget (raw 0.137,
+      shown as 50% — see Section 4.5).
+    NO normalisation/scaling of features — XGBoost (trees) does not need it,
+    and the heuristic rules compare against human-readable absolute values.
+
+3.8 DATA LEAKAGE / UNREALISTIC ASSUMPTIONS (the honest list)
+    (a) TRAIN/SERVE FEATURE PARITY — actively tested, and one real gap was
+        found and fixed: the live path used to prefer CDP's on-wire
+        encodedDataLength for payload size, while training used Zeek's
+        uncompressed response-body length. Fixed 2026-09-11 by preferring
+        Content-Length live, matching what training measures (see 2.1).
+        test/C3/test_c3_feature_parity.py asserts all 20 ML features agree to
+        1e-6 between the live engine and the offline training builder on real
+        capture rows.
+    (b) FAMILY LEAKAGE avoided by construction: LOFO holds out an entire
+        malware family (every capture it appears in); LOPO holds out a
+        specific C&C pair while allowing the same family elsewhere in
+        training. Neither protocol is a random row split.
+    (c) ONLY 6 MALWARE FAMILIES, 3 of them with fewer than 5 in-scope windows,
+        all from 2011-2014, all lab/public-capture traffic. Generalisation to
+        a 2020s browser-extension or cloud-API C2 family is unproven (see
+        Sections 5 / 9).
+    (d) The heuristic rule weights (0.30, 0.25, ...) are DESIGN CHOICES, not
+        calibrated from a labelled fusion-outcome dataset (there is no such
+        dataset in this project). This is stated in risk_fusion.py's
+        docstring. The 0.55/0.45 fusion SPLIT, unlike the rule weights, IS
+        measured — see Section 4.7.
+
+
+===============================================================================
+ SECTION 4 — ML / AI / DETECTION LOGIC
+===============================================================================
+
+4.1 THE ONE MODEL THAT AFFECTS LIVE DETECTION
+    File on disk:   models/c3_beacon_classifier.pkl   (tracked in the
+                    repository by an explicit .gitignore exception, like C2's
+                    two models; named c3_xgb_final_20260912.pkl until
+                    2026-09-17, when it was renamed with the model inside
+                    verified unchanged tree for tree). Originally built by
+                    scripts/train_c3_final_model.py (archived); every seed is
+                    fixed, and core/c3/C3_ML_Train.ipynb now retrains it from
+                    data/c3_training_dataset_clear.csv and checks that all 300
+                    trees, every score and the threshold come out identical.
+    Loaded by:      core/c3/ml_classifier.py -> C3XGBoostEngine.reload()
+                    (constructed once at import as the singleton c3_ml_engine)
+    Called from:    core/c3/analyzer.py -> _analyze_once() -> c3_ml_engine.score()
+    Model type:     XGBClassifier (gradient-boosted decision trees), from the
+                    xgboost library (in requirements.txt).
+    Hyperparameters (XGB_PARAMS in the trainer):
+        n_estimators=300, max_depth=4, learning_rate=0.06,
+        min_child_weight=8, subsample=0.85, colsample_bytree=0.85,
+        reg_lambda=2.0, eval_metric="aucpr", random_state=42, n_jobs=8
+    Calibration:    NONE (uncalibrated). A predecessor was isotonic-calibrated;
+                    at ~300 positive windows the isotonic fit is a coarse step
+                    function whose ties collapse ranking resolution exactly
+                    where the decision is made — measured LOFO mean ROC-AUC
+                    0.9571 with it, 0.9780 without, on identical folds. See 4.6.
+    Threshold:      set by a 5% FALSE-POSITIVE BUDGET on out-of-fold benign
+                    scores (not a fixed 0.5, and not F1-optimal — see 4.5).
+    Training-set weighting: WEIGHT_SCHEME = "equal_family" (see 4.5).
+    Artefact size: 298 KB (a bare XGBClassifier), versus 2.1 MB for the
+        previous isotonic-calibrated model (a CalibratedClassifierCV wrapping
+        five base estimators) — also loads correspondingly faster.
+
+4.2 THE 20 FEATURES THE MODEL READS (ML_FEATURE_SUBSET, ml_classifier.py)
+    All SCALE-FREE (ratios, shares, normalised entropies) — deliberately none
+    are absolute byte counts or absolute millisecond intervals, because those
+    do not mean the same thing in a 2011 capture and a 2026 browser.
+        timing shape (8):  iat_cv, iat_bowley_skewness, iat_norm_mad,
+                           iat_burstiness, iat_autocorr_lag1, iat_spread_ratio,
+                           iat_clock_share, iat_entropy_norm
+        size (4):          payload_size_mean, payload_cv, payload_repeat_ratio,
+                           upload_download_ratio
+        url/method (5):    url_path_entropy, unique_path_ratio, http_post_ratio,
+                           uri_len_norm, uri_char_entropy_norm
+        behaviour (1):     referrer_absent_ratio
+        url, no query (2): path_only_entropy, unique_path_only_ratio
+    (The constant's historical name, ML_FEATURE_SUBSET being referred to as
+    "the 18-feature model" in several older documents, is a label, not a
+    count — two features were added on 2026-09-11 and the name stuck.)
+
+4.3 MONOTONE CONSTRAINTS — WHICH DIRECTION EACH FEATURE IS ALLOWED TO PUSH
+    A monotone constraint of -1 means "the model's P(C2) may only DECREASE as
+    this feature increases"; +1 means it may only increase; 0 means the model
+    decides freely. This encodes the project's own MEASURED domain knowledge
+    so a ~300-row positive class cannot spuriously reverse it in a region the
+    data does not cover.
+        feature                    constraint   meaning
+        iat_cv                        -1        lower (more regular) = more C2-like
+        iat_bowley_skewness             0        no forced direction
+        iat_norm_mad                   -1        lower spread = more C2-like
+        iat_burstiness                 -1        more regular = more C2-like
+        iat_autocorr_lag1                0        no forced direction
+        iat_spread_ratio                -1        lower spread = more C2-like
+        iat_clock_share                +1        more "on the clock" = more C2-like
+        iat_entropy_norm                -1        lower gap-entropy = more C2-like
+        payload_size_mean                0        no forced direction
+        payload_cv                      -1        lower size variance = more C2-like
+        payload_repeat_ratio            +1        more identical replies = more C2-like
+        upload_download_ratio           +1        more upload-heavy = more C2-like
+        url_path_entropy                -1        fewer distinct paths = more C2-like
+        unique_path_ratio               -1        fewer distinct paths = more C2-like
+        http_post_ratio                  0        no forced direction
+        uri_len_norm                     0        no forced direction
+        uri_char_entropy_norm            0        no forced direction
+        referrer_absent_ratio           +1        no Referer = more C2-like
+        path_only_entropy               -1        fewer distinct endpoints = more C2-like
+        unique_path_only_ratio          -1        fewer distinct endpoints = more C2-like
+
+4.4 FEATURE IMPORTANCE (gain-based, from the final fit)
+        referrer_absent_ratio    0.285   (the single most important feature)
+        path_only_entropy        0.143
+        payload_repeat_ratio     0.115
+        iat_spread_ratio         0.072
+    Leave-one-out AGREES with this ranking: removing referrer_absent_ratio
+    costs 0.0394 mean AUC — nearly 2.3x the next most costly feature
+    (upload_download_ratio, 0.0171), then payload_cv (0.0144). Six features,
+    all timing-SHAPE measures, actually GAIN a little AUC when removed —
+    consistent with only ZeusV1 being genuinely metronomic among the 6
+    families (see 4.6), and the reason the timing PRIORS (4.3) matter more
+    than the timing features' raw predictive weight does.
+
+4.5 THE THREE CONFIGURATION CHOICES MADE BY MEASUREMENT (not by prior),
+    each checked against its alternatives on LOFO — the protocol the headline
+    is read from — with the loser dropped:
+
+    (a) Calibration — NONE, vs isotonic (previous) vs sigmoid.
+        LOFO mean ROC-AUC: 0.9780 uncalibrated / 0.9571 isotonic / 0.9440
+        sigmoid. Uncalibrated wins at this sample size (~300 positives).
+
+    (b) Threshold rule — a 5% FALSE-POSITIVE BUDGET on out-of-fold benign
+        scores, vs an F1-optimal cut. An F1-optimal cut is positioned by
+        where the POSITIVES sit, and every LOFO fold holds out a family with
+        its own score distribution, so that cut does not transfer fold to
+        fold. The negative population is the same every time, so a budget
+        expressed against it keeps its meaning. Swept 1%-8% (LOFO family
+        means):
+            budget    accuracy  precision  recall   F1
+             1%        0.8015    0.9887    0.6105   0.7299
+             2%        0.9001    0.9702    0.8263   0.8918
+             3%        0.9207    0.9529    0.8859   0.9161
+             5%        0.9272    0.9314    0.9239   0.9269   <- chosen (F1 peak)
+             8%        0.9312    0.9135    0.9568   0.9339
+        5% is the F1 peak and sits on the recall-leaning side of it, which is
+        the right side for this detector: the ML score is only 0.55 of the
+        fused verdict and risk_fusion.py's both-signal guard already blocks an
+        ML-only score from confirming BEACON, so the precision backstop lives
+        downstream in fusion — while a miss at this stage is final.
+
+    (c) Family re-weighting — EQUAL_FAMILY, vs sqrt-weighted, capped, or flat.
+        LOFO F1: 0.9040 equal-family vs 0.8713 sqrt-weighted, 0.8712 capped
+        (flat also tested and not competitive). Every malware family
+        contributes the same total training weight regardless of how many
+        windows it has, so the model does not simply learn "whichever capture
+        is biggest" (ZeusV1 alone would otherwise dominate at 226 of 310
+        windows). On the negative side, real human browsing (CTU-Normal) and
+        ordinary network background each carry half of the benign weight, so
+        "normal" is not defined purely by one 2011 lab network's traffic mix.
+
+    Also measured and NOT adopted:
+        - XGBoost + logistic-regression blend: mean LOFO AUC 0.9670, against
+          0.9774 for XGBoost alone and 0.8754-0.9090 for logistic regression
+          by itself. XGBoost alone wins.
+        - Greedy backward feature elimination: reached +0.003 AUC by dropping
+          the timing features. NOT taken — with only 3 reliable LOFO folds,
+          selecting features against the very folds the headline is read from
+          tunes the headline to its own test set. Measured, recorded, left on
+          the table; all 20 features are kept.
+
+4.6 THE MONOTONE-CONSTRAINT REGRESSION (a real bug caught by a unit test, and
+    the honest story of a wrong first diagnosis)
+    Relaxing the timing monotone constraints to just 3 minimal priors RAISED
+    corpus LOFO F1 (0.9735 vs 0.9631 with the full set). It also broke
+    detection of an idealised, textbook GET-only beacon (iat_cv=0,
+    payload_cv=0, url_path_entropy=0) — a corner of feature space NO real
+    training window occupies, because real captures always carry some jitter.
+    An unconstrained tree is free to do anything there: measured, it scored
+    that beacon at 0.081 (below its own threshold) while the browser-side
+    heuristic was independently flagging the same window five different ways.
+    test_a_persistent_beacon_is_still_confirmed (a pre-existing unit test)
+    caught it.
+        priors kept          LOFO per-window F1   idealised GET beacon   browsing
+        minimal (3)               0.9735               0.081  ✗           0.0005
+        full                      0.9631               0.379              0.0011
+        full + upload prior       0.9697               0.425  ✓           0.0008
+    Fixed by restoring the full prior set PLUS a new one, upload_download_ratio
+    +1 (more upload relative to download is never LESS C&C-like) — cost 0.004
+    F1, bought correct behaviour exactly where the corpus has no data, which
+    is the entire reason domain priors exist. Fused verdict on the idealised
+    beacon: 0.55*0.425 + 0.45*0.73 (heuristic) = 0.562 >= 0.52 -> BEACON.
+    THE WRONG FIRST DIAGNOSIS, kept here deliberately as a record: the failure
+    was first blamed on upload_download_ratio, because the missed beacon had
+    it at 0 and 88% of benign windows do too. Checking instead of assuming
+    showed the opposite — real zero-upload C2 windows are detected 100%
+    (FastFlux 10/10, Neris 48/48, Sogou 3/3, mean score 0.978), and REMOVING
+    the feature collapsed ZeusV1 recall to 0.500. The real cause was the
+    missing timing priors, not that feature.
+
+4.7 FUSION — THE ACTUAL DECISION MAKER (core/c3/risk_fusion.py)
+    score = 0.55 * ML + 0.45 * heuristic (ML_WEIGHT / HEURISTIC_WEIGHT).
+    CHANGED from 0.45/0.55 on 2026-09-03, on measurement: a sweep of the ML
+    weight from 0.45 to 0.70 over 55,844 real in-scope windows found:
+        ML weight   accuracy  precision  recall    F1
+           0.45       0.9361    0.9892    0.8818   0.9324
+           0.50       0.9509    0.9825    0.9182   0.9493
+           0.55       0.9742    0.9672    0.9818   0.9745   <- peak, chosen
+           0.60       0.9706    0.9446    1.0000   0.9715
+           0.70       0.9658    0.9360    1.0000   0.9669
+    (That sweep used an earlier model. The 2026-09-14 changes below were
+    adopted on the end-to-end measurement, not on a new sweep.)
+    If no ML score: score = heuristic only.
+    ML SCALE (2026-09-14): the ML score is fused on the model's decision
+    scale — its own threshold (raw 0.137) = 0.50.
+    BOTH MUST AGREE: reaching 0.52 with ML < 0.50 (ML_CONFIRM_FLOOR: the
+    model does not call it C2) or heuristic < 0.10 (BOTH_SIGNAL_FLOOR: no
+    timing rhythm) -> held at 0.51 (UNCONFIRMED_CAP). MEASURED CONSEQUENCE:
+    a context-blind capture (heuristic at 0) cannot reach BEACON — by design.
+    CONTEXT-BLIND BYPASS (opt-in, OFF by default, CONTEXT_BLIND_BYPASS_ENABLED
+    = False): letting a single ML score >= 0.95 confirm BEACON alone was
+    measured and rejected — 78.8% context-blind recall but a 0.441% false
+    -beacon rate on 55,514 real benign windows, versus zero false beacons
+    today. Requiring the SAME condition to persist for 3 consecutive cycles
+    instead of just once was then re-measured and found much safer:
+        persistence (cycles)   context-blind recall   false-beacon rate
+              1                     78.79%                 0.2918%
+              2                     67.88%                 0.0540%
+              3                     60.61%                 0.0270%  <- available, off
+              5                     50.61%                 0.0018%
+    At N=3 the false-beacon rate is ~16x below the rate that got the
+    single-window form rejected, while still catching 60.61% of context-blind
+    C2. It exists as a configurable option (Section 6.7) but ships disabled —
+    enabling it is a product decision, not a tuning one.
+    Verdict: >=0.52 BEACON, >=0.30 SUSPICIOUS, else SAFE. Plus the analyzer's
+    >=10-request confirmation bar, the 3-cycle temporal persistence gate, and
+    the known-safe 0.85 bar (Section 2.2 step 8).
+    REPUTATION (AbuseIPDB + VirusTotal) is EVIDENCE ONLY — looked up after a
+    BEACON is confirmed, shown on the alert, never added to the score.
+
+4.8 IF NO MODEL FILE IS PRESENT
+    ml_classifier.reload() fails safe: logs a message, model_loaded=False,
+    and the whole pipeline runs HEURISTIC-ONLY. Detection still works, just
+    without the ML contribution. Fusion handles ml=None natively.
+
+4.9 MODEL LINEAGE (for context — none of these run live any more)
+    Isolation Forest (unsupervised, removed) -> RandomForest on CTU-13
+    label_c2 (replaced) -> XGBoost on NetFlow byte totals (replaced — payload
+    scale bug) -> XGBoost, HTTP, absolute-timing, 9-feature (best raw
+    precision, silent on fast beacons) -> XGBoost, cadence-invariant, 6-feature
+    (fixed the fast-beacon blind spot) -> XGBoost, 18-feature, uncalibrated
+    (2026-09-02) -> XGBoost, 18-feature, isotonic-calibrated, scoped
+    (2026-09-03) -> XGBoost, 20-feature, isotonic-calibrated, scoped
+    (2026-09-11, after the cache-busting fix added 2 features) -> XGBoost,
+    20-feature, UNCALIBRATED, FINAL (2026-09-12, current — label-integrity +
+    scope fixes + the three measured config changes above).
+
+
+===============================================================================
+ SECTION 5 — EVALUATION
+===============================================================================
+
+5.1 METHOD
+    Primary: LOFO (Leave-One-Family-Out) over the 6 in-scope families.
+    Secondary: LOPO (Leave-One-Pair-Out) — same family may remain in training,
+    only the specific C&C server is held out. Folds with fewer than 10 test
+    positives are reported but excluded from every mean, in BOTH protocols
+    (a rule previously applied to LOFO only — see 5.4). Plain accuracy is
+    quoted only on a class-balanced held-out set, averaged over 5 negative
+    draws. The threshold is chosen from grouped inner cross-validation on the
+    TRAINING data only — the test fold is never consulted, in either protocol.
+
+5.2 UNSEEN MALWARE FAMILY (LOFO) — THE HEADLINE
+    | family    | C2 windows | accuracy | precision | recall | F1     | ROC-AUC|
+    | ZeusV1    |    226     |  0.9792  |  0.9601   | 1.0000 | 0.9796 | 0.9992 |
+    | Neris     |     65     |  0.9585  |  0.9495   | 0.9692 | 0.9591 | 0.9916 |
+    | FastFlux  |     12     |  0.8417  |  0.9236   | 0.7500 | 0.8267 | 0.9389 |
+    | Sogou     |      3     |        excluded — under 10 positives         |
+    | ZeusB26   |      3     |        excluded — under 10 positives         |
+    | Zeus78    |      1     |        excluded — under 10 positives         |
+    | PER-WINDOW AVERAGE (303 windows) | 0.9693 | 0.9564 | 0.9835 | 0.9697 |
+    | PER-FAMILY AVERAGE (3 folds)     | 0.9264 | 0.9444 | 0.9064 | 0.9218 (AUC 0.9765) |
+    | ASKED FOR                        | 0.94   | 0.95   | 0.97   | 0.95   |
+    PER-WINDOW: all four asked-for targets are met. PER-FAMILY: none of them
+    are. Both are standard (micro- and macro-average, respectively) and both
+    are honest — they differ because the macro average lets FastFlux's 12
+    windows carry the same one-third of the result as ZeusV1's 226.
+        "How well does it do on the windows it will actually see?" -> per-window.
+        "How well does it do on the very next family, whichever that is?" ->
+            per-family — the conservative, fair answer to a novel-threat
+            generalisation question. Neither number is hidden here.
+    FASTFLUX IS THE WHOLE GAP, structurally, not from a tuning failure: it is
+    a fast-flux botnet, so it rotates destination IPs by design, and windows
+    are cut per (source, destination) pair — its 12 windows are spread over 3
+    destinations, payloads from 9.7 bytes to 21.7 kB, several windows with
+    only 7-15 requests. Its ROC-AUC is still 0.939 (the model ranks its
+    beacons well above benign); what suffers is where one shared threshold
+    lands for it. One window is worth 8.3 points of its own recall.
+
+5.3 UNSEEN C&C SERVER (LOPO) — the easier protocol, not the headline
+    | metric              | folds | accuracy | precision | recall | F1     |
+    | per-window average  |   4   |  0.9715  |  0.9603   | 0.9837 | 0.9719 |
+    | per-family average  |   4   |  0.9565  |  0.9644   | 0.9500 | 0.9543 (AUC 0.9988) |
+    This is also where the OLD published figure was inflated: 11 of the 15
+    total C&C-pair folds contain only 3 test windows each, and a 3-window fold
+    scores exactly 1.000 or 0.000 with nothing in between. Averaging those in
+    gives 0.9884 / 0.9905 / 0.9867 / 0.9878 — reported for transparency and
+    explicitly NOT used, now that the same >=10-positive reliability rule
+    LOFO always applied is applied to LOPO too.
+
+5.4 THE ABSOLUTE FALSE-POSITIVE LOAD, STATED PLAINLY
+    The balanced numbers above answer "when it sees one of each, how often is
+    it right?" — they do NOT answer "how much noise does it make?" On the
+    FULL, unbalanced held-out data (49,922 benign windows against 303 C2), the
+    same operating point gives:
+        |                | predicted benign | predicted beacon    |
+        | actually benign|     47,351        |  2,571  (5.2%)       |
+        | actually C2    |          5        |    298  (98.3%)      |
+    2,571 benign windows cross the ML threshold — exactly the 5% budget doing
+    what it was set to do, and exactly why the ML score is NOT the verdict:
+    risk_fusion.py weights it 0.55, and the both-signal guard stops an ML
+    score from reaching BEACON without independent heuristic corroboration.
+    Measured on a realistic browsing window, the live engine actually returns
+    0.0008 — most of that 5% sits just over the line, not near the top.
+    Quoting the balanced precision alone, without this table, is quoting half
+    the picture.
+
+5.5 TRAFFIC OUTSIDE SCOPE, REPORTED RATHER THAN DROPPED
+    The 6,580 excluded windows (dead channels, never-answered channels) are
+    still scored, against 2,902 benign windows held OUT of this model's
+    training: ROC-AUC 0.9987, median score 0.713, 99.98% above threshold.
+    They are outside the DEFINED SCOPE of "active periodic C&C", not outside
+    the detector's actual reach.
+
+5.6 END TO END — WHAT AN ANALYST ACTUALLY SEES, AND THE LIMIT THAT IS NOT
+    THE CLASSIFIER'S
+    Everything above measures the classifier alone. scripts/eval_c3_real_
+    world_pipeline.py measures the real feature_engine -> ml_classifier ->
+    heuristic rules -> risk_fusion chain end to end, nothing reimplemented, on
+    every real C2 window of the held-out family (including the dead channels
+    outside the training scope). A network capture carries no browser
+    context, so three conditions are reported and never blended: A =
+    context-blind (interceptor.py's own "assume benign" fallback — a genuine
+    lower bound); B = background tab + idle user assumed; C = foreground tab +
+    idle user assumed (an in-page beacon). B and C are labelled assumptions,
+    not measured data, and benign windows get the same assumed context.
+    UPDATED 2026-09-14 after the scoring rework (Section 4 / risk_fusion.py
+    rule 2): the ML score is fused on the model's decision scale, the
+    heuristic needs a timing rhythm, and a BEACON needs the model's own "yes"
+    (ML >= 0.50). Held out:
+        | family   | A: SUSP+ | B: BEACON | B: SUSP+ | B: FP  | C: BEACON | C: SUSP+ | fused ROC (B) |
+        | ZeusV1   |  1.0000  |  1.0000   |  1.0000  | 0.0000 |  1.0000   |  1.0000  |    1.0000     |
+        | Neris    |  0.7579  |  0.0842   |  0.9053  | 0.0000 |  0.0842   |  0.9684  |    0.9927     |
+        | FastFlux |  0.7500  |  0.0000   |  0.7500  | 0.0000 |  0.0000   |  0.7500  |    0.9591     |
+        | Zeus78   |  0.9363  |  0.0000   |  0.9363  | 0.0010 |  0.0000   |  0.9363  |    0.9934     |
+    (FP = held-out real human browsing windows flagged BEACON.) Under
+    condition A no window reaches BEACON and no benign window is flagged.
+    Against the 2026-09-13 run (old scoring): SUSPICIOUS-or-above rose for
+    every family (A: Neris 0.49 -> 0.76, FastFlux 0.42 -> 0.75, Zeus78 0.37
+    -> 0.94); BEACON rose for ZeusV1 (0.965 -> 1.0) and fell for Neris
+    (0.274 -> 0.084), FastFlux (0.083 -> 0) and Zeus78 (0.045 -> 0).
+    WHY THOSE FALL — and why it is the intended reading: a BEACON verdict now
+    states that the model calls the traffic C2 AND that the timing has a
+    beacon rhythm. FastFlux, Zeus78 and most Neris windows have no rhythm
+    (median timing CV 0.91 / 1.61 / 0.73, against 0.003 for ZeusV1 and 1.82
+    for real human browsing), so they are SUSPICIOUS. Their old BEACONs came
+    from "high ML + assumed background tab" — the same path that produced a
+    real false BEACON on live browsing (cdn.doubleverify.com, random timing).
+    THE COST: on held-out CAPTURE-BACKGROUND windows (lab machines' own
+    automated HTTP, not browser traffic), worst-case context assumed, BEACON
+    rose from 0.64% to 1.36% of windows. Those windows are software
+    heartbeats — one endpoint, GET, 0–7-byte replies, no Referer, every
+    3–12 s — whose ML (raw 0.15–0.28) and heuristic (0.55–0.73) overlap the
+    real Real-World Beacon Test's (raw 0.13–0.36, heuristic 0.60). No fusion
+    setting can confirm the one and not the other; the old scoring avoided
+    them only by never confirming the real test beacon either. On held-out
+    real human browsing BEACON fell (0.08% -> 0.03% pooled).
+    REAL LIVE WINDOWS (current code): all 4 saved windows of the local test
+    beacon and 4 of 6 of the Real-World Beacon Test are BEACON (the host is
+    confirmed); the 5 ad-tech hosts from a 60-minute browsing run are SAFE or
+    SUSPICIOUS, none BEACON.
+    The classifier generalises to unseen families; the end-to-end BEACON
+    VERDICT confirms periodic beacons where browser context is available and
+    reports non-periodic C2 as SUSPICIOUS. Quoting either number as the other
+    is wrong.
+
+5.7 WHY THIS EVALUATION IS APPROPRIATE
+    - LOFO/LOPO test exactly the real questions ("does it catch a family it
+      has never seen?" / "does it catch a new server from a known family?").
+      A random row split would leak family identity and inflate the numbers.
+    - Plain accuracy is quoted ONLY on a class-balanced set, never on the raw
+      52,909-window in-scope population, where "always predict benign" alone
+      would already score >99%.
+    - Both micro (per-window) and macro (per-family) readings are reported
+      side by side, and the conservative one is never hidden behind the
+      flattering one.
+
+5.8 WEAKNESSES OF THE EVALUATION (say these before the panel does)
+    - Only 3 reliable LOFO folds; one of them (ZeusV1, 226 windows) is nearly
+      3.5x the size of the other two combined.
+    - 310 in-scope positives total, 3 of the 6 families with under 5 windows.
+      Confidence intervals on every metric are wide.
+    - No 2020s malware family, no live-captured C2, no browser-extension C2 in
+      the training data at all (the threat C3 is pitched at) — those are
+      covered only by heuristics and the scripted test cases (Section 9.3).
+    - The end-to-end BEACON figures depend on an assumed browser-context
+      condition (B or C) because a network capture cannot supply real
+      context.
+    - Reputation and blocking are NOT evaluated with metrics — only
+      functionally tested.
+
+
+===============================================================================
+ SECTION 6 — DESIGN JUSTIFICATION
+===============================================================================
+
+6.1 WHY THIS OVERALL APPROACH (browser-inside detection + ML + heuristics)
+    - A network IDS cannot see browser state. C3's whole value proposition is
+      the browser-execution context (idle user, hidden tab, extension origin,
+      script initiator, same-site). CDP is the standard, no-extra-driver way
+      to get it.
+    - Pure ML is unreliable in isolation (310 in-scope positives). Pure
+      heuristics are brittle and easy to tune around. Combining them, and
+      REQUIRING both to agree before confirming, gives a defensible middle
+      ground with a low false-positive rate.
+    - "Evidence, not autoblock, by default": alerting always; blocking only
+      when the user opts in — because Playwright/CDP blocking cannot guarantee
+      it stops service-worker traffic, and blocking live traffic is
+      hard to reverse.
+
+6.2 WHY THESE FEATURES
+    - iat_cv and its five timing-shape siblings: the classic beacon signal,
+      made robust to jitter (iat_norm_mad, iat_spread_ratio), one long pause
+      (iat_norm_mad), and drift (iat_autocorr_lag1) rather than relying on one
+      brittle number.
+    - Browser-context features (idle, background, extension, same-site): the
+      novelty — they let C3 separate "regular timing because it is a beacon"
+      from "regular timing because it is Slack syncing in a tab you have open".
+    - referrer_absent_ratio: the single most important feature (Section 4.4)
+      — a timer-driven request has no human click behind it, so it never
+      carries a Referer.
+    - path_only_entropy / unique_path_only_ratio: added specifically to close
+      a cache-busting evasion (Section 6.4).
+    - Absolute timing and absolute byte counts DROPPED on purpose — they do
+      not transfer across a 2011 capture and a 2026 browser (Section 4.9).
+
+6.3 WHY XGBOOST
+    - Small (by ML standards), wide, very imbalanced tabular data ->
+      gradient-boosted trees are a standard strong choice; no feature scaling
+      needed.
+    - Supports monotone_constraints directly (needed to bake in the measured
+      feature directions in Section 4.3).
+    - Supports per-row sample weighting (needed for equal-family training,
+      Section 4.5).
+    - Outperformed a logistic-regression blend and logistic regression alone
+      on this data (Section 4.5).
+
+6.4 THE CACHE-BUSTING EVASION FIX (2026-09-11)
+    The four original url/path features all measure path+QUERY, so a beacon
+    that appends one random parameter per check-in (GET /gate.php?r=8f21ba07)
+    makes every check-in a distinct string and swings all four toward
+    "varied" — i.e. benign-looking — at once, because the training corpus is
+    2011-era C2 that polls one static URI. Fix: add path_only_entropy and
+    unique_path_only_ratio, the SAME window measured WITHOUT the query string.
+    Ordinary varied browsing scores high on both old and new; a static beacon
+    scores low on both; only a cache-busting beacon splits the pair apart.
+    Measured over 330 real in-scope C2 windows
+    (scripts/probe_c3_cachebust_evasion.py):
+        evasion applied                 18-feature     20-feature
+        clean (as captured)                100.0%         100.0%
+        cache-busting query only           100.0%          99.7%
+        Referer header only                 89.4%          89.4%
+        BOTH combined                       57.0%          72.4%
+    +15.4 points of recall under the realistic COMBINED attack. Cache-busting
+    alone was already not a working evasion (referrer_absent_ratio alone
+    carries enough weight to hold the verdict) — do not quote that row as
+    evidence for the change; the honest result is that it shows none.
+
+6.5 THE FALSE-POSITIVE BUDGET AS THE THRESHOLD RULE
+    Chosen over an F1-optimal cut specifically because LOFO holds out a whole
+    family each fold, and each family has its own score distribution — an
+    F1-optimal cut is positioned by where the POSITIVES sit, so it does not
+    transfer fold to fold. The negative population is the same every time, so
+    a budget against it keeps a stable meaning, and it is also the number an
+    operator actually sets in practice ("how much benign noise am I willing
+    to tolerate"). See the full sweep in Section 4.5.
+
+6.6 THE TEMPORAL PERSISTENCE GATE (2026-09-11)
+    Requiring PERSISTENCE_CYCLES = 3 consecutive cycles of new traffic at or
+    above SUSPICIOUS before BEACON confirms is a real behavioural difference,
+    not a threshold hike: a genuine beacon runs for minutes to hours, so it
+    reappears observation after observation, while the false-positive shapes
+    this targets — web-push keep-alives, extension filter-list updates — are
+    bursty (beacon-shaped for one or two windows, then silent). This makes the
+    detector less IMPULSIVE, not less SENSITIVE: a real beacon still clears
+    the gate, it just takes a little longer. The streak only advances on
+    genuinely NEW traffic (re-scoring an unchanged, already-counted window
+    does not inflate it) and resets only when the score itself drops below
+    SUSPICIOUS — a 60-second beacon that only sends new traffic once every
+    sixth 10-second cycle is not unfairly punished for going quiet in between.
+
+6.7 THE CONTEXT-BLIND BYPASS (available, OFF by default)
+    A single high-confidence ML score was measured and rejected as a bypass
+    for the both-signal guard (78.8% recall at a 0.441% false-beacon rate —
+    too high to ship). Requiring the SAME high-confidence condition to PERSIST
+    for 3 consecutive cycles was then measured separately and found ~16x
+    safer (0.0270% false-beacon rate) while still catching 60.61% of
+    context-blind C2. It exists in the code as an explicit, named, off-by-
+    default flag (CONTEXT_BLIND_BYPASS_ENABLED) rather than being silently
+    baked in — turning it on trades a small, measured false-beacon risk for
+    recall on captures with no browser context at all, and that trade is
+    listed here as a product decision for whoever operates this system, not
+    made unilaterally by the code.
+
+6.8 THE ANALYST FEEDBACK LOOP (alert_store.py, added since the last review)
+    An analyst can mark any saved alert "correct" or "false_positive" (+ an
+    optional note) from the dashboard. This is EVIDENCE, not a scoring input,
+    by explicit design: letting an analyst's label feed back into scoring
+    automatically would create a retraining loop with no held-out set — a
+    detector that quietly learns its OPERATOR's habits instead of the
+    ATTACKER's. /c3/alerts/feedback/stats reports a measured false-positive
+    rate, but only over LABELLED alerts; unlabelled ones are reported
+    separately and never folded into the denominator, so an unreviewed alert
+    is never silently counted as correct.
+
+6.9 ALTERNATIVES CONSIDERED / POSSIBLE
+    - Isolation Forest (unsupervised): TRIED, REMOVED — flags "weird", not "C2".
+    - RandomForest: TRIED, REPLACED — worse-calibrated benign ceiling.
+    - Logistic regression / an XGBoost+LR blend: measured, both lose to
+      XGBoost alone (Section 4.5).
+    - Deep learning / LSTM on the raw request sequence: not enough labelled
+      data (310 in-scope positives) — would overfit badly; heavier at runtime.
+    - Pure signature/blocklist: defeated by the exact threat model (trusted
+      domains).
+
+6.10 TRADE-OFFS (chosen position -> consequence)
+    - Uncalibrated model    -> sharper ranking at this sample size, BUT the
+                              raw score is not a literal probability — fusion
+                              treats it as a relative signal, which is all it
+                              was ever used for.
+    - 5% FPR-budget threshold -> recall-leaning by design, BUT precision is
+                              backstopped downstream by fusion + both-signal
+                              guard, not by the ML threshold itself.
+    - Both-signal gate      -> very low false positives, BUT a beacon only one
+                              signal sees is missed (context-blind BEACON
+                              recall is 0.0000 with the bypass off).
+    - Temporal persistence  -> filters bursty false positives, BUT adds up to
+                              ~20-30 extra seconds of detection latency on top
+                              of the existing 10-request floor.
+    - Reputation as evidence -> no false negatives from clean-reputation
+                              trusted-domain C2, BUT reputation cannot rescue
+                              a borderline score.
+    - deque(maxlen=50) window -> bounded memory, BUT a very slow beacon
+                              (~1/hour) never fills a window inside the
+                              30-minute age filter and is effectively invisible.
+
+
+===============================================================================
+ SECTION 7 — REAL-WORLD BEHAVIOUR
+===============================================================================
+
+7.1 NORMAL TRAFFIC (human browsing)
+    Irregular timing -> iat_cv high (usually > 0.3). user_active_ratio high.
+    Many different URLs -> high url_path_entropy AND high path_only_entropy.
+    No timing rhythm, so the heuristic scores 0. ML is typically far below
+    its 50% line (raw 0.0008 on a realistic browsing window — Section 5.4 —
+    which is about 0.5% on the decision scale). Fused score well under 0.30.
+    Verdict: SAFE.
+
+7.2 SUSPICIOUS TRAFFIC (beacon-like but not confirmed)
+    The window is still small, OR only one side agrees — the model calls it
+    C2 but the timing has no rhythm (non-periodic C2; ad-tech pixels that
+    send no Referer), or the timing has a clear rhythm but the model is below
+    its 50% line (e.g. an in-page fetch() beacon that sends a Referer) — OR it
+    is a known-safe host under the 0.85 bar, OR fewer than 10 requests seen,
+    OR the 3-cycle persistence streak has not yet been built up. Score lands
+    0.30-0.51. Verdict: SUSPICIOUS. Visible on the dashboard, no alert
+    pop-up, no block.
+
+7.3 CONFIRMED BEACON
+    >=10 requests, a timing rhythm (clockwork or steady despite jitter) plus
+    supporting evidence (user idle / hidden tab / extension / fixed
+    endpoint), the ML model at or above its 50% line, AND this has been true
+    for 3 consecutive cycles of new traffic. Fused score >= 0.52.
+    Verdict: BEACON. -> threat-intel lookup runs -> alert saved to SQLite ->
+    WebSocket pop-up on the dashboard -> if auto-block on and score >= 0.75,
+    the host's traffic is aborted and the block persisted for 24h. An analyst
+    can later mark the alert correct/false-positive from the dashboard.
+
+7.4 UNKNOWN / UNSEEN TRAFFIC (a family not in training)
+    The classifier itself generalises well to an unseen family (LOFO
+    per-window F1 0.97) as long as browser context is available; the
+    heuristics are family-agnostic by construction (they key on timing
+    rhythm + browser context, not a learned family fingerprint). A novel
+    beacon with a rhythm that fires while the user is idle or in a hidden tab
+    reaches BEACON via combined ML+heuristic evidence. Without browser context
+    at all (a raw network capture, or the worst-case deployment scenario), no
+    window can be confirmed as BEACON by design, and SUSPICIOUS-or-above rests
+    on the ML score alone (Section 5.6). C2 whose timing has no rhythm at all
+    (FastFlux, Zeus78, most Neris windows) is reported as SUSPICIOUS, not
+    BEACON, even with context: a BEACON verdict claims a rhythm.
+
+7.5 FALSE POSITIVE SCENARIOS (what could wrongly alert)
+    - SPA background sync to a THIRD-PARTY domain (not the page's own) — the
+      same-site dampener only covers same-site. Mitigated by
+      _SAFE_HOST_SUFFIXES + the 0.85 bar for well-known ones, but a niche
+      analytics/telemetry host with a real rhythm is a risk.
+    - Ad-tech / analytics pixels that send no Referer and small replies score
+      high on the ML (its strongest feature is a missing Referer). Measured
+      on live browsing (2026-09-11): cdn.doubleverify.com, random timing
+      (iat_cv 3.36), raw ML 0.85 — it WAS confirmed as a BEACON under the old
+      rules ("user idle" +0.25 was enough corroboration). With the rhythm
+      requirement (2026-09-14) the same window stops at SUSPICIOUS.
+    - "push_keepalive" / "extension filter-list update" shaped traffic — the
+      docs explicitly call this structurally indistinguishable from a beacon
+      by timing + context alone. The temporal persistence gate (Section 6.6)
+      specifically targets the bursty version of this; a sustained one is
+      still a genuine risk, at a measured ~5% ML-side false-positive rate
+      before fusion narrows it (Section 5.4).
+    - A brief context-tagger failure fails to BENIGN defaults, not worst-case
+      ones, so a hiccup can only fail to add evidence, never invent it
+      (interceptor.py comment) — and is now also LABELLED via
+      degraded_context_ratio so it is visible rather than silent.
+
+7.6 FALSE NEGATIVE SCENARIOS (what it will miss)
+    - Combined jitter + GET + cache-busting URL + Referer spoofing: measured
+      recall drops to 72.4% under the realistic combined attack, even with
+      the cache-busting fix (Section 6.4) — the single biggest remaining
+      known evasion path.
+    - An in-page beacon written as an ordinary fetch() sends a Referer
+      header. The model's strongest feature is a MISSING Referer (it learned
+      from malware processes, which never send one), so it scores such a
+      beacon low — measured on real test-beacon windows: raw 0.23 without a
+      Referer, 0.009 with one. The heuristic still sees the rhythm, so the
+      host shows as SUSPICIOUS, not BEACON. Fixing this needs a model that
+      does not lean on the Referer (a retrain), not a fusion change.
+    - Very slow beacon (interval >> a few minutes) -> window never fills
+      within the 30-minute age filter; too few events to score.
+    - FastFlux-style rotating-destination C2: windows are cut per (source,
+      destination) pair, so a family that deliberately rotates destinations
+      fragments its own evidence across many small windows (Section 5.2).
+    - Beacon on a host the user also browses normally in the foreground -> the
+      one window mixes both; user_active_ratio and same_site_ratio move
+      against detection.
+
+7.7 EDGE CASES / FAILURE CONDITIONS
+    - Service-worker traffic: CDP/Playwright may not intercept it (documented
+      limitation) -> C3 cannot see or block it.
+    - No model file -> heuristic-only mode (graceful).
+    - Enrichment CDP lag -> benign defaults, labelled via
+      degraded_context_ratio (graceful and now visible, by design).
+    - Browser/session restart -> in-memory windows and persistence streaks
+      are cleared; persisted BLOCKS are re-applied from SQLite without
+      resetting their 24h expiry clock.
+
+7.8 ROBUSTNESS TO CHANGING TRAFFIC
+    - Scale-free features + no calibration lock-in: robust to beacon SPEED
+      and byte-scale changes.
+    - Heuristics: robust to family changes (behaviour-keyed).
+    - Weak to: deliberate jitter + GET + cache-busting + Referer spoofing +
+      same-site hosting, applied TOGETHER (Section 7.6).
+
+7.9 CAN AN ATTACKER BYPASS IT?  (yes — known, measured routes)
+    - Add heavy timing jitter (beyond about +/-40%): neither rhythm rule
+      fires, so the host can reach SUSPICIOUS but not BEACON. Moderate jitter
+      is covered by the "steady rhythm despite jitter" rule.
+    - Use GET + cache-bust the URL + spoof/strip the Referer header, all
+      together — the one combination measured to cost real recall (72.4%,
+      Section 6.4), against 100% for any single evasion alone.
+    - Beacon to the page's own domain / a well-known safe host (same-site
+      dampener / 0.85 bar).
+    - Fire only while the user is actively interacting (the rhythm rules
+      need a user who is not).
+    - Send a Referer (an ordinary in-page fetch()) — the ML model then scores
+      it low (Section 7.6).
+    - Use a service worker / cross-origin fetch pattern CDP misses.
+    - Stay context-blind AND keep every window bursty rather than sustained
+      (defeats the 3-cycle persistence gate, though this also means never
+      confirming for the SAME reason a genuine slow/quiet beacon does not).
+    C3 raises the bar and forces the attacker to give up regularity and
+    stealth-context simultaneously — it does not claim to be unevadable.
+
+
+===============================================================================
+ SECTION 8 — PERFORMANCE & PRACTICALITY
+===============================================================================
+
+8.1 RUNTIME COST
+    - One CDP Network session per tab; three lightweight event handlers per
+      request; the request is only assembled once its 3 CDP events arrive.
+    - Analyzer loop: once every 10 seconds. Per cycle it computes 32 features
+      (pure Python/NumPy arithmetic over <=50 events) and one XGBoost
+      predict_proba (20 features, 300 shallow trees — still sub-millisecond)
+      per host.
+    - Model artefact is 298 KB (uncalibrated, bare XGBClassifier) — loads
+      faster than the 2.1 MB isotonic-calibrated predecessor.
+    - Feature engine builds the offline tldextract once at import (no network).
+    - Reputation lookup: only on a confirmed BEACON, cached 30 min per host,
+      two concurrent HTTP calls with an 8s timeout.
+    Net: negligible CPU; scales with (open tabs) x (active hosts), both small
+    in practice.
+
+8.2 LATENCY (time to detect)
+    - Up to 10s analyzer-loop delay.
+    - >= 10 requests before a BEACON can be CONFIRMED. For a 10s beacon that
+      is ~100s minimum; for a 60s beacon ~10 minutes.
+    - The 3-cycle temporal persistence gate adds roughly 20-30 more seconds on
+      top of the above for a fast beacon (longer for a slow one, since a
+      cycle only "counts" when new traffic actually arrives).
+    - Timing maturity ramps fully in at 20 events.
+    So C3 is a "sustained evidence" detector, not an instant one — by design.
+
+8.3 SCALABILITY
+    - Memory bounded: deque(maxlen=50) scoring window per host; a 10,000-entry
+      history log per host (dashboard only), frozen when a host is blocked.
+    - SQLite for alerts and blocks (single-file, in ~/.websentinel/).
+    - Single-process FastAPI + one browser session. Not built for many
+      concurrent browser sessions — it monitors THE user's browser.
+
+8.4 DEPENDENCIES (requirements.txt, the ones C3 uses)
+    fastapi, uvicorn[standard]  – backend + WebSocket
+    playwright                  – the driven Chromium + CDP + route blocking
+    xgboost                     – the model
+    scikit-learn                – metrics/splits in training (scripts only)
+    numpy, pandas               – arrays / dataset handling
+    httpx                       – AbuseIPDB / VirusTotal calls
+    tldextract                  – eTLD+1 for same_site_ratio (offline snapshot)
+    Config: core/settings.json (gitignored) holds abuseipdb_key /
+    virustotal_key; forwarded at startup and on save (core/main.py). No keys
+    in source.
+
+8.5 DEPLOYMENT LIMITATIONS
+    - Windows-focused test path (the real-world beacon test is a .bat + ngrok);
+      the core detector is OS-independent Python.
+    - Only sees browser-routed traffic — a native OS malware process is out of
+      scope (correctly — that is not C3's threat model).
+    - Service-worker / some cross-origin fetch traffic may be invisible to CDP.
+    - Auto-block is opt-in and best-effort, not a guaranteed firewall.
+
+
+===============================================================================
+ SECTION 9 — SECURITY & RESEARCH VALIDITY
+===============================================================================
+
+9.1 EVASION OPPORTUNITIES — see 7.9. Summarised: jitter + GET + cache-busting
+    URL + Referer spoofing + same-site/safe-host hosting + foreground timing +
+    service-worker transport each individually weakens one signal, at
+    measured cost when combined (Section 6.4).
+
+9.2 PRIVACY / SECURITY OF C3 ITSELF
+    - The injected JS tracker only reports event TYPE + timestamp + page URL +
+      visibility — NOT keystroke content, NOT form data.
+    - Idle time is computed per origin, so browsing one site is not logged
+      against another.
+    - API keys are read from a gitignored settings file, never hardcoded, and
+      the user's email is never sent to AbuseIPDB/VirusTotal.
+    - Reputation calls send the destination host / resolved IP to third
+      parties (AbuseIPDB, VirusTotal) — standard for TI enrichment, but it is
+      an outbound disclosure and only happens on a confirmed BEACON.
+
+9.3 REPRODUCIBILITY
+    - Training is fully reproducible: every seed in scripts/train_c3_final_
+      model.py is fixed (random_state=42 throughout); the run was executed
+      three times during development and produced identical fold metrics
+      each time.
+    - The dataset builder (scripts/build_c3_18feat_dataset.py) is
+      deterministic (no random sampling beyond the seeded per-pair cap) and
+      logs provenance CSVs.
+    - The raw captures are public (Stratosphere Laboratory / Malware Capture
+      Facility Project).
+    - 154 unit tests (test/C3/test_c3_units.py) lock feature values, every
+      heuristic rule (with a regression on a real ad-CDN window), the ML
+      decision scale, the fusion math, the both-signal gate, the temporal
+      persistence gate, the timing ramp, the VirusTotal thresholds, the alert
+      and block stores, the analyst-feedback API, and the interceptor's
+      blocking logic.
+    - 4 train/serve parity tests (test/C3/test_c3_feature_parity.py) assert
+      all 20 ML features agree to 1e-6 between the live engine and the
+      offline training builder, on real capture rows — and that the DEPLOYED
+      model's own predict_proba agrees with the engine's score() to 6 decimal
+      places.
+    - 3 scripted attack test cases (test/C3/tc01/02/03): tc01 (Cobalt-Strike-
+      style beacon via a compromised WordPress mimic), tc02 (Discord
+      cloud-APT dual-channel), tc03 (real ngrok-tunnelled C2 mimic with a live
+      AbuseIPDB/VirusTotal lookup — the only one exercising the full pipeline
+      including reputation).
+
+9.4 DATASET LIMITATIONS / BIAS (repeat, because a panel will push here)
+    - 310 in-scope real positives across 6 families, 3 of them with under 5
+      windows; all captures 2011-2014, from public research/malware-analysis
+      sources rather than a live 2020s deployment.
+    - FastFlux is structurally under-served by per-(source,destination)
+      windowing (Section 5.2).
+    - Sogou cannot be detected and is not claimed to be — 3 windows, and on
+      the strongest feature it looks like ordinary browsing
+      (referrer_absent_ratio 0.06 vs 1.00 for every other family). Excluded
+      from every mean by the pre-declared <10-positive rule, reported as
+      0.000 rather than hidden.
+    - No browser-extension C2 and no service-worker C2 in the training data
+      at all — those are the pitch, but they are covered only by heuristics
+      and the scripted tests.
+
+9.5 WHAT YOU CAN AND CANNOT CLAIM
+    CAN claim:
+      - A working, real-time, browser-inside C2 beacon detector that fuses a
+        supervised ML signal with 9 browser-execution heuristics, gated by a
+        both-signal requirement and a temporal persistence requirement.
+      - Honest LOFO/LOPO evaluation on real malware-capture C2, both micro
+        and macro readings reported side by side, never one hidden behind the
+        other.
+      - Per-window LOFO meets all four asked-for targets (accuracy ~94%,
+        precision ~95%, recall ~97%, F1 ~95%) on the hardest protocol; the
+        per-family reading is lower and is disclosed beside it, not instead.
+      - Real threat-intel enrichment, real 24h-persisted traffic blocking,
+        and a real analyst-feedback loop treated as evidence, not as an
+        automatic retraining signal.
+      - Novel design choices: per-origin idle clock, monotone-constrained
+        scale-free features, a both-signal gate (model says C2 + a timing
+        rhythm), a temporal
+        persistence gate, and reputation-as-evidence-only.
+    CANNOT claim:
+      - The per-family (macro) reading also meets the targets — it does not,
+        and the gap is explained (FastFlux), not hidden.
+      - Generalisation to modern / browser-extension / cloud-API C2 —
+        untested on real data of that kind.
+      - That the end-to-end BEACON verdict reaches the same numbers without
+        real browser context — a network capture alone cannot supply it
+        (Section 5.6).
+      - That blocking is guaranteed containment (best-effort, CDP-limited).
+      - That the true operational auto-block false-positive rate is measured
+        — it genuinely is not (see analyzer.py's own disclosed limitation on
+        AUTO_BLOCK_SCORE_FLOOR, Section 6 of Claude_Chat.txt / analyzer.py
+        source comments).
+
+9.6 REALISTIC FUTURE IMPROVEMENTS (justified by the evidence above)
+    1. A per-destination-CLUSTER window (grouping fast-flux IPs that share an
+       ASN or resolve pattern) rather than strictly per-(source,destination),
+       to close the FastFlux gap structurally rather than by tuning.
+    2. Add >=1 modern family, browser-extension C2 samples, and cloud-API-as-
+       C2 samples — the biggest open generalisation gap (Section 9.4).
+    3. Re-run the combined-evasion measurement (Section 6.4) periodically as
+       new evasion techniques are considered, rather than treating 72.4% as
+       a permanent floor.
+    4. Turn the context-blind bypass's measured trade-off (Section 6.7) into
+       an explicit product decision once the true operational auto-block
+       false-positive rate can be measured from real deployment data, not
+       just offline captures.
+    5. Fold the analyst-feedback loop's measured false-positive rate
+       (Section 6.8) into a published, standing benchmark rather than an
+       on-demand query.
+
+
+===============================================================================
+ SECTION 10 — RESEARCH PANEL QUESTIONS (grouped) WITH SHORT ANSWERS
+===============================================================================
+
+--- BASIC UNDERSTANDING ---
+Q: In one sentence, what does C3 do?
+A: It watches every request the browser makes and flags any destination that
+   is being contacted on a machine-like timer while the user is not driving
+   it — a C2 beacon — sustaining that judgement across several observations
+   before it alerts and, optionally, blocks it.
+
+Q: Why can't a normal firewall or IDS do this?
+A: They see the wire, not the browser. They cannot tell if the user was
+   active, if the tab was hidden, if an extension made the request, or if the
+   request was script-initiated. Those browser-execution facts are C3's core
+   signal.
+
+Q: What is a "beacon"?
+A: A hidden program checking in with its operator on a fixed schedule, e.g.
+   one small HTTPS request every 30 seconds, forever.
+
+--- TECHNICAL IMPLEMENTATION ---
+Q: How do you capture the traffic?
+A: Chrome DevTools Protocol. core/c3/interceptor.py opens a CDP "Network"
+   session on every tab and listens to requestWillBeSent / responseReceived /
+   loadingFinished. No browser extension, no proxy.
+
+Q: How is "was the user active" measured?
+A: A tiny injected JS script (context_tagger.py) reports click/keydown/scroll/
+   touch events with a timestamp and the page URL. Python keeps a per-ORIGIN
+   last-interaction time, so activity on google.com does not reset evil.com's
+   idle clock.
+
+Q: How often does it score, and on how much data?
+A: Every 10 seconds, on the last 50 requests per host (a deque), with events
+   older than 30 minutes dropped.
+
+Q: What exactly is the final score formula?
+A: score = 0.55 * ML + 0.45 * heuristic. Reputation is never in it. If there
+   is no ML score yet, score = heuristic only.
+
+Q: What has to be true for a BEACON to actually be confirmed?
+A: Fused score >= 0.52, both ML and heuristic each contributing at least
+   0.10, at least 10 requests observed, and 3 consecutive cycles of new
+   traffic scoring at or above SUSPICIOUS.
+
+--- "WHY DID YOU CHOOSE THIS?" ---
+Q: Why XGBoost?
+A: Small, wide, very imbalanced tabular data; no scaling needed; supports
+   monotone constraints (to bake in measured feature directions) and
+   per-row sample weighting (for equal-family training); and it beat a
+   logistic-regression blend and logistic regression alone on this data.
+
+Q: Why only 20 features in the model when you compute 32?
+A: The other 12 either duplicate the heuristics' job (browser-context ratios,
+   same-site, script-initiator) or are absolute-scale predecessors kept only
+   for the dashboard. The 20 the model reads are all scale-free by design.
+
+Q: Why is reputation not part of the score?
+A: C3's threat model is C2 hidden inside TRUSTED domains, which have a clean
+   reputation. A reputation term would only ever pull the score DOWN on
+   exactly the case we care about. So we show it as evidence, not as a factor.
+
+Q: Why 0.55/0.45 and not 0.50/0.50?
+A: Measured — a sweep from 0.45 to 0.70 over 55,844 real windows found 0.55
+   is the balanced-F1 peak (0.9745); past it, precision falls faster than
+   recall rises. It is a named constant with the sweep documented in
+   risk_fusion.py's own docstring, easy to revisit if the model changes.
+
+--- "WHY NOT ANOTHER APPROACH?" ---
+Q: Why not an unsupervised anomaly detector?
+A: We tried Isolation Forest. It flags "unusual", not "C2" — too many false
+   alarms and no concept of a beacon. We moved to supervised learning on real
+   C2 labels.
+
+Q: Why not deep learning on the request sequence?
+A: 310 in-scope labelled positives. A sequence model would overfit badly and
+   cost more at runtime. Trees on aggregate features are the right size of
+   model here.
+
+Q: Why not just block by signature/blocklist?
+A: The destinations are legitimate services (Discord/GitHub/Google). A
+   blocklist has nothing to match.
+
+--- DATASET / MODEL ---
+Q: How big is the training data and how balanced?
+A: 52,909 in-scope windows (310 C2, 52,599 benign) after the label-integrity
+   and scope fixes — about 1:170. Very imbalanced; handled by per-family and
+   per-class re-weighting at training time, not resampling.
+
+Q: Where do the labels come from?
+A: The captures' own trusted "-CC<n>-" command-and-control ground-truth
+   marker. A window is positive if it holds at least one such flow.
+
+Q: Is the model trained on synthetic data?
+A: No. 100% real public malware captures (CTU-13 + three further Stratosphere
+   Zeus captures). The project has a strict no-synthetic-data policy.
+
+Q: Which file is the live model and where is it loaded?
+A: models/c3_beacon_classifier.pkl, loaded by
+   core/c3/ml_classifier.py::C3XGBoostEngine.reload(), called via the
+   c3_ml_engine singleton from analyzer.py.
+
+--- RESULTS / METRICS ---
+Q: What is your headline accuracy?
+A: Per-window LOFO on the hardest protocol: accuracy 0.9693, precision
+   0.9564, recall 0.9835, F1 0.9697 — meeting all four asked-for targets. The
+   per-family reading of the same folds is 0.9264 / 0.9444 / 0.9064 / 0.9218,
+   reported beside it because FastFlux's 12 windows carry a full third of
+   that average.
+
+Q: Why does the per-family number miss the targets when per-window doesn't?
+A: FastFlux (12 windows, ROC-AUC 0.939, recall 0.75) is structurally
+   under-served because it is a fast-flux botnet windowed per destination
+   pair. It is not a tuning failure — the model ranks its beacons correctly;
+   the shared threshold is where it costs recall.
+
+Q: What metric did you optimise and why?
+A: The operating threshold by a 5% false-positive budget on out-of-fold
+   benign scores (not F1-optimal — an F1-optimal cut does not transfer
+   across LOFO folds with different positive distributions). Model
+   configuration choices were each compared by LOFO F1/AUC.
+
+--- UNEXPECTED RESULTS ---
+Q: Relaxing your monotone constraints IMPROVED corpus accuracy — why keep
+   the stricter ones?
+A: Because the looser version broke an idealised, off-manifold beacon (scored
+   0.081, a real regression a unit test caught) that no training window
+   actually resembles. We paid 0.004 F1 to fix behaviour in a region the data
+   cannot inform, which is the entire point of a domain prior.
+
+Q: Your first diagnosis of that regression was wrong — why mention that?
+A: Because checking instead of assuming is the standard this project holds
+   itself to. The wrong guess (blaming upload_download_ratio) would have led
+   to removing a feature that is 100% correct on real zero-upload C2; keeping
+   the wrong-turn story in the write-up is what disclosure looks like.
+
+--- FAILURE / LIMITATION ---
+Q: What is the easiest way to evade C3?
+A: Combine jitter, GET, a cache-busted URL, and a spoofed/stripped Referer —
+   measured to cost real recall (down to 72.4%) — while also beaconing while
+   the user is active and to a same-site or well-known-safe host.
+
+Q: What can C3 not see at all?
+A: Native OS processes (not its threat model), and some service-worker /
+   cross-origin-fetch traffic that CDP does not report in our session.
+
+Q: What if there is no model file?
+A: It runs heuristic-only and still detects — just without the ML
+   contribution. Fusion handles a missing ML score natively.
+
+--- REAL-WORLD DEPLOYMENT ---
+Q: How fast does it react?
+A: A sustained-evidence detector: up to 10s loop delay, at least 10 requests,
+   and 3 consecutive cycles of sustained evidence — roughly 2-3 minutes for a
+   10s beacon, longer for a slow one.
+
+Q: Is the blocking a real firewall?
+A: No — best-effort. It aborts requests via Playwright routes + CDP blocked
+   URLs, persisted 24h with auto-expiry. It cannot guarantee stopping
+   service-worker traffic. That is why auto-block is opt-in.
+
+Q: What does it cost to run?
+A: Negligible CPU — one shallow XGBoost prediction and 32 arithmetic features
+   per host every 10 seconds; reputation calls only on a confirmed beacon,
+   cached 30 min.
+
+--- SECURITY / EVASION ---
+Q: Could an attacker feed fake activity events to look "user-driven"?
+A: The tracker only accepts events from the page context via a single exposed
+   function; a malicious page could fire synthetic click events on itself, but
+   C3 also checks tab VISIBILITY and per-origin idle — a hidden-tab beacon is
+   never "active" regardless. It is a partial mitigation, not absolute.
+
+Q: Does C3 leak anything to third parties?
+A: Only on a confirmed BEACON: the destination host/IP goes to AbuseIPDB and
+   VirusTotal for enrichment. No user identity, no page content.
+
+--- RESEARCH NOVELTY / CONTRIBUTION ---
+Q: What is genuinely new here?
+A: (1) Detecting C2 from INSIDE the browser using CDP + a per-ORIGIN idle
+   clock. (2) Scale-free, monotone-constrained features that stay valid at
+   any beacon speed and byte scale. (3) A both-signal gate (the model must call
+   it C2, and the timing must show a beacon rhythm) PLUS a temporal
+   persistence gate, so neither one signal nor one lucky window can confirm
+   a beacon alone. (4) An analyst-feedback loop treated strictly as
+   evidence, never as an automatic retraining signal. (5) A disclosed,
+   measured, off-by-default context-blind bypass rather than a silent one.
+
+Q: Is any of this in prior tools?
+A: Network IDS (Zeek/Suricata/RITA) do beacon timing analysis but have no
+   browser context. Endpoint tools have process context but not per-request
+   browser-execution state. C3's combination is the contribution.
+
+--- INTEGRATION WITH THE OTHER 3 COMPONENTS ---
+Q: How does C3 fit with C1/C2/C4?
+A: Same FastAPI backend, same dashboard, same alert stream. C3 is the live
+   runtime-traffic layer; C1 does URLs, C2 does BitB phishing pages, C4 does
+   after-the-fact forensic correlation. C3 does not call them and they do not
+   call C3 — integration is at the platform/UI level.
+
+--- CHALLENGING FOLLOW-UPS ---
+Q: 226 of your 303 reliable LOFO test positives are one family (ZeusV1).
+   Isn't your headline basically "detects ZeusV1"?
+A: Partly, on raw window count — but Neris (65 windows, F1 0.959) and
+   FastFlux (12 windows, F1 0.827) are reported individually, not folded
+   into a single number, and the per-family average deliberately gives all
+   three equal weight for exactly this reason.
+
+Q: If the ML threshold is set to allow a 5% false-positive rate, why keep
+   the ML at all?
+A: Because at the fused-system level, risk_fusion.py's both-signal guard and
+   the 0.45 heuristic weight backstop that precision downstream — the design
+   never lets the 5%-budget ML score alone confirm a beacon. What it buys is
+   a scale-free, cross-family-generalising signal the heuristics alone don't
+   have.
+
+Q: Your persistence gate means a fast, single-shot beacon that fires once and
+   disappears is never confirmed. Isn't that a hole?
+A: Yes, deliberately, for the same reason it filters bursty false positives —
+   a "beacon" that never repeats is, almost by definition, not the sustained
+   C&C channel this detector targets. It would still show as SUSPICIOUS.
+
+Q: Why does only ZeusV1 reach BEACON end to end, when every family is
+   flagged SUSPICIOUS or above 75-100% of the time?
+A: Because a BEACON verdict also claims a beacon rhythm, and only ZeusV1's
+   C2 has one (median timing CV 0.003; FastFlux, Zeus78 and most Neris
+   windows sit at 0.7-1.6; real browsing is 1.8). It is measured on
+   the real pipeline with no reimplementation, held out, under three
+   labelled context conditions (Section 5.6). The same rule is what keeps
+   an ad CDN with random timing from being confirmed on live browsing.
+
+
+===============================================================================
+ SECTION 11 — FINAL OUTPUT
+===============================================================================
+
+-------------------------------------------------------------------------------
+ A) DETAILED TECHNICAL EXPLANATION (condensed)
+-------------------------------------------------------------------------------
+C3 is a real-time, browser-resident C2 beacon detector. It attaches a Chrome
+DevTools Protocol Network session to every tab of the WebSentinel-driven
+Chromium session and records every outgoing request (URL, method, size,
+timestamp, CDP initiator). A small injected JavaScript tracker reports user
+interaction events so Python can maintain a PER-ORIGIN idle clock and a
+per-request "was the user active / was the tab hidden / did an extension or a
+script initiate this" context.
+
+Every 10 seconds, an analyzer loop groups the last 50 requests per host into a
+window (events > 30 min old dropped) and computes 32 features: timing shape
+(iat_cv and five scale-free siblings), request rate, payload shape, POST
+ratio, browser-context ratios, URL/path diversity (with and without the query
+string), Referer presence, same-site ratio, and script-initiator ratio.
+
+Two signals score the window. (1) A supervised, UNCALIBRATED XGBoost
+classifier (models/c3_beacon_classifier.pkl, 300 trees, depth 4) reads 20
+scale-free features and outputs P(C2), with monotone constraints baking in the
+project's own measured feature directions. It was trained on 52,909 in-scope
+windows (310 real C2-labelled positives across 6 malware families, after a
+label-integrity fix that removed 273,944 mislabelled benign requests and a
+scope fix that excluded dead/never-answered channels), with equal per-family
+weighting and a threshold set by a 5% false-positive budget; its score is
+shown and fused on its decision scale (its own threshold = 50%). (2)
+Hand-written heuristic rules first require a beacon rhythm in the timing,
+then score browser-execution evidence.
+
+Fusion is fixed: score = 0.55*ML + 0.45*heuristic — the measured peak of a
+weight sweep. A both-signal gate holds the score at 0.51 if it would
+otherwise reach the 0.52 BEACON threshold without both agreeing (ML at or
+above its 50% line; a rhythm in the timing). A
+temporal persistence gate additionally requires 3 consecutive cycles of new
+traffic at or above SUSPICIOUS before BEACON confirms. The analyzer requires
+>= 10 requests to confirm, ramps timing trust smoothly from 6 to 20 events,
+and applies a 0.85 confirmation bar to well-known analytics/CDN hosts.
+Verdicts: SAFE < 0.30 <= SUSPICIOUS < 0.52 <= BEACON.
+
+On a confirmed BEACON: a threat-intel lookup (AbuseIPDB + VirusTotal) runs
+once, attached to the alert as EVIDENCE only. The alert is persisted to SQLite
+and pushed to the dashboard. If auto-block is enabled and the score >= 0.75,
+the host's traffic is aborted and blocked for 24 hours. An analyst can later
+label the alert correct/false-positive, recorded as evidence, never fed back
+into scoring automatically.
+
+Honest evaluation is LOFO (unseen family): per-window F1 0.9697, meeting all
+four asked-for targets (accuracy ~94%, precision ~95%, recall ~97%, F1 ~95%);
+per-family F1 0.9218, reported beside it because a 12-window family (FastFlux)
+otherwise carries a full third of the average. The absolute false-positive
+load on the raw population is 5.2% of benign windows crossing the ML
+threshold — exactly the budget it was set to — narrowed downstream by fusion.
+End to end, held out, with browser context assumed, the periodic family
+(ZeusV1) is confirmed as BEACON 100% of the time and every family is flagged
+SUSPICIOUS or above 75-100% of the time. Non-periodic C2 stays SUSPICIOUS by
+design: a BEACON verdict needs the model's own "yes" and a timing rhythm.
+
+-------------------------------------------------------------------------------
+ B) SIMPLE PRESENTATION / VIVA EXPLANATION
+-------------------------------------------------------------------------------
+"Malware that hides in your browser talks to the attacker by making a small
+web request every few seconds to a normal-looking website like Discord or
+GitHub. Firewalls miss it because the website is trusted and, on the wire, it
+looks like ordinary browsing.
+
+C3 watches the browser from the inside. For every website your browser talks
+to, it checks two things: is the timing machine-like (the same gap every
+time), and is the browser behaving like a person is there (are you clicking,
+is the tab open, did you actually go to this site)? A person browses
+irregularly and clicks around. A beacon fires like a metronome while you are
+idle or the tab is hidden.
+
+It turns each website's recent requests into 32 numbers. A trained model
+(XGBoost) gives one opinion based mostly on how regular the timing and
+request shape are. Nine simple rules give a second opinion based on the
+browser context. We combine them 55% model / 45% rules. Only if BOTH agree,
+we have seen at least 10 requests, AND that agreement has held for three
+separate checks in a row, do we call it a BEACON. Then we check the
+destination on AbuseIPDB and VirusTotal just to show the analyst, pop an
+alert, and optionally block that site for 24 hours. An analyst can later tell
+the system whether an alert was right or wrong — we keep that as a record, but
+we never let it silently retrain the model.
+
+We tested it honestly on real malware captures, holding out a whole malware
+family each time. On the traffic windows it actually sees, it hits the
+accuracy, precision, recall and F1 targets we set out to reach. Looked at
+family-by-family instead, it does a little worse, mainly on one small,
+fast-flux family whose traffic naturally splits itself into many tiny pieces —
+we report both readings rather than only the flattering one. We are open
+about what it misses: beacons that add random jitter, use GET, change their
+URL every time, AND spoof their Referer, all at once."
+
+-------------------------------------------------------------------------------
+ C) COMPLETE FLOW DIAGRAM
+-------------------------------------------------------------------------------
+
+  Chromium (WebSentinel session)
+        |
+        |  every outgoing request (all tabs)
+        v
+  +-----------------------------+        +--------------------------------+
+  | interceptor.py (CDP)        |<------>| context_tagger.py              |
+  | requestWillBeSent /         |        | injected JS: click/key/scroll  |
+  | responseReceived /          |        | -> per-ORIGIN idle clock       |
+  | loadingFinished              |        | -> user_active / bg_tab /      |
+  | -> per-host deque(maxlen=50) |        |    extension / script / page   |
+  +-----------------------------+        +--------------------------------+
+        |  (last 50 req per host, <30 min old)
+        v
+  +-------------------------------------------------------------+
+  | analyzer.py  _analyze_once()   -- every 10 seconds          |
+  |   skip: <3 events / blocked / brand-new burst               |
+  |   timing maturity weight w = f(n events)  (6 -> 20 ramp)    |
+  +-------------------------------------------------------------+
+        |
+        v
+  +-----------------------------+
+  | feature_engine.py           |
+  | compute 32 features         |
+  +-----------------------------+
+        |                              \
+        v                               v
+  +---------------------+        +-----------------------------+
+  | ml_classifier.py    |        | analyzer._heuristic_score() |
+  | XGBoost, 20 features |        | rhythm first, then evidence |
+  | -> 0.50 = its C2 line|        | (same-site dampener x0.70)  |
+  | c3_xgb_final_...pkl  |        +-----------------------------+
+  +---------------------+                 |
+        |   ML                            |  heuristic
+        \-------------------+  +----------/
+                            v  v
+                +--------------------------------+
+                | risk_fusion.py  fuse()          |
+                | score = 0.55*ML + 0.45*heur     |
+                | BEACON: ML >= 0.50 + a rhythm   |
+                +--------------------------------+
+                            |
+                            v
+                +--------------------------------+
+                | verdict + gates (analyzer.py)   |
+                |  >=10 req to confirm            |
+                |  3-cycle persistence gate       |
+                |  known-safe host -> 0.85 bar    |
+                |  SAFE / SUSPICIOUS / BEACON     |
+                +--------------------------------+
+                            | BEACON
+                            v
+        +-------------------------------------------------+
+        | _handle_beacon()                                 |
+        |  60s cooldown                                    |
+        |  reputation_engine.score_beacon()  (EVIDENCE)    |
+        |    AbuseIPDB (IP) + VirusTotal (domain), cached  |
+        |  alert_store.add_alert()  -> SQLite              |
+        |  if auto-block & score>=0.75:                    |
+        |     interceptor.block_host() -> route.abort()    |
+        |     + CDP setBlockedURLs, block_store (24h)      |
+        |  broadcast c3_alert  -> dashboard WebSocket      |
+        +-------------------------------------------------+
+                            |
+                            v
+              FastAPI /c3/* endpoints + dashboard
+     (Live Monitor / Alerts (+ analyst feedback) / Host Analysis / Detection Lab)
+
+-------------------------------------------------------------------------------
+ D) KEY FACTS TO MEMORISE
+-------------------------------------------------------------------------------
+  * Purpose: real-time, browser-inside C2 BEACON detection (CDP-based).
+  * Capture: Chrome DevTools Protocol Network domain, one session per tab.
+  * Scoring cadence: every 10 s, on the last 50 requests per host, <30 min old.
+  * 32 features computed; ML reads 20; heuristics use ~12; the rest are
+    absolute-scale predecessors or dashboard-only display fields.
+  * ML model: XGBoost, models/c3_beacon_classifier.pkl, 300 trees depth 4,
+    UNCALIBRATED, loaded by ml_classifier.py.
+  * Top feature: referrer_absent_ratio (0.285 gain importance).
+  * Training data: 52,909 in-scope windows (310 real C2, 52,599 benign),
+    6 malware families, after a label-integrity fix (removed 273,944
+    mislabelled benign requests) and a scope fix. NO synthetic data.
+  * Threshold: a 5% false-positive budget on out-of-fold benign scores, not
+    a fixed 0.5 and not F1-optimal.
+  * Weighting: equal-family (every malware family contributes equal total
+    training weight) + balanced benign source split.
+  * Fusion: score = 0.55*ML + 0.45*heuristic (measured peak of a 0.45-0.70
+    sweep). Reputation NOT in the score.
+  * Both-signal gate: ML below 0.50 on the decision scale, or heuristic
+    below 0.10 (no timing rhythm) -> capped at 0.51.
+  * Temporal persistence gate: 3 consecutive cycles of new SUSPICIOUS+
+    traffic required before BEACON confirms.
+  * Thresholds: SAFE <0.30, SUSPICIOUS 0.30-0.51, BEACON >=0.52,
+    auto-block >=0.75, confirm needs >=10 requests, known-safe bar 0.85.
+  * Honest eval (LOFO, per-window/micro): acc 0.9693, prec 0.9564, rec
+    0.9835, F1 0.9697 — meets all four asked-for targets.
+  * Honest eval (LOFO, per-family/macro): acc 0.9264, prec 0.9444, rec
+    0.9064, F1 0.9218 — the conservative reading, does not meet them.
+  * Absolute false-positive load: 5.2% of raw benign windows cross the ML
+    threshold (2,571 of 49,922) — the 5% budget doing its job.
+  * End to end, held out, context assumed: BEACON 100% for the periodic
+    family (ZeusV1); SUSPICIOUS-or-above 75-100% for every family;
+    non-periodic C2 is SUSPICIOUS by design; 0-0.1% of held-out real
+    browsing flagged BEACON (2026-09-14 scoring, Section 5.6).
+  * Reputation: AbuseIPDB + VirusTotal, only on a confirmed BEACON, cached
+    30 min, EVIDENCE ONLY.
+  * Blocking: Playwright route.abort() + CDP setBlockedURLs, persisted 24 h,
+    auto-expire, re-apply on restart. Opt-in (off by default).
+  * Analyst feedback: correct/false_positive + note per alert, evidence
+    only, never auto-fed back into scoring or retraining.
+  * Tests: 154 unit tests + 4 train/serve parity tests + 3 scripted attack
+    scenarios (tc01/02/03).
+  * Fail-safe: no model file -> heuristic-only mode still detects.
+  * Biggest honest weaknesses: combined jitter+GET+cache-bust+Referer-spoof
+    evasion (down to 72.4% recall); FastFlux under-served by per-pair
+    windowing; only 6 families, 3 with under 5 windows; end-to-end BEACON
+    needs real browser context to reach its measured numbers.
+
+-------------------------------------------------------------------------------
+ E) TOP 15 LIKELY PANEL QUESTIONS + ANSWERS
+-------------------------------------------------------------------------------
+1. Q: What problem does C3 solve that existing tools don't?
+   A: C2 hidden inside trusted domains, detected from browser-execution
+      context (idle user, hidden tab, extension/script origin) that a network
+      IDS cannot see.
+
+2. Q: How do you get the data out of the browser?
+   A: Chrome DevTools Protocol Network domain, one CDP session per tab
+      (interceptor.py). No extension, no proxy.
+
+3. Q: What are the features and which matters most?
+   A: 32 total; the model uses 20 scale-free ones; referrer_absent_ratio is
+      the single most important (0.285 gain importance) and every important
+      timing feature is monotone-constrained.
+
+4. Q: What model, and why that one?
+   A: XGBoost. Small imbalanced tabular data, no scaling needed, supports
+      monotone constraints and per-row sample weighting, and beat a
+      logistic-regression alternative on this data.
+
+5. Q: Supervised or unsupervised?
+   A: Supervised on real C2 labels. We removed an earlier Isolation Forest
+      because it flags "unusual", not "C2".
+
+6. Q: Describe the dataset.
+   A: 52,909 in-scope windows (310 real C2, 52,599 benign) across 6 malware
+      families, from CTU-13 plus three further public Stratosphere Zeus
+      captures, after fixing a label-integrity defect that had put 273,944
+      of the malware's own requests into the benign class.
+
+7. Q: How did you evaluate?
+   A: LOFO (hold out a whole malware family) as the headline, LOPO (hold out
+      one C&C server, same family allowed elsewhere) as a secondary, easier
+      protocol. Both report micro and macro averages side by side.
+
+8. Q: What are the honest numbers?
+   A: LOFO per-window: accuracy 0.9693, precision 0.9564, recall 0.9835, F1
+      0.9697 — meets all four asked-for targets. Per-family: 0.9264 / 0.9444
+      / 0.9064 / 0.9218 — does not, mainly because of one 12-window family.
+
+9. Q: A 5% false-positive budget sounds high — explain.
+   A: It is the ML stage's OWN threshold, not the system's. Fusion (0.55 ML
+      weight) and the both-signal guard downstream narrow it substantially —
+      that is exactly why the ML score alone can never confirm a beacon.
+
+10. Q: How is the final verdict computed?
+    A: score = 0.55*ML + 0.45*heuristic; both must be >= 0.10; >= 10 requests
+       and 3 consecutive sustained cycles to confirm BEACON.
+
+11. Q: Why isn't reputation part of the score?
+    A: The threat model is trusted-domain C2, which has clean reputation. A
+       reputation term would only reduce the score on the exact case we
+       target. It is shown as analyst evidence instead.
+
+12. Q: What happens on a confirmed beacon?
+    A: TI lookup (evidence), alert saved to SQLite, WebSocket pop-up, and if
+       auto-block is on and score >= 0.75, the host is blocked for 24h. An
+       analyst can later label the alert correct/false-positive.
+
+13. Q: How fast does it detect?
+    A: Sustained-evidence: up to 10s loop, >= 10 requests, and 3 consecutive
+       sustained cycles — roughly 2-3 minutes for a fast beacon.
+
+14. Q: How can it be evaded?
+    A: Timing jitter + GET + cache-busting URL + Referer spoofing, applied
+       TOGETHER, is the one combination measured to cost real recall
+       (down to 72.4%) — plus foreground timing and same-site hosting.
+
+15. Q: What is the research contribution?
+    A: Browser-inside C2 detection via CDP with a per-ORIGIN idle clock,
+       scale-free monotone-constrained features, a both-signal gate (model
+       says C2 + a timing rhythm) PLUS a temporal persistence gate, and an analyst-feedback loop kept
+       strictly as evidence rather than an automatic retraining signal.
+
+-------------------------------------------------------------------------------
+ F) 10 DIFFICULT / TRICKY PANEL QUESTIONS + ANSWERS
+-------------------------------------------------------------------------------
+1. Q: 226 of your 303 reliable LOFO test positives are one family (ZeusV1).
+      Is your headline just "detects ZeusV1"?
+   A: Partly on raw count, but Neris and FastFlux are reported individually
+      (F1 0.959 and 0.827) and the macro/per-family average deliberately
+      weighs all three families equally to counter exactly this.
+
+2. Q: Your combined-evasion test shows recall dropping to 72.4%. Doesn't that
+      make the ML layer beatable?
+   A: Yes, and we measured and published the exact number rather than a
+      single-evasion "still works" claim. It is the honest ceiling of what
+      the current feature set resists against the strongest tested attack.
+
+3. Q: If the both-signal gate blocks ML-only detections, a stealthy beacon
+      that only the model sees is missed. Why keep that gate?
+   A: Deliberate. With ~300 in-scope positives we will not auto-confirm and
+      block live user traffic on the model alone. A documented, off-by-
+      default bypass exists for sustained high-confidence ML, but shipping
+      it enabled is a product decision, not a tuning one.
+
+4. Q: Are the end-to-end figures reproducible / peer-reviewable?
+   A: Yes: scripts/eval_c3_real_world_pipeline.py re-runs them on the real
+      captures through the real pipeline, held out, under three labelled
+      context conditions, and writes data/_c3_real_world_pipeline_results
+      .json. That script and its output were archived on 2026-09-15, so the
+      figures stand as recorded rather than as a standing benchmark. The
+      classifier's own numbers are reproducible today: core/c3/C3_ML_Train.ipynb
+      recomputes every one of them from the model and the training CSV.
+
+5. Q: You compute 32 features but the model reads 20. Isn't that wasted
+      design?
+   A: The other 12 mostly duplicate the heuristics' job (browser-context
+      ratios, same-site, script-initiator all drive specific rules) or are
+      absolute-scale predecessors kept for the dashboard. It is a documented,
+      deliberate division of labour, not dead code.
+
+6. Q: The heuristic rule weights (0.30, 0.25, ...) look arbitrary. How do
+      you defend them scientifically?
+   A: We do not claim they are optimal — there is no labelled fusion-outcome
+      dataset in this project to calibrate them against, and risk_fusion.py
+      says so. The 0.55/0.45 FUSION SPLIT, unlike the individual rule
+      weights, IS measured (Section 4.7).
+
+7. Q: Relaxing your monotone constraints improved corpus accuracy. Why not
+      just ship that version?
+   A: We measured it and it broke an idealised beacon a real unit test checks
+      for — a real regression, not a hypothetical one. We paid 0.004 F1 to
+      fix it rather than ship a corpus-flattering number that fails on data
+      the corpus itself cannot represent.
+
+8. Q: Your benign training class is largely 2011-2014 lab/public-capture
+      traffic. How is that valid for a modern browser detector?
+   A: It is a real, disclosed limitation (Section 9.4). It is adequate for
+      learning "regular C2 vs irregular non-C2 timing" but not representative
+      of modern web-app background traffic. The heuristics (same-site
+      dampener, known-safe list, 0.85 bar) are how we compensate; broadening
+      the benign set is future work.
+
+9. Q: A malicious page could fire fake click events on itself to look
+      user-driven. Doesn't that defeat your context signal?
+   A: It weakens user_active_ratio, but C3 also checks document visibility and
+      a per-origin idle clock — a hidden-tab or worker beacon is never
+      "active" no matter what events fire. It raises the attacker's cost; it
+      is not absolute.
+
+10. Q: Your analyst-feedback feature could be used to silently improve the
+       model over time. Why isn't it wired into retraining?
+    A: Because that would create a retraining loop with no held-out set — the
+       detector would learn its operator's habits, not the attacker's. It is
+       kept as an auditable evidence trail (a measured false-positive rate
+       over LABELLED alerts) precisely so that decision stays a deliberate,
+       future, measured one rather than an accidental one.
+
+-------------------------------------------------------------------------------
+ G) WEAKNESSES / LIMITATIONS TO HONESTLY ACKNOWLEDGE
+-------------------------------------------------------------------------------
+DATA
+  * Only 310 in-scope real C2 positive windows; 6 malware families, 3 of them
+    with under 5 windows; all captures 2011-2014, public research sources.
+  * FastFlux is structurally under-served by per-(source,destination)
+    windowing — not a tuning failure, a windowing-granularity mismatch with
+    how that family actually operates.
+  * Sogou cannot be detected and is not claimed to be (3 windows; looks like
+    ordinary browsing on the strongest feature).
+  * No browser-extension C2 and no service-worker C2 in training at all —
+    the headline threat is covered only by heuristics + scripted tests.
+
+MODEL
+  * Threshold set by a 5% false-positive budget on the ML stage alone — real
+    but expected to be, and measured to be, narrowed downstream by fusion.
+  * Combined jitter + GET + cache-busting + Referer spoofing measured to cost
+    real recall (down to 72.4%) — the single biggest known evasion path.
+  * Only 3 of 6 LOFO folds are "reliable" and one (ZeusV1) is nearly 3.5x the
+    combined size of the other two.
+
+FEATURES / PIPELINE
+  * The path-only features close the SINGLE-technique cache-busting evasion
+    but not the combined attack (Section 6.4).
+  * Several computed features feed nothing in the live scoring path
+    (dashboard/backward-compatibility only).
+  * The 9 heuristic rule weights are design choices, not calibrated; only the
+    ML/heuristic fusion SPLIT is measured.
+
+DETECTION BEHAVIOUR
+  * Sustained-evidence design: minimum ~2-3 minutes for a fast beacon once
+    the temporal persistence gate is included; longer for a slow one.
+  * Very slow beacons (interval >> a few minutes) never fill a window within
+    the 30-minute age filter and are effectively invisible.
+  * Foreground / same-site-hosted / single-shot (non-repeating) beacons are
+    dampened or gated out and can be missed by design.
+
+END-TO-END / EVALUATION
+  * A BEACON verdict needs browser context a network capture cannot supply,
+    and a timing rhythm, so non-periodic C2 is reported as SUSPICIOUS.
+    Benign software heartbeats (one endpoint, tiny replies, no Referer,
+    every few seconds) look exactly like a beacon and can be confirmed:
+    1.36% of held-out capture-background windows under worst-case assumed
+    context (Section 5.6).
+  * An in-page fetch() beacon sends a Referer; the model's strongest
+    feature is a missing one, so it scores such a beacon low and the host
+    reads SUSPICIOUS. Closing that needs a retrain.
+  * The true operational auto-block false-positive rate remains genuinely
+    unmeasured — the offline corpus has no real browser-context signal to
+    drive the heuristic side of that specific question.
+  * Reputation and blocking are functionally tested, not measured with
+    metrics.
+
+BLOCKING / SCOPE
+  * Blocking is best-effort (CDP/Playwright can miss service-worker traffic);
+    opt-in, off by default.
+  * Only browser-routed traffic is in scope — native OS malware is not (by
+    design, but state it).
+
+
+===============================================================================
+ SECTION 12 — EXTRA Q&A SESSION (ML DEEP-DIVE)
+ Plain, clear answers to a specific list of questions. Every number is traced
+ to the real code / real dataset files in this repo.
+===============================================================================
+
+-------------------------------------------------------------------------------
+ Q1. WHAT ARE THE ML APPROACHES USED?
+-------------------------------------------------------------------------------
+There is exactly ONE machine-learning model in the live C3 pipeline:
+
+  * A SUPERVISED binary classifier — XGBoost (gradient-boosted decision
+    trees). Class 1 = "C2 beacon window", class 0 = "not C2".
+    File: models/c3_beacon_classifier.pkl
+    Code: core/c3/ml_classifier.py  (class C3XGBoostEngine)
+
+Approaches TRIED and DROPPED along the way (not in the live system):
+  * Isolation Forest — UNSUPERVISED anomaly detection. Removed: it detects
+    "statistically unusual traffic", not "C2" specifically. Too many false
+    alarms, no concept of a beacon.
+  * Random Forest — supervised, replaced by XGBoost for better calibration
+    (its benign scores sat lower, letting the BEACON threshold be set safely
+    lower and recall go up).
+  * Logistic regression, alone and blended with XGBoost — both measured and
+    beaten by XGBoost alone on LOFO AUC (Section 4.5 above).
+
+Alongside the ML model, C3 also runs 9 HAND-WRITTEN HEURISTIC RULES
+(analyzer.py). Those are NOT machine learning — they are fixed if/then rules —
+but they are 45% of the final decision.
+
+One-line answer: "One supervised, uncalibrated XGBoost classifier on 20
+scale-free features, fused with a rule-based heuristic engine. Unsupervised
+(Isolation Forest), Random Forest, and logistic-regression approaches were
+tested and rejected on measurement."
+
+-------------------------------------------------------------------------------
+ Q2. WHAT ARE THE INPUTS?
+-------------------------------------------------------------------------------
+(a) INPUT TO THE WHOLE C3 SYSTEM (live): every outgoing network request the
+    browser makes, captured through CDP (interceptor.py) — url, host, method,
+    status, size (Content-Length preferred, falling back to on-wire bytes),
+    timestamp, CDP initiator type — plus browser context from
+    context_tagger.py: idle_time_ms (per origin), user_was_active,
+    is_background_tab, is_extension_origin, page_url. Grouped per host into a
+    rolling window of the last 50 requests (events > 30 min old dropped).
+
+(b) INPUT TO THE ML MODEL ITSELF: a row of 20 numbers, all scale-free, from
+    feature_engine.py -> compute_features(), looked up BY NAME
+    (ml_classifier.ML_FEATURE_SUBSET), not by position — see Section 4.2 for
+    the full list. Output: one number, P(C2) between 0 and 1.
+
+-------------------------------------------------------------------------------
+ Q3. IS THE DATASET PUBLICLY AVAILABLE? / WHAT DATASETS ARE USED?
+-------------------------------------------------------------------------------
+YES — every raw source is public. C3 does NOT invent data.
+
+  * CTU-13 (Stratosphere Laboratory, CTU University, Prague, 2011) — the 6 of
+    13 scenarios whose C&C rides over HTTP (1, 2, 5, 7, 9, 13).
+  * Three further public Stratosphere Malware Capture Facility captures:
+    Botnet-25-1 (ZeusV1), Botnet-26 (ZeusB26), Botnet-78-1/2 (Zeus78).
+  * Built into data/c3_18feat_dataset.csv by scripts/build_c3_18feat_
+    dataset.py. Not committed to git (data/*.csv is gitignored — the
+    project's existing convention for large files), but fully rebuildable
+    from the public captures with the script in this repo.
+
+Older, superseded datasets (data/c3_ctu13_http_c2_dataset.csv, etc.) are not
+used by the deployed model; they belong to earlier, now-archived model
+generations documented in ml_classifier.py's own module history.
+
+-------------------------------------------------------------------------------
+ Q4. ARE THE DATASETS LABELLED OR NOT?
+-------------------------------------------------------------------------------
+LABELLED. data/c3_18feat_dataset.csv's `label` column is 1 for a window
+containing at least one request with the capture's own trusted "-CC<n>-"
+command-and-control ground-truth tag, 0 otherwise (ANY-based, not majority).
+As of the 2026-09-12 fix, "0" specifically means "confirmed NOT part of a
+C&C channel" — windows that were part of the malware's own non-C&C traffic
+(scans, spam, click-fraud) but never carried a -CC tag are now dropped as
+UNDETERMINED rather than counted as a labelled negative (Section 3.4). No
+unlabelled/clustering data is used anywhere in C3.
+
+-------------------------------------------------------------------------------
+ Q5. WHAT FEATURES ARE INCLUDED IN THE DATASET?
+-------------------------------------------------------------------------------
+data/c3_18feat_dataset.csv carries all 32 features from feature_engine.
+FEATURE_ORDER (Section 3.6) plus bookkeeping columns (source, pair, family,
+group, label, status_known_ratio, error_status_ratio, botnet_noncc_ratio —
+the last three drive the label-integrity and scope rules, Sections 3.4-3.5).
+Of the 32 feature columns, the model reads 20 by name (Section 4.2); the rest
+are present for the heuristics, diagnostics, or backward compatibility.
+
+-------------------------------------------------------------------------------
+ Q6. IS THE DATASET BALANCED OR UNBALANCED?
+-------------------------------------------------------------------------------
+UNBALANCED, heavily and realistically (real beacons are rare compared to
+ordinary browsing):
+    In-scope (what the deployed model trains/evaluates on):
+        52,909 windows;  310 C2 (0.59%);  52,599 benign  (~1:170)
+    Raw corpus (before the scope filter):
+        62,321 windows;  6,890 C2 (11.1%);  55,431 benign  (~1:8, but most of
+        this positive share is OUT-of-scope dead/never-answered channels —
+        see Section 3.2, NOT what the headline trains or is measured on)
+
+HOW THE IMBALANCE IS HANDLED:
+  * NOT resampling. Per-row sample weighting at training time
+    (WEIGHT_SCHEME = "equal_family"): every malware family carries equal
+    total weight, and the benign class carries the same total weight as the
+    positive class, split evenly between real human browsing and ordinary
+    network background (Section 4.5).
+  * Plain accuracy is only reported on a class-balanced held-out set, never
+    on the raw imbalanced population, where "always predict benign" would
+    already score >99%.
+
+-------------------------------------------------------------------------------
+ Q7. HOW MANY ROWS DOES THE DATASET INCLUDE?
+-------------------------------------------------------------------------------
+data/c3_18feat_dataset.csv (raw, printed by the trainer):
+    TOTAL WINDOWS   : 62,321
+    C2 windows      : 6,890
+    Benign windows  : 55,431
+
+Of the 6,890 C2 windows, only 310 (across 40 independent C&C pairs, 6
+families) pass the ACTIVE-PERIODIC-CHANNEL scope rule and are what the
+deployed model actually trains and is evaluated on — the other 6,580 are
+dead or never-answered channels, reported separately (Section 5.5), not
+silently dropped. If asked "how many rows trained your live model?", the
+correct answer is 52,909 in-scope windows (310 C2 + 52,599 benign), not the
+raw 62,321.
+
+-------------------------------------------------------------------------------
+ Q8. WHAT ARE THE HYPERPARAMETERS IN MY ML MODEL?
+-------------------------------------------------------------------------------
+From scripts/train_c3_final_model.py's XGB_PARAMS and the deployed pickle:
+    n_estimators        = 300     boosting rounds (trees)
+    max_depth           = 4       each tree is fairly shallow
+    learning_rate       = 0.06    how much each new tree corrects the model
+    min_child_weight    = 8       a leaf must be backed by enough rows to split
+    subsample           = 0.85    each tree sees a random 85% of the rows
+    colsample_bytree    = 0.85    each tree sees a random 85% of the features
+    reg_lambda          = 2.0     L2 regularisation on leaf weights
+    monotone_constraints = the 20-value tuple in Section 4.3
+    eval_metric         = "aucpr" (area under precision-recall curve)
+    random_state        = 42      fixed seed -> reproducible training
+    n_jobs              = 8       CPU threads for training
+    threshold           = set per-fold by a 5% false-positive budget (NOT a
+                          fixed 0.5 — see Q9 and Section 4.5)
+    sample weighting    = equal_family (per-row, not a model parameter, but
+                          part of every clf.fit() call — Section 4.5)
+
+-------------------------------------------------------------------------------
+ Q9. DOES THIS USE ML HYPERPARAMETER TUNING?
+-------------------------------------------------------------------------------
+YES, but deliberately targeted at the choices that actually moved the number,
+each swept and measured against its alternatives on LOFO (Section 4.5):
+  * Calibration: none / isotonic / sigmoid -> none wins (0.9780 vs 0.9571 vs
+    0.9440 mean LOFO ROC-AUC).
+  * Threshold rule: false-positive budget (1%-8% swept, 5% chosen) vs
+    F1-optimal.
+  * Family weighting: equal_family vs sqrt / capped / flat -> equal_family
+    wins (LOFO F1 0.9040 vs 0.8713 / 0.8712).
+  * Model family: XGBoost alone vs an XGBoost+logistic-regression blend vs
+    logistic regression alone -> XGBoost alone wins (mean LOFO AUC 0.9774 vs
+    0.9670 vs 0.8754-0.9090).
+  * Feature set: all 20 kept vs greedy backward elimination -> all 20 kept,
+    deliberately, even though elimination measured +0.003 AUC, because
+    selecting features against the same 3 reliable LOFO folds the headline is
+    read from would tune the headline to its own test set.
+The core tree hyperparameters (n_estimators, max_depth, etc.) are fixed by
+design at conservative, anti-overfit values given ~300 real positive windows,
+not swept by a large automated search — stated openly, as with the earlier
+model generations this one supersedes.
+
+-------------------------------------------------------------------------------
+ Q10. WHAT PACKAGES ARE USED TO TRAIN / LEARN THE ML MODEL?
+-------------------------------------------------------------------------------
+  Core learning:
+    xgboost            – the XGBClassifier itself (the model)
+    scikit-learn       – training SUPPORT tools, NOT the model: GroupKFold
+                         for the inner threshold-selection CV, metrics
+                         (roc_auc_score, precision_recall_fscore_support,
+                         confusion_matrix, accuracy_score)
+  Data handling:
+    pandas             – load the CSV, apply the scope/label rules, group by
+                         family/pair for LOFO/LOPO folds
+    numpy              – feature columns -> numeric arrays for XGBoost
+  Saving the model:
+    pickle             – writes {model, feature_names, threshold,
+                         feature_importances, trained_on, calibration,
+                         threshold_rule, scope, LOFO_mean, LOPO_mean} to
+                         models/c3_beacon_classifier.pkl. This project uses
+                         `pickle`, NOT `joblib`.
+  Charts (separate script, not needed to train):
+    scripts/make_c3_model_charts.py generates the figures under
+    paper/figures/model/ from the same JSON results file the trainer writes.
+
+  At RUNTIME (live scoring) the model only needs: xgboost + numpy + pickle.
+  pandas / scikit-learn are training-time only.
+
+-------------------------------------------------------------------------------
+ Q11. WHY SUPERVISED (OR UNSUPERVISED) RATHER THAN LINEAR REGRESSION?
+-------------------------------------------------------------------------------
+"Supervised vs unsupervised" and "linear regression" are not opposite choices.
+  * Supervised vs unsupervised = do we have labels? We DO (every window is
+    marked C2 or benign, per the "-CC" ground truth), so supervised fits.
+  * Linear regression = a specific supervised algorithm predicting a
+    CONTINUOUS number by a straight-line relationship.
+
+Why not linear regression here:
+  1. This is CLASSIFICATION (C2 or not), not a continuous quantity.
+  2. The relationship is NOT linear: a beacon needs LOW iat_cv AND small,
+     repeated payload sizes AND few distinct paths TOGETHER — an
+     AND-interaction a linear model cannot express but a tree can, by
+     splitting on one feature then another down the same branch.
+  3. The data is imbalanced (~1:170) with features on very different natural
+     scales; trees only care about VALUE ORDER, not magnitude, so they are
+     robust to this without any scaling step.
+  4. We need MONOTONE CONSTRAINTS (Section 4.3) — XGBoost supports this
+     directly; plain linear regression has no such mechanism.
+
+Why not unsupervised (Isolation Forest): tried and removed — it finds
+"unusual" traffic, not "C2" specifically, with real labels available there is
+no reason to throw them away.
+
+-------------------------------------------------------------------------------
+ Q12. WHY DO OUR MODELS DIFFER FROM LINEAR REGRESSION?
+-------------------------------------------------------------------------------
+  Linear regression:                    XGBoost (what we use):
+  -----------------------------------   -----------------------------------
+  Predicts a continuous number          Predicts a probability 0..1 (then
+  (needs a manual threshold to           class 0/1)
+  classify)
+  Fits ONE straight-line equation:      Builds 300 small decision trees, each
+  y = w1*f1 + w2*f2 + ... + b            correcting the previous ones
+  Feature effects are ADDITIVE and       Captures FEATURE INTERACTIONS via
+  independent                            nested tree splits
+  Sensitive to feature SCALE and to     Scale-free (uses value ORDER only);
+  outliers                               robust to outliers via max_depth /
+                                         min_child_weight / reg_lambda
+  No built-in class-imbalance handling  Per-row sample_weight (equal_family)
+  No monotonic-constraint support       monotone_constraints, one entry per
+                                         feature (Section 4.3)
+  Cannot model "suspicious only when     Can, because a tree branch is a chain
+  several conditions co-occur"           of AND conditions
+
+-------------------------------------------------------------------------------
+ Q13. WHY DID YOU CHOOSE THIS MODEL SPECIFICALLY FOR THE PROJECT?
+-------------------------------------------------------------------------------
+  1. The data is small (~300 real positives), wide (20 features), tabular,
+     and very imbalanced — boosted decision trees are the standard strong
+     baseline for exactly that shape, and beat deep learning when data is
+     scarce.
+  2. No feature scaling needed — deliberately scale-free features plus a
+     tree model that only uses value order.
+  3. Monotone constraints — needed to force known feature directions, and
+     directly supported.
+  4. Per-row sample weighting — needed for equal-family training, and
+     directly supported via sample_weight.
+  5. Measured, not assumed, to beat the alternatives actually tried
+     (logistic regression, an XGB+LR blend, isotonic/sigmoid calibration) —
+     Section 4.5.
+  6. Fast and light at runtime — one predict_proba over 300 depth-4 trees is
+     still sub-millisecond, fitting easily inside a 10-second analyzer loop.
+  7. Exposes real feature_importances_, shown to the analyst on the
+     dashboard — the ML decision is explainable, not a black box.
+
+-------------------------------------------------------------------------------
+ Q14. XGBOOST — WHY IS IT SPECIAL COMPARED TO OTHER MODELS?
+-------------------------------------------------------------------------------
+XGBoost = "Extreme Gradient Boosting". It builds an ENSEMBLE of small decision
+trees one after another; each new tree is trained to fix the mistakes the
+current ensemble still makes. The final score is the sum of all trees'
+contributions, squashed to a 0..1 probability.
+
+  vs Random Forest (also trees): RF builds trees INDEPENDENTLY and averages
+    them; XGBoost builds them SEQUENTIALLY. In this project's own tests,
+    XGBoost's benign scores sat lower/tighter, letting the BEACON threshold be
+    set lower safely. XGBoost also supports monotone constraints; RF's
+    support is poor.
+  vs Logistic regression: measured directly on this data (Section 4.5) —
+    XGBoost alone (mean LOFO AUC 0.9774) beats logistic regression alone
+    (0.8754-0.9090) and an XGB+LR blend (0.9670).
+  vs Neural network / deep learning: needs far more than ~300 positives or it
+    overfits badly; heavier at runtime; not explainable via simple feature
+    importances.
+
+  Built-in advantages actually used:
+    * sample_weight (per row)     -> equal-family training
+    * monotone_constraints        -> encodes measured feature directions
+    * subsample / colsample / reg_lambda -> regularisation against
+                                    overfitting ~300 positive rows
+    * feature_importances_        -> explainability for the dashboard
+
+-------------------------------------------------------------------------------
+ Q15. WHAT ARE THE LIBRARIES USED?
+-------------------------------------------------------------------------------
+LIVE C3 code (core/c3/*.py) — from requirements.txt:
+  xgboost        the ML model (ml_classifier.py)
+  numpy          feature vector -> array for the model; also used inside
+                 feature_engine.py's Plane-3 feature math
+  playwright     drives Chromium + CDP capture + route-based blocking
+  httpx          async calls to AbuseIPDB / VirusTotal (reputation_engine.py)
+  tldextract     registrable-domain (eTLD+1) parsing for same_site_ratio
+  fastapi        the /c3/* HTTP + WebSocket endpoints (core/main.py)
+  uvicorn        the server that runs FastAPI
+  Python standard library: asyncio, sqlite3 (alert_store.py / block_store.py),
+     pickle (model load), pathlib, datetime, statistics, math, collections,
+     urllib, ipaddress, socket, csv, json
+
+TRAINING SCRIPTS ONLY (not needed to run the detector):
+  pandas         load and filter the CSV dataset, group by family/pair
+  scikit-learn   grouped CV + evaluation metrics
+
+NOT used by C3 (belong to teammates' components, or were never adopted):
+  joblib         NOT used for the C3 model — C3 uses `pickle`
+  tensorflow / torch / keras  — none; C3 has no deep learning
+  Isolation Forest / sklearn.ensemble  — only in archived, retired code
+
+-------------------------------------------------------------------------------
+ Q16. IS IT "SKLEARN" OR "SCIKIT-LEARN"?
+-------------------------------------------------------------------------------
+The SAME library, two names: "scikit-learn" is the PyPI package name
+(`pip install scikit-learn`); "sklearn" is the import name
+(`from sklearn.metrics import roc_auc_score`). The MODEL itself is not from
+scikit-learn — it is `from xgboost import XGBClassifier`. scikit-learn is used
+only for grouped cross-validation and metrics.
+
+-------------------------------------------------------------------------------
+ Q17. WHERE IS THE ML MODEL CONNECTED INTO THE C3 COMPONENT?
+-------------------------------------------------------------------------------
+  1. LOAD  — core/c3/ml_classifier.py
+       C3XGBoostEngine.__init__() sets
+         self._model_path = <repo>/models/c3_beacon_classifier.pkl
+       and calls self.reload(), which pickle-loads and validates the model
+       (rejects it if it isn't the {model, feature_names, threshold} payload
+       shape, doesn't expose predict_proba, or names a feature that doesn't
+       exist in feature_engine.FEATURE_ORDER). A module-level singleton
+       `c3_ml_engine = C3XGBoostEngine()` is created at import time.
+
+  2. CALL  — core/c3/analyzer.py
+       imports `from .ml_classifier import c3_ml_engine`. Inside
+       _analyze_once(), for each host with n_events >= 6:
+         ml_full, _ = c3_ml_engine.score(feats_full)
+       score() builds the 20-value array (by name) and returns
+       model.predict_proba(X)[0][1].
+
+  3. FUSE  — core/c3/risk_fusion.py
+       analyzer.py calls c3_risk_fusion.fuse(ml_full, None, heur_full,
+       degraded_ratio, context_blind_ok), which computes
+       0.55*ml + 0.45*heuristic and applies the both-signal and
+       context-blind-bypass logic.
+
+  4. STATUS — core/c3/analyzer.py -> status()
+       reports c3_ml_engine.model_loaded and c3_ml_engine.feature_importance()
+       so the dashboard can show whether the model is live and what it
+       weighs, plus the live thresholds/weights so the dashboard never
+       hardcodes a second, driftable copy of them.
+
+  5. BACKEND — core/main.py
+       exposes /c3/status, /c3/hosts, /c3/alerts, the feedback endpoints, etc.
+       It does NOT touch the model directly — it goes through c3_analyzer.
+
+  6. TRAINING (offline, separate) — scripts/train_c3_final_model.py, reading
+       data/c3_18feat_dataset.csv (built by scripts/build_c3_18feat_
+       dataset.py). Not imported by the live system; it just writes the
+       .pkl file that step 1 then loads.
+
+  Nothing in C1 / C2 / C4 imports the C3 model. The model is used only
+  within the C3 package.
+
+-------------------------------------------------------------------------------
+ Q18. WHAT FILES ARE INVOLVED IN THE MODEL, AND WHICH LINES?
+-------------------------------------------------------------------------------
+(Line numbers are approximate — the function/attribute names are the
+reliable anchors.)
+
+  core/c3/ml_classifier.py   — the model wrapper (THE key file)
+    ~line 170  ML_FEATURE_SUBSET = [...]        the 20 feature names, in order
+    ~line 209  class C3XGBoostEngine             the wrapper class
+    ~line 229  __init__()                        sets self._model_path
+    ~line 298  self._model_path = .../models/c3_beacon_classifier.pkl
+    ~line 302  self.reload()                     called on construction
+    ~line 304  def reload()                      pickle.load + validate
+    ~line 384  def model_loaded                  property: is a model present?
+    ~line 388  def feature_importance()          real feature_importances_
+    ~line 409  def score(features)               build 20-value array ->
+                                                 model.predict_proba(X)[0][1]
+
+  core/c3/analyzer.py         — where the model is actually called
+    ~line 17   from .ml_classifier import c3_ml_engine
+    ~line 74   AUTO_BLOCK_SCORE_FLOOR = 0.75      (re-measured 2026-09-13)
+    ~line 119  PERSISTENCE_CYCLES = 3
+    ~line 157  CONTEXT_BLIND_BYPASS_ENABLED = False
+    ~line 478  if c3_ml_engine.model_loaded and n_events >= 6:  -> score()
+    ~line 553  c3_risk_fusion.fuse(ml_full, None, heur_full, ...)
+    ~line 799  def _heuristic_score()             the 9 rules
+
+  core/c3/feature_engine.py   — produces the model's input
+    ~line 30   FEATURE_ORDER = [...]             all 32 features (names)
+    ~line 171  def compute_features(events)      turns a window into the dict
+
+  core/c3/risk_fusion.py      — consumes the model's output
+    ~line 62   BEACON_THRESHOLD = 0.52
+    ~line 93   ML_WEIGHT = 0.55 ; HEURISTIC_WEIGHT = 0.45
+    ~line 121  def fuse(ml, reputation, heuristic, degraded_ratio, allow_...)
+
+  models/c3_beacon_classifier.pkl — the trained model file on disk
+    a pickled dict: {model: XGBClassifier, feature_names: [20 names],
+    threshold: <5%-budget value>, feature_importances, trained_on,
+    calibration: "none", threshold_rule, scope, LOFO_mean, LOPO_mean, note}
+
+  scripts/train_c3_final_model.py — trains the deployed model
+    ~line 116  FEATURES = list(FEATURES_18)       the 20 names
+    ~line 140  MONOTONE = (...)                   the 20-value tuple
+    ~line 142  XGB_PARAMS = dict(...)              hyperparameters
+    ~line 147  WEIGHT_SCHEME = "equal_family"
+    ~line 161  FPR_BUDGET = 0.05
+    ~line 165  def load_scoped()                  the scope rule
+    ~line 315  def main()                          LOFO, LOPO, final fit, save
+
+-------------------------------------------------------------------------------
+ Q19. WHAT ARE numpy, pandas, joblib, matplotlib — AND WHAT ELSE LIKE THEM?
+-------------------------------------------------------------------------------
+  numpy — fast arrays and math. USED IN LIVE C3 (ml_classifier.py's array
+    build for predict_proba, and feature_engine.py's Plane-3 feature math).
+  pandas — table/spreadsheet handling. TRAINING SCRIPTS ONLY.
+  joblib — an alternative to pickle for saving Python objects. C3 does NOT
+    use it; C3 uses `pickle` throughout.
+  matplotlib / seaborn — charting. Used only by scripts/make_c3_model_
+    charts.py to produce the figures under paper/figures/model/; not used by
+    the live detector.
+  scikit-learn — grouped CV + evaluation metrics (training only).
+  xgboost — the model itself (LIVE).
+  (standard library, not third-party, but the same role:) pickle, sqlite3,
+    asyncio, statistics/math.
+
+  Quick "live vs training" split:
+    LIVE detector needs : xgboost, numpy, pickle, playwright, httpx,
+                          tldextract, fastapi, uvicorn, sqlite3, asyncio
+    TRAINING scripts    : + pandas, scikit-learn (+ matplotlib/seaborn for
+                          the separate chart-generation script only)
+
+-------------------------------------------------------------------------------
+ Q20. IN XGBOOST, WHAT IS THE "XGBClassifier"? WHY IS IT USED?
+-------------------------------------------------------------------------------
+`XGBClassifier` is the scikit-learn-style CLASSIFICATION interface of the
+xgboost library (`XGBRegressor` is the continuous-number version).
+
+  * .fit(X, y, sample_weight=w) – trains 300 boosted decision trees on the
+    feature matrix X, the 0/1 labels y, and the equal-family per-row weights.
+  * .predict_proba(X)     – returns [P(class 0), P(class 1)] per row; C3 takes
+    column [1] = P(C2). This is the ML score fed into fusion.
+  * .predict(X)           – hard 0/1 label at a 0.5 cut. C3 does NOT use this
+    for the verdict — the fused score decides.
+  * .feature_importances_ – how much each of the 20 features contributed
+    (shown on the dashboard).
+
+Why this class specifically: it gives a PROBABILITY (0..1) fusion needs; it
+accepts sample_weight (equal-family training) and monotone_constraints
+(measured feature directions); and its scikit-learn-compatible API lets the
+training script reuse sklearn's GroupKFold and metric functions directly.
+
+-------------------------------------------------------------------------------
+ Q21. roc_auc, roc_curve, precision_score, recall_score, f1_score —
+      HOW DO THEY MEASURE ACCURACY IN MY MODEL?
+-------------------------------------------------------------------------------
+The 4 basic counts every metric is built from, at the model's chosen
+operating threshold (a 5% false-positive budget, not a fixed 0.5):
+    TP (true positive)  = real C2 window, model said C2       (correct)
+    FP (false positive) = benign window,  model said C2       (false alarm)
+    FN (false negative) = real C2 window, model said benign   (missed beacon)
+    TN (true negative)  = benign window,  model said benign   (correct)
+
+  PRECISION = TP / (TP + FP) — "when the model shouts C2, how often is it
+    right?" LOFO per-window: 0.9564.
+  RECALL = TP / (TP + FN) — "of all real C2 windows, how many did it catch?"
+    LOFO per-window: 0.9835.
+  F1 = 2*precision*recall/(precision+recall) — harmonic mean; punishes
+    trivially maximising either alone. LOFO per-window: 0.9697.
+  ROC CURVE / ROC-AUC — sweep the threshold and plot true-positive rate vs
+    false-positive rate; AUC is the area under that, 0.5 = coin flip, 1.0 =
+    perfect. LOFO per-family mean: 0.9765 — but this can look flatteringly
+    high on a rare positive class, so it is not the headline metric alone.
+  ACCURACY = (TP+TN)/everything. Only reported here on a class-BALANCED held-
+    out set (5 negative draws averaged) — on the raw ~1:170 imbalanced
+    population it would be a meaningless >99% for "always predict benign".
+
+  HOW THEY "MEASURE ACCURACY" TOGETHER (the practical reading):
+    - Balanced accuracy/precision/recall/F1 answer "when it sees one of
+      each, how often is it right" (Section 5.2/5.3).
+    - The RAW false-positive count (Section 5.4: 2,571 of 49,922 benign
+      windows, 5.2%) answers "how much noise does it actually make" — a
+      question the balanced numbers alone cannot answer, and quoting one
+      without the other is quoting half the picture.
+    - Per-window (micro) vs per-family (macro) averaging answers two
+      different questions ("the windows it actually sees" vs "the next
+      family, whichever that is") — both are reported, always, never one
+      hidden behind the other.
+
+  One-line summary for the panel:
+    "On the hardest protocol (an unseen malware family), per-window we hit
+     accuracy 0.9693 / precision 0.9564 / recall 0.9835 / F1 0.9697 — meeting
+     every target asked for. Per-family, the more conservative reading, we
+     get 0.9264 / 0.9444 / 0.9064 / 0.9218, mainly pulled down by one
+     12-window family whose destinations rotate by design. We report both,
+     always, and we report the raw false-positive load (5.2% of benign
+     windows crossing the ML threshold) alongside the balanced numbers so
+     neither reading is quoted in isolation."
+
+===============================================================================
+ END OF FILE
+===============================================================================

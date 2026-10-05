@@ -333,6 +333,10 @@ class PlaywrightSession:
         self._pw          = None
         self._ctx         = None
         self._page        = None
+        # Tabs opened by open_background_tab(). Tracked separately from
+        # self._ctx.pages so close_background_tabs() never closes the primary
+        # page or a tab the user opened themselves.
+        self._background_pages: list = []
         self._running     = False
         self._callbacks:  List[Callable] = []   # nav callbacks
         self._click_cbs:  List[Callable] = []   # C1 click callbacks
@@ -502,6 +506,9 @@ class PlaywrightSession:
         self._ctx  = None
         self._page = None
         self._pw   = None
+        # Their pages died with the context; keeping stale handles would make
+        # close_background_tabs() operate on closed objects after a restart.
+        self._background_pages.clear()
         # Persistent profile (_PROFILE_DIR) is intentionally kept on stop —
         # it stores browser history and extension data for C4 forensics.
 
@@ -648,6 +655,119 @@ class PlaywrightSession:
         return tid
 
     # ── Navigation ─────────────────────────────────────────────────
+    async def open_background_tab(self, url: str, timeout: int = 30_000) -> dict:
+        """Open `url` in a SECOND tab and leave it in the background.
+
+        Added 2026-09-11 by the hardening pass, step 7, which
+        requires "a webmail or chat tab left open in the background".
+
+        Until now this session drove exactly one page (navigate() calls
+        self._page.goto), so every captured request was foreground by
+        construction. core/c3/context_tagger.py derives is_background_tab from
+        `document.visibilityState != "visible"`, which meant
+        background_tab_ratio was permanently 0.0 and could never be exercised
+        -- TC-01 and TC-02 both assert it exceeds 0.80 and therefore could not
+        pass, and the background-tab beacon scenario the component exists to
+        detect was untestable. See Section 9, Findings 2 and 3.
+
+        The new page is opened, navigated, and then the ORIGINAL page is
+        brought back to front, which is what actually makes the new tab
+        hidden. Chromium reports visibilityState "hidden" for a non-foreground
+        tab, so the tagger starts seeing is_background_tab=True for its
+        traffic. The context's "page" event handler already attaches CDP to
+        new pages, so nothing extra is needed for capture.
+
+        navigate() is deliberately left alone: it still drives self._page, so
+        every existing caller behaves exactly as before.
+
+        Measured later (scripts/repro_c3_background_tab_blind.py): in this
+        environment the backgrounded tab still reports visibilityState
+        "visible", even with focus emulation turned off below, so
+        is_background_tab stays False. The method is still what TC-02 and the
+        dashboard's live C3 test rely on: a real second tab keeps its page, and
+        the beacon in it, running while the first tab is navigated. Since
+        2026-09-14 TC-01 and TC-02 print background_tab_ratio for information
+        instead of asserting it.
+        """
+        if not self.is_running:
+            raise RuntimeError("Playwright session not running")
+        # Remember the real primary BEFORE opening anything. The context's
+        # "page" event fires on new_page() and _on_new_page() reassigns
+        # self._page to the newcomer -- correct for a tab a user opened, wrong
+        # here, where the whole point is that the new tab stays in the
+        # background. Without this the code below would bring the NEW tab to
+        # the front and background the original, i.e. exactly backwards.
+        # _on_new_page() is deliberately left alone; it is shared with C1's
+        # extension flows and ordinary popup handling.
+        primary = self._page
+        page = await self._ctx.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        except Exception:
+            # A tab that fails to load is still a real open tab; keep it rather
+            # than tearing it down, so the caller can decide.
+            pass
+        self._background_pages.append(page)
+        if primary is not None:
+            self._page = primary
+        # Send the original page back to the front. Without this the NEW tab is
+        # the visible one and nothing is in the background at all.
+        #
+        # The sleep is not cosmetic: bring_to_front() resolves as soon as the
+        # command is accepted, but Chromium delivers the visibilitychange event
+        # to the backgrounded tab asynchronously. Reading visibilityState
+        # immediately after reports the PRE-switch value ("visible"), which
+        # makes a working background tab look broken.
+        # Playwright enables Chromium's focus emulation on every page it
+        # creates (Emulation.setFocusEmulationEnabled) so that tests behave
+        # deterministically regardless of which tab the OS considers active.
+        # A useful default for testing -- and fatal here: it makes a
+        # backgrounded tab keep reporting document.visibilityState "visible",
+        # so context_tagger never sees is_background_tab and
+        # background_tab_ratio stays 0.0 no matter how many tabs are open.
+        # Turning it off for THIS page only was expected to restore real
+        # visibility behaviour; measured, it does not here (see the docstring).
+        # Every other page keeps Playwright's default.
+        try:
+            cdp = await self._ctx.new_cdp_session(page)
+            await cdp.send("Emulation.setFocusEmulationEnabled", {"enabled": False})
+        except Exception:
+            pass
+
+        if self._page is not None:
+            try:
+                await self._page.bring_to_front()
+                await asyncio.sleep(1.0)
+            except Exception:
+                pass
+
+        async def _visibility(p) -> str:
+            try:
+                return str(await p.evaluate("document.visibilityState"))
+            except Exception:
+                return "unknown"
+
+        # Report every tab, not just the new one -- if the switch silently
+        # failed, "all tabs visible" is the symptom and it must be visible in
+        # the result rather than inferred from downstream features being 0.
+        tabs = [{"url": (p.url or "")[:120], "visibility": await _visibility(p),
+                 "is_primary": (p is self._page)}
+                for p in (self._ctx.pages if self._ctx else [])]
+        return {"url": page.url, "visibility": await _visibility(page),
+                "background_tabs": len(self._background_pages), "tabs": tabs}
+
+    async def close_background_tabs(self) -> dict:
+        """Close every tab opened by open_background_tab()."""
+        closed = 0
+        for page in list(self._background_pages):
+            try:
+                await page.close()
+                closed += 1
+            except Exception:
+                pass
+        self._background_pages.clear()
+        return {"closed": closed}
+
     async def navigate(self, url: str, timeout: int = 30_000) -> str:
         if not self.is_running:
             raise RuntimeError("Playwright session not running")

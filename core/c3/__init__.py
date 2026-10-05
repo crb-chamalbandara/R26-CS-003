@@ -1,42 +1,59 @@
-# Component 3 — Browser Execution Aware C2 Beacon Detector
-
-# This package contains all the pieces that make up C3.
-# C3 sits inside the running WebSentinel browser and watches every network
-# request the browser makes.  It asks one question: "Is this traffic from a
-# human browsing normally, or from a hidden program that phones home on a
-# clockwork schedule?"
+# Component 3 -- Browser Execution Aware C2 Beacon Detector
 #
-# The sub-modules work as a pipeline, in this order:
+# C3 runs inside the WebSentinel browser and watches every request the browser
+# makes. It asks one question per destination host: is this a person browsing,
+# or a hidden program phoning home on a clockwork schedule?
 #
-#   interceptor.py      — hooks into the browser and captures every outgoing
-#                         request (URL, method, size, timing)
+# The modules form a pipeline, in this order:
 #
-#   context_tagger.py   — for each captured request, records whether the user
-#                         was active (clicked / typed), whether the tab was
-#                         in the background, and how long the user had been idle
+#   interceptor.py       captures every outgoing request through the Chrome
+#                        DevTools Protocol (URL, method, size, timing) without
+#                        pausing the browser, and keeps a rolling window of the
+#                        last 50 requests per host
 #
-#   feature_engine.py   — turns the list of requests for each destination host
-#                         into 29 numbers (features) that describe the traffic
-#                         pattern (timing regularity, request rate, same-site
-#                         alignment, script-vs-parser initiator, etc.)
+#   context_tagger.py    records, for each request, whether the user was active
+#                        (clicked or typed), whether the tab was in the
+#                        background, and how long the user had been idle
 #
-#   anomaly_engine.py   — an isotonic-calibrated XGBoost model scores 18 of
-#                         those features for bot-like HTTP behaviour
+#   feature_engine.py    turns one host's window into 32 numbers describing the
+#                        traffic pattern: timing regularity, request rate,
+#                        same-site alignment, script or parser initiator, and
+#                        so on
 #
-#   heuristic rules     — simple if/then rules inside analyzer.py that look for
-#                         patterns like "very regular timing + user is idle"
+#   ml_classifier.py     an XGBoost model scores 20 of those 32 features and
+#                        reports how much the window looks like a C2 beacon
 #
-#   risk_fusion.py      — combines the ML scores and heuristic score into one
-#                         final number (0–1) and decides SAFE / SUSPICIOUS / BEACON
+#   analyzer.py          the 10-second loop. Holds the heuristic rules (the
+#                        second, independent signal), applies every gate
+#                        between a score and an alert, and drives the rest of
+#                        the pipeline
 #
-#   reputation_engine.py — once a BEACON is confirmed, checks the destination
-#                          against threat-intelligence databases (AbuseIPDB,
-#                          VirusTotal) and shows the result as analyst evidence
-#                          (it is not folded into the risk score)
+#   risk_fusion.py       combines the ML and heuristic scores into one number
+#                        from 0 to 1 and decides SAFE, SUSPICIOUS or BEACON
 #
-#   alert_store.py      — saves confirmed BEACON alerts to a local SQLite database
-#                         so they survive restarts and can be shown in the dashboard
+#   reputation_engine.py after a BEACON is confirmed, looks the destination up
+#                        in AbuseIPDB and VirusTotal. This is analyst evidence
+#                        only and is never folded into the risk score
 #
-#   analyzer.py         — the main loop that runs every 10 seconds, feeds each
-#                         host's request window through the pipeline above, and
-#                         triggers alerts when the verdict is BEACON
+#   alert_store.py       saves confirmed alerts to SQLite so they survive a
+#                        restart and can be shown in the dashboard
+#
+#   block_store.py       persists a confirmed block with a 24-hour expiry, so a
+#                        block survives a restart and lifts itself on time
+#
+# Documentation lives in researches/C3/: ARCHITECTURE.md for how the whole
+# component fits together, C3_Final_Model_Results.md for the model's
+# engineering record, and C3_Training_Dataset_Feature_Dictionary.md for the
+# training data. C3_ML_Train.ipynb in this folder retrains the deployed model
+# from data/c3_training_dataset_clear.csv and recomputes every result it shows.
+#
+# ARCHIVED PATHS IN COMMENTS. Comments throughout this package cite training
+# scripts, evaluation scripts, result JSON files and standalone test cases that
+# the running app does not need. Those were moved out of the repository, not
+# deleted, and are under:
+#
+#     Desktop\Removals in C3\L A S T - Removals\
+#
+# at the same relative paths (2026-09-15_runtime_only_clean\ for the code and
+# data, 2026-09-17_c3_cleanup\ for the earlier working notes). So a comment
+# citing scripts/train_c3_final_model.py means that file, in the archive.
