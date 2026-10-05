@@ -104,6 +104,13 @@ MITRE_MAP = {
         "severity":       "High",
         "description":    "Potentially malicious file type downloaded"
     },
+    "R02b": {
+        "technique_id":   "T1204.002",
+        "technique_name": "Malicious File",
+        "tactic":         "Execution",
+        "severity":       "High",
+        "description":    "Chrome's own Safe Browsing check flagged the downloaded file as dangerous"
+    },
     "R03": {
         "technique_id":   "T1539",
         "technique_name": "Steal Web Session Cookie",
@@ -142,14 +149,17 @@ def _severity(score):
     return "Low"
 
 def map_cooccurrence(finding):
-    types = sorted(finding.get("artifact_types", []))
-    key   = "+".join(types)
+    types  = sorted(finding.get("artifact_types", []))
+    key    = "+".join(types)
+    domain = finding.get("domain", "")
+    # The fallback is browser-artifact discovery, not file-system discovery: every
+    # co-occurrence signal comes from browser stores tied to one domain.
     mitre = MITRE_MAP.get(key, {
-        "technique_id":   "T1083",
-        "technique_name": "File and Directory Discovery",
+        "technique_id":   "T1217",
+        "technique_name": "Browser Information Discovery",
         "tactic":         "Discovery",
         "severity":       _severity(finding.get("score", 0)),
-        "description":    f"Co-occurrence of {key} artifacts on same domain"
+        "description":    f"{key.replace('+', ', ')} artifacts all tied to '{domain}' in one window"
     })
     return {**finding, "mitre": mitre, "severity": mitre["severity"]}
 
@@ -160,7 +170,7 @@ def map_orphan(finding):
         "technique_name": "Process Injection",
         "tactic":         "Defense Evasion",
         "severity":       _severity(finding.get("score", 0)),
-        "description":    "Orphan artifact with no parent history"
+        "description":    f"Orphan artifact for '{finding.get('domain','')}' with no parent history"
     })
     return {**finding, "mitre": mitre, "severity": mitre["severity"]}
 
@@ -171,7 +181,7 @@ def map_temporal(finding):
         "technique_name": "Valid Accounts",
         "tactic":         "Persistence",
         "severity":       _severity(finding.get("score", 0)),
-        "description":    "Activity at unusual time for this user"
+        "description":    f"Activity on '{finding.get('domain','')}' at an unusual time for this user"
     })
     return {**finding, "mitre": mitre, "severity": mitre["severity"]}
 
