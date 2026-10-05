@@ -1,20 +1,20 @@
 """
-C3 reputation engine — beacon-triggered only.
+C3 reputation engine -- beacon-triggered only.
 
 Two sources:
   • AbuseIPDB  (IP confidence score)
-  • VirusTotal  (domain report — multi-engine malicious/suspicious verdict count)
+  • VirusTotal  (domain report -- multi-engine malicious/suspicious verdict count)
 
 Called only when a BEACON verdict is confirmed, not on every analysis cycle,
 to stay within free-tier API rate limits.
 
 The result is shown to the analyst as supporting evidence on a confirmed
-beacon. It is NOT an input to the risk score — see core/c3/risk_fusion.py,
+beacon. It is NOT an input to the risk score -- see core/c3/risk_fusion.py,
 where the score is ML + heuristic only.
 
 (VirusTotal replaced Google Safe Browsing here on 2026-08-29. GSB is a
 phishing/malware URL blocklist and is still used, unchanged, by C2's own
-Layer-5 phishing check — this module no longer imports or depends on it.
+Layer-5 phishing check -- this module no longer imports or depends on it.
 OTX AlienVault was removed on 2026-08-30.)
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ from typing import Optional
 import httpx
 
 # Both API keys are supplied at runtime from Settings (core/settings.json,
-# gitignored) — never hardcode credentials in source. main.py forwards them via
+# gitignored) -- never hardcode credentials in source. main.py forwards them via
 # these set_*_key() functions at startup and whenever Settings are saved.
 _abuseipdb_key: str = ""
 _virustotal_key: str = ""
@@ -45,7 +45,7 @@ def set_virustotal_key(key: str) -> None:
 
 
 class C3ReputationEngine:
-    _CACHE_TTL = 1800  # 30 min — beacon re-checks are rare
+    _CACHE_TTL = 1800  # 30 min -- beacon re-checks are rare
 
     def __init__(self) -> None:
         self._client: Optional[httpx.AsyncClient] = None
@@ -84,7 +84,7 @@ class C3ReputationEngine:
         """The full last threat-intel result for a host if it is still fresh,
         whether flagged or clean: {score, flagged, sources, detail}.
 
-        Unlike cached_score(), this also returns clean (0.0) results — the
+        Unlike cached_score(), this also returns clean (0.0) results -- the
         analyzer/dashboard show the real per-source numbers as evidence on a
         confirmed beacon, and "AbuseIPDB 0% / VirusTotal 0%" is a meaningful,
         real answer, not an absence of one. Returns None only when no lookup
@@ -109,7 +109,7 @@ class C3ReputationEngine:
             return cached["payload"]
 
         if self._is_private_or_local(clean_host):
-            return self._empty("local host — skipped")
+            return self._empty("local host - skipped")
 
         ips = await self._resolve_ips(clean_host)
 
@@ -132,7 +132,7 @@ class C3ReputationEngine:
         flagged  = combined >= 0.5
 
         parts = [f"{k}={v:.2f}" for k, v in sources.items()]
-        detail = ("FLAGGED — " if flagged else "Clean — ") + ", ".join(parts) if parts else "no TI data"
+        detail = ("FLAGGED: " if flagged else "Clean: ") + ", ".join(parts) if parts else "no TI data"
 
         payload = {
             "score":   round(combined, 4),
@@ -236,7 +236,13 @@ class C3ReputationEngine:
             ip = ipaddress.ip_address(host)
             return ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local
         except ValueError:
-            return host in {"localhost"}
+            # "localhost" and every name under it: RFC 6761 reserves *.localhost
+            # for loopback, and Chromium resolves it to 127.0.0.1 (that is how
+            # the dashboard's live beacon test reaches the backend). Checking
+            # only the bare name sent such hosts through a DNS lookup and to
+            # VirusTotal, and delayed their alert until those calls returned.
+            name = host.rstrip(".")
+            return name == "localhost" or name.endswith(".localhost")
 
     @staticmethod
     async def _noop(name: str) -> tuple[str, None]:
@@ -250,7 +256,7 @@ class C3ReputationEngine:
 c3_reputation_engine = C3ReputationEngine()
 
 # =============================================================================
-# WHAT THIS FILE DOES — plain English summary
+# WHAT THIS FILE DOES -- plain English summary
 # =============================================================================
 #
 # The reputation engine runs extra threat-intelligence checks only when a
@@ -259,7 +265,7 @@ c3_reputation_engine = C3ReputationEngine()
 #
 # Given a host and a sample URL it concurrently queries two sources:
 #  - AbuseIPDB (IP confidence score),
-#  - VirusTotal (domain report — count of engines flagging it malicious/suspicious).
+#  - VirusTotal (domain report -- count of engines flagging it malicious/suspicious).
 #
 # The engine resolves hosts to public IPs, skips private or local addresses,
 # caches results for 30 minutes, and returns a simple combined score and a

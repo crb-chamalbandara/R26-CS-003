@@ -30,6 +30,10 @@ models/*.joblib
 models/*.h5
 models/*.pt
 models/*.bin
+# C3's deployed model is tracked (291 KB), like C2's models.
+# data/c3_training_dataset_clear.csv is its exact training data, and
+# core/c3/C3_ML_Train.ipynb retrains it from that file and checks the match.
+!models/c3_beacon_classifier.pkl
 
 # ── Runtime data / generated files ───────────────────────────
 data/urls_labeled.csv

@@ -344,7 +344,7 @@ input,textarea,select{font-family:inherit}
 
 /* ── C3 live monitor ────────────────────────────────────────── */
 .c3-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
-.c3-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px 16px;
+.c3-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 16px;
   background:var(--bg1);border-bottom:1px solid var(--b1);flex-shrink:0}
 .c3-sbox{background:var(--bg2);border:1px solid var(--b1);
   border-radius:var(--radius);padding:10px 10px 9px;text-align:center;position:relative;
@@ -354,9 +354,6 @@ input,textarea,select{font-family:inherit}
 .c3-snum{font-size:22px;font-weight:800;line-height:1;color:var(--c3);letter-spacing:-.01em}
 .c3-snum.danger{color:var(--danger)}
 .c3-slbl{font-size:9px;color:var(--t3);margin-top:4px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
-.c3-model-badge{font-size:8px;font-weight:700;padding:2px 6px;border-radius:4px;
-  background:var(--c3b);color:var(--c3);border:1px solid rgba(245,166,35,.25);
-  margin-top:5px;display:inline-block;letter-spacing:.04em}
 .c3-tabs{display:flex;background:var(--bg1);border-bottom:1px solid var(--b1);padding:0 14px;flex-shrink:0;gap:2px}
 .c3-tab{padding:9px 14px;background:none;border:none;border-bottom:2px solid transparent;
   color:var(--t3);font-size:11.5px;font-weight:600;transition:all .18s;white-space:nowrap;
@@ -366,7 +363,7 @@ input,textarea,select{font-family:inherit}
 .c3-content{flex:1;overflow:hidden;position:relative}
 .c3-pane{display:none;height:100%;overflow-y:auto;padding:12px;flex-direction:column;gap:8px}
 .c3-pane.active{display:flex}
-.c3-table{width:100%;border-collapse:collapse;background:var(--bg2);border:1px solid var(--b1);
+.c3-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--bg2);border:1px solid var(--b1);
   border-radius:var(--radius);overflow:hidden;font-size:10.5px;box-shadow:var(--shadow-sm)}
 .c3-table th,.c3-table td{padding:8px 10px;border-bottom:1px solid var(--b1);text-align:left}
 .c3-table th{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);background:rgba(var(--tint),.02);font-weight:700}
@@ -392,6 +389,29 @@ input,textarea,select{font-family:inherit}
 .c3-blocked-badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;
   background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.4);
   letter-spacing:.06em;text-transform:uppercase;flex-shrink:0}
+/* Analyst feedback loop (Section 8 Step 8). Deliberately quiet styling: this
+   is a review control, not a detection signal, and it must not compete with
+   the verdict pill or the score for attention. */
+.c3-fb{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 4px;
+  padding:9px 12px;border-radius:8px;background:var(--bg2);border:1px solid var(--bd)}
+.c3-fb.busy{opacity:.55;pointer-events:none}
+.c3-fb-lbl{font-size:11px;font-weight:600;color:var(--t2)}
+.c3-fb-btn{font-size:11px;font-weight:600;padding:4px 12px;border-radius:6px;
+  cursor:pointer;background:transparent;transition:background .15s,color .15s}
+.c3-fb-btn.ok{border:1px solid rgba(34,197,94,.45);color:var(--safe)}
+.c3-fb-btn.ok:hover{background:rgba(34,197,94,.15)}
+.c3-fb-btn.fp{border:1px solid rgba(245,158,11,.45);color:var(--warn)}
+.c3-fb-btn.fp:hover{background:rgba(245,158,11,.15)}
+.c3-fb-saved{font-size:11px;font-weight:700;letter-spacing:.04em}
+.c3-fb-saved.ok{color:var(--safe)}
+.c3-fb-saved.fp{color:var(--warn)}
+.c3-fb-msg{font-size:10.5px;color:var(--t3);margin-left:auto}
+/* Context-quality caveat (Section 8 Step 3). Amber, not red: this is not a
+   detection, it is a statement that part of the evidence is missing. It must
+   read as "incomplete", clearly distinct from the red BLOCKED badge. */
+.c3-ctx-badge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;
+  background:rgba(245,158,11,.15);color:var(--warn);border:1px solid rgba(245,158,11,.45);
+  letter-spacing:.06em;text-transform:uppercase;flex-shrink:0;cursor:help}
 .c3-mitre-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;
   background:rgba(59,130,246,.12);color:#60a5fa;border:1px solid rgba(59,130,246,.2);
   font-family:monospace;flex-shrink:0}
@@ -406,8 +426,6 @@ input,textarea,select{font-family:inherit}
 .c3-reason-line{font-size:11px;color:var(--t1);line-height:1.45;margin-top:8px;
   padding-top:8px;border-top:1px solid rgba(var(--tint),.06)}
 /* Full detail panel (collapsed by default) */
-.c3-card-detail{display:none;margin-top:10px;border-top:1px solid var(--b1);padding-top:10px}
-.c3-card-detail.open{display:block}
 .c3-signals{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:6px;margin-bottom:10px}
 .c3-sig{background:var(--bg1);border:1px solid var(--b1);border-radius:6px;padding:7px 9px}
 .c3-sig-label{font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px}
@@ -417,14 +435,8 @@ input,textarea,select{font-family:inherit}
 .c3-sig-detail{font-size:10px;color:var(--t3);margin-top:3px;line-height:1.35}
 .c3-feature-section{margin-top:2px}
 .c3-feature-title{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
-.c3-feature-bars{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
-.c3-bar-row{display:grid;grid-template-columns:110px 1fr 50px;align-items:center;gap:6px;font-size:10.5px;color:var(--t2)}
-.c3-bar-name{color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10.5px}
 .c3-bar-wrap{height:5px;background:var(--b1);border-radius:3px;overflow:hidden}
 .c3-bar-fill{height:100%;border-radius:3px;transition:width .5s ease}
-.c3-bar-val{font-family:monospace;color:var(--t1);text-align:right;font-size:10.5px}
-.c3-detail-text{font-size:10.5px;color:var(--t2);background:var(--bg1);border:1px solid var(--b1);
-  border-radius:5px;padding:6px 9px;margin-top:8px;line-height:1.5;font-style:italic}
 
 /* ── User-friendly feature analysis ────────────────────────── */
 .c3-feat-grid{display:flex;flex-direction:column;gap:8px}
@@ -443,8 +455,6 @@ input,textarea,select{font-family:inherit}
 .c3-feat-hint{font-size:10.5px;color:var(--t3);line-height:1.4}
 .c3-feat-bar-col{flex-shrink:0}
 .c3-feat-val{font-size:10.5px;font-family:monospace;font-weight:600;text-align:right;white-space:nowrap;flex-shrink:0}
-.c3-detail{display:none;margin-top:8px;border-top:1px solid var(--b1);padding-top:8px}
-.c3-detail.open{display:block}
 .c3-event-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
 .c3-event{display:grid;grid-template-columns:50px 1fr 58px 76px;gap:7px;font-size:9.5px;color:var(--t2)}
 /* Session divider in Alerts tab */
@@ -452,9 +462,6 @@ input,textarea,select{font-family:inherit}
 .c3-session-divider-line{flex:1;height:1px;background:var(--b2)}
 .c3-session-divider-label{font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;
   letter-spacing:.08em;white-space:nowrap}
-.c3-prev-toggle{background:none;border:1px solid var(--b2);border-radius:4px;color:var(--t3);
-  font-size:9px;padding:2px 8px;cursor:pointer;transition:all .15s}
-.c3-prev-toggle:hover{background:var(--bg3);color:var(--t1)}
 
 /* ── Evidence visualizations (timeline / sparkline / radar / donut) ──────── */
 .c3-viz-wrap{background:var(--bg1);border:1px solid var(--b1);border-radius:8px;
@@ -462,7 +469,6 @@ input,textarea,select{font-family:inherit}
 .c3-viz-hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
 .c3-viz-title{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;font-weight:700}
 .c3-viz-meta{font-size:9.5px;color:var(--t3);font-family:monospace}
-.c3-viz-svg{width:100%;height:auto;display:block}
 .c3-viz-empty{font-size:10.5px;color:var(--t3);font-style:italic;padding:8px 2px}
 .c3-viz-legend{display:flex;gap:12px;margin-top:5px;font-size:9.5px;color:var(--t3);flex-wrap:wrap}
 .c3-viz-legend-item{display:flex;align-items:center;gap:4px}
@@ -481,14 +487,6 @@ input,textarea,select{font-family:inherit}
 .c3-donut-legend{display:flex;flex-direction:column;gap:4px;font-size:9px;flex:1;min-width:0}
 .c3-donut-legend-item{display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .c3-donut-legend-val{margin-left:auto;font-family:monospace;font-weight:700;flex-shrink:0}
-
-/* ── Adaptive fusion weights table ─────────────────────────────────────── */
-.c3-weights-table{display:flex;flex-direction:column;gap:3px;margin-top:2px}
-.c3-weights-row{display:grid;grid-template-columns:1.3fr repeat(4,0.6fr);gap:4px;
-  font-size:10.5px;color:var(--t2);align-items:center}
-.c3-weights-row.hdr{color:var(--t3);text-transform:uppercase;letter-spacing:.04em;font-size:9.5px}
-.c3-weights-row span{text-align:right;font-family:monospace}
-.c3-weights-row span:first-child{text-align:left;font-family:inherit;color:var(--t1)}
 
 /* ── Live pipeline diagram ─────────────────────────────────────────────── */
 .c3-pipeline{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding:4px 2px 12px}
@@ -514,13 +512,6 @@ input,textarea,select{font-family:inherit}
 .c3-score-mini-fill{height:100%;border-radius:3px;transition:width .5s ease}
 .c3-score-pct{font-size:10px;font-weight:700;font-family:monospace;flex-shrink:0;width:30px;text-align:right}
 
-/* Detail/reasoning cell: was single-line ellipsis + hover-only tooltip (not
-   reachable by keyboard/touch) — now wraps onto up to 2 visible lines so the
-   "why" is readable without hovering. Tooltip stays as a fallback for the
-   rare longer string. */
-.c3-detail-cell{font-size:11px;color:var(--t1);line-height:1.4;max-width:280px;
-  min-width:200px;vertical-align:middle;white-space:normal;word-break:break-word}
-
 /* ── Beacon countdown overlay ────────────────────────────────── */
 @keyframes beaconRingPulse{
   0%{box-shadow:0 0 0 0 rgba(239,68,68,.55),0 0 30px rgba(239,68,68,.2)}
@@ -542,24 +533,35 @@ input,textarea,select{font-family:inherit}
   background:rgba(0,0,0,0);transition:background .35s
 }
 #c3-beacon-overlay.active{pointer-events:all;background:rgba(0,0,0,.72)}
+/* Modernized to match the rest of C3's glass-panel language (dark, blurred,
+   cyan-bordered cards) instead of the flat red gradient box this used to be -
+   a full-screen "C2 BEACON DETECTED" moment is the single most-seen part of
+   this component, so it should not look like a different, older app.
+   #c3-beacon-overlay sits OUTSIDE #panel-c3 in the DOM (a sibling, not a
+   descendant), so the panel's --c3-glass-* custom properties do not reach in
+   here - the equivalent values are written out directly below instead of
+   referencing those tokens. */
 #c3-beacon-box{
-  background:linear-gradient(160deg,#0f1824 0%,#160d0d 100%);
-  border:1px solid rgba(239,68,68,.5);border-radius:20px;
+  background:linear-gradient(158deg,rgba(32,15,20,.92) 0%,rgba(10,18,32,.95) 68%);
+  -webkit-backdrop-filter:blur(20px) saturate(150%);
+  backdrop-filter:blur(20px) saturate(150%);
+  border:1px solid rgba(239,68,68,.45);border-radius:20px;
   padding:32px 36px 26px;text-align:center;max-width:460px;width:92%;
-  box-shadow:0 0 0 1px rgba(239,68,68,.15),0 20px 60px rgba(0,0,0,.7),0 0 80px rgba(239,68,68,.12);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 0 0 1px rgba(239,68,68,.12),
+             0 20px 60px rgba(0,0,0,.7),0 0 80px rgba(239,68,68,.12);
   transform:scale(0.82) translateY(16px);opacity:0;
   transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s ease
 }
 #c3-beacon-overlay.active #c3-beacon-box{transform:scale(1) translateY(0);opacity:1}
 #c3-beacon-ring{
   width:72px;height:72px;border-radius:50%;
-  background:rgba(239,68,68,.15);border:2px solid rgba(239,68,68,.6);
+  background:rgba(239,68,68,.12);border:1.5px solid rgba(239,68,68,.55);
   display:flex;align-items:center;justify-content:center;
   margin:0 auto 14px;animation:beaconRingPulse 1.8s ease-out infinite
 }
 #c3-beacon-ring-inner{
   width:52px;height:52px;border-radius:50%;
-  background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.5);
+  background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.45);
   display:flex;align-items:center;justify-content:center
 }
 #c3-beacon-icon{display:flex;align-items:center;justify-content:center;animation:beaconIconPop .4s ease both}
@@ -570,7 +572,7 @@ input,textarea,select{font-family:inherit}
 }
 #c3-beacon-title{
   font-size:20px;font-weight:900;letter-spacing:.04em;
-  color:var(--danger);margin-bottom:8px;text-shadow:0 0 20px rgba(239,68,68,.4)
+  color:var(--danger);margin-bottom:8px;text-shadow:0 0 16px rgba(239,68,68,.3)
 }
 #c3-beacon-host-wrap{
   display:flex;align-items:center;justify-content:center;gap:8px;
@@ -588,14 +590,14 @@ input,textarea,select{font-family:inherit}
   border-radius:10px;overflow:hidden
 }
 .c3-bscore-item{flex:1;text-align:center;padding:10px 6px}
-.c3-bscore-sep{width:1px;height:36px;background:var(--b1);flex-shrink:0}
+.c3-bscore-sep{width:1px;height:36px;background:rgba(255,255,255,.10);flex-shrink:0}
 .c3-bscore-val{font-size:18px;font-weight:900;line-height:1}
 .c3-bscore-lbl{font-size:8.5px;color:var(--t3);text-transform:uppercase;margin-top:3px;letter-spacing:.05em}
 #c3-beacon-ti-row{
   display:flex;align-items:center;justify-content:center;gap:10px;
   margin:-6px 0 16px;padding:8px 12px;
-  background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.22);
-  border-radius:10px
+  background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.24);
+  border-radius:12px
 }
 .c3-beacon-ti-tag{
   font-size:8px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
@@ -623,8 +625,9 @@ input,textarea,select{font-family:inherit}
   margin-bottom:4px;animation:beaconCountdown .35s ease both
 }
 #c3-beacon-msg{font-size:11px;color:var(--t2);margin-bottom:14px;line-height:1.4}
-#c3-beacon-bar{height:4px;background:var(--b1);border-radius:2px;overflow:hidden;margin-bottom:20px}
-#c3-beacon-bar-fill{height:100%;background:var(--danger);border-radius:2px;width:0%;
+#c3-beacon-bar{height:5px;background:rgba(255,255,255,.08);border-radius:20px;overflow:hidden;
+  margin-bottom:20px;box-shadow:inset 0 1px 2px rgba(0,0,0,.4)}
+#c3-beacon-bar-fill{height:100%;background:var(--danger);border-radius:20px;width:0%;
   transition:width 1s linear;box-shadow:0 0 6px rgba(239,68,68,.5)}
 #c3-beacon-actions{display:flex;gap:10px;justify-content:center}
 #c3-beacon-dismiss{
@@ -780,15 +783,6 @@ input,textarea,select{font-family:inherit}
   padding:2px 9px;border-radius:999px;font-size:9.5px;font-weight:600}
 .c2ev-none{font-size:10px;color:var(--t3);font-style:italic}
 
-.c3-row-btn{background:none;border:none;color:var(--c3);font:inherit;text-align:left;padding:0;cursor:pointer;font-weight:600}
-.c3-row-btn:hover{text-decoration:underline}
-.c3-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.c3-select{background:var(--bg1);border:1px solid var(--b2);border-radius:var(--radius);
-  color:var(--t0);font-size:11.5px;padding:8px 10px;outline:none;transition:border-color .2s}
-.c3-select:focus{border-color:var(--c3)}
-.btn-c3{background:var(--c3);border:none;color:#111827;padding:8px 16px;border-radius:var(--radius);
-  font-size:12px;font-weight:700;transition:all .2s;box-shadow:0 2px 8px rgba(245,166,35,.2)}
-.btn-c3:hover{filter:brightness(1.1);box-shadow:0 4px 14px rgba(245,166,35,.3)}
 
 /* ── Detection Lab tab ──────────────────────────────────────── */
 .lab-top-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -829,20 +823,6 @@ input,textarea,select{font-family:inherit}
   padding:8px 16px;border-radius:var(--radius);font-size:11px;font-weight:600;
   cursor:pointer;transition:all .2s;flex-shrink:0;white-space:nowrap}
 .lab-btn-test:hover{background:var(--c3);color:#111827;border-color:var(--c3);box-shadow:0 3px 10px rgba(245,166,35,.25)}
-.lab-test-steps{display:flex;flex-direction:column;gap:6px;margin-top:12px;
-  border-top:1px solid var(--b1);padding-top:12px}
-.lab-step{display:flex;align-items:flex-start;gap:10px;font-size:10.5px;color:var(--t2);line-height:1.45}
-.lab-step-n{width:20px;height:20px;border-radius:50%;background:var(--b2);
-  color:var(--t1);font-size:9px;font-weight:700;display:flex;align-items:center;
-  justify-content:center;flex-shrink:0;margin-top:1px}
-.lab-engine-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;
-  border-top:1px solid var(--b1);padding-top:12px}
-.lab-engine-item{background:var(--bg1);border:1px solid var(--b1);border-radius:var(--radius);padding:10px 12px;transition:border-color .18s}
-.lab-engine-item:hover{border-color:var(--b2)}
-.lab-engine-label{font-size:9.5px;font-weight:700;color:var(--c3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
-.lab-engine-desc{font-size:9.5px;color:var(--t2);line-height:1.5}
-.lab-mitre{font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:9px;color:#60a5fa;background:rgba(59,130,246,.1);
-  padding:2px 6px;border-radius:4px;white-space:nowrap;border:1px solid rgba(59,130,246,.15)}
 
 /* ── C4 buttons ─────────────────────────────────────────────── */
 .btn-c4{background:linear-gradient(135deg,var(--c4),#0da076);border:none;color:#0a1a12;
@@ -1894,6 +1874,31 @@ input,textarea,select{font-family:inherit}
   --c3-thead:#e7eef7;
 }
 
+/* -- One accent, not two ----------------------------------------------------
+   The panel used to carry two identity colours at once. Everything a user
+   actually interacts with - active tab, hover glows, primary buttons, radar
+   dot, pipeline icons - had already moved to cyan, but the original amber
+   --c3 still drove the Detection Lab card icons, the export counter and two of
+   the four sparklines, so the panel read as half-migrated.
+
+   Amber also collides semantically here: --c3 and --warn are the SAME hex
+   (#f5a623), so C3's decorative colour was indistinguishable from its own
+   SUSPICIOUS verdict colour - in the one panel where "suspicious" is a
+   constant, meaningful state. Moving the accent to cyan frees amber to mean
+   only "suspicious", which is the only thing it should mean in here.
+
+   The two tokens are redefined on .c3-body rather than on #panel-c3 or :root,
+   and that scope is deliberate. It keeps the change strictly inside C3's own
+   working surface: the app-wide component colour-coding (the C3 sidebar icon,
+   the C3 badge in the panel header, the C3 tag in the shared Test Runner) all
+   still read the global amber --c3 and are untouched, and so is C1's report
+   accent stripe, which also borrows var(--c3). Nothing outside this panel body
+   changes colour. */
+#panel-c3 .c3-body{
+  --c3:var(--c3-cyan);
+  --c3b:rgba(34,211,238,.11);
+}
+
 /* -- Typography -------------------------------------------------------------
    Plus Jakarta Sans for prose/UI, JetBrains Mono for anything tabular (hosts,
    byte counts, scores, feature values) so digits align column-to-column. */
@@ -1904,13 +1909,10 @@ input,textarea,select{font-family:inherit}
 #panel-c3 .c3-host,
 #panel-c3 .c3-card-title,
 #panel-c3 .c3-score-pct,
-#panel-c3 .c3-bar-val,
 #panel-c3 .c3-feat-val,
 #panel-c3 .c3-viz-meta,
-#panel-c3 .lab-mitre,
 #panel-c3 .lab-blocked-host,
 #panel-c3 .c3-mitre-tag,
-#panel-c3 .c3-weights-row span,
 #panel-c3 .c3-mono,
 #c3-beacon-overlay #c3-beacon-host,
 #c3-beacon-overlay #c3-beacon-mitre{
@@ -1950,8 +1952,7 @@ input,textarea,select{font-family:inherit}
 #panel-c3 .c3-table,
 #panel-c3 .c3-viz-wrap,
 #panel-c3 .c3-feat-group,
-#panel-c3 .c3-pipe-stage,
-#panel-c3 .lab-engine-item{
+#panel-c3 .c3-pipe-stage{
   background:linear-gradient(158deg,var(--c3-glass-a) 0%,var(--c3-glass-b) 100%);
   border:1px solid var(--c3-glass-brd);
   border-radius:12px;
@@ -2022,7 +2023,30 @@ input,textarea,select{font-family:inherit}
 }
 
 /* == 3 - LIVE MONITOR TABLE ================================================= */
-#panel-c3 .c3-table{border-radius:12px;overflow:hidden}
+/* overflow:clip, not hidden: hidden makes the table its own scroll container,
+   which silently disabled the sticky header below. clip keeps the rounded
+   corners without that side effect (hidden stays as the fallback). */
+#panel-c3 .c3-table{border-radius:12px;overflow:hidden;overflow:clip}
+/* Two separate causes made rows appear to scroll UNDER the sticky header
+   instead of being hidden behind it:
+   1. border-collapse:collapse (the base .c3-table rule, further up this
+      file) is unreliable with position:sticky table cells in Chromium — the
+      collapsed-border paint pass can draw a scrolled-past row's border/edge
+      back over the sticky <th>. Every visible border here is already drawn
+      as a per-cell border-bottom (see td below), so nothing actually needs
+      collapsing; border-collapse:separate + border-spacing:0 (on the base
+      rule) renders identically and removes the bug at its source.
+   2. A sticky <th> sticks to the padding edge of its scrolling ancestor
+      (#c3-pane-monitor / #c3-pane-hosts), but .c3-pane's own top padding
+      sits INSIDE that same scrollport, not outside it — so a row could still
+      be visible while crossing that 12px padding strip on its way past the
+      header. Moving the gap from the pane's padding onto the table's own
+      margin puts the scrollport flush with the header's stuck position, so a
+      scrolled-past row is clipped the instant it reaches the top. */
+#panel-c3 #c3-pane-monitor,
+#panel-c3 #c3-pane-hosts{padding-top:0}
+#panel-c3 #c3-pane-monitor .c3-table,
+#panel-c3 #c3-pane-hosts .c3-table{margin-top:12px}
 #panel-c3 .c3-table th{
   /* Solid (not blurred) fill: this is a position:sticky header, so a
      backdrop-filter here re-composites on every scroll frame of the Live
@@ -2073,8 +2097,9 @@ input,textarea,select{font-family:inherit}
   border:1px solid rgba(245,158,11,.32)
 }
 
-/* Risk-score capsule bar (green / amber / red) used in the Live Monitor. */
-#panel-c3 .c3-cap{display:flex;align-items:center;gap:7px;min-width:86px;flex-wrap:wrap;row-gap:3px}
+/* Risk-score capsule bar (green / amber / red) used in the Live Monitor. One
+   line, fixed bar width, so every row is the same height and the bars line up. */
+#panel-c3 .c3-cap{display:flex;align-items:center;gap:8px;white-space:nowrap}
 #panel-c3 .c3-cap-track{
   flex:1;height:7px;border-radius:20px;min-width:38px;overflow:hidden;
   background:rgba(var(--tint),.07);box-shadow:inset 0 1px 2px rgba(0,0,0,.4)
@@ -2084,9 +2109,53 @@ input,textarea,select{font-family:inherit}
 }
 #panel-c3 .c3-cap-val{
   font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
-  font-size:9.5px;font-weight:700;width:32px;text-align:right;flex-shrink:0;
+  font-size:9.5px;font-weight:700;width:34px;text-align:right;flex-shrink:0;
   font-variant-numeric:tabular-nums
 }
+
+/* Live Monitor is a dense, fast-moving request log: one compact line per
+   request, fixed column widths (a SUSPICIOUS pill appearing must not shift the
+   columns), and the timing regularity in its own column so it is never read as
+   part of the risk score. Two-id selectors so these win over the panel-wide
+   type-size rules further down regardless of order. */
+#panel-c3 #c3-pane-monitor .c3-table{table-layout:fixed}
+#c3-pane-monitor col.c3-mc-time{width:80px}
+#c3-pane-monitor col.c3-mc-method{width:76px}
+#c3-pane-monitor col.c3-mc-size{width:80px}
+#c3-pane-monitor col.c3-mc-ctx{width:128px}
+#c3-pane-monitor col.c3-mc-risk{width:214px}
+#c3-pane-monitor col.c3-mc-cv{width:96px}
+#panel-c3 #c3-pane-monitor .c3-table th{padding:8px 10px}
+#panel-c3 #c3-pane-monitor .c3-table td{
+  padding:0 10px;height:30px;vertical-align:middle;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+#panel-c3 #c3-pane-monitor .c3-num{text-align:right}
+#panel-c3 #c3-pane-monitor .c3-table tbody tr:nth-child(even){background:rgba(255,255,255,.016)}
+#panel-c3 #c3-pane-monitor .c3-table tbody tr:hover{background:rgba(34,211,238,.06)}
+#panel-c3 #c3-pane-monitor .c3-host{max-width:none;color:var(--t0)}
+#panel-c3 #c3-pane-monitor .c3-mon-time,
+#panel-c3 #c3-pane-monitor .c3-mon-method,
+#panel-c3 #c3-pane-monitor .c3-mon-size{
+  font-family:'JetBrains Mono','Cascadia Code',ui-monospace,Consolas,monospace;
+  font-variant-numeric:tabular-nums;font-size:10.5px
+}
+#panel-c3 #c3-pane-monitor .c3-mon-time{color:var(--t2)}
+#panel-c3 #c3-pane-monitor .c3-mon-method{color:var(--t2);letter-spacing:.03em}
+#panel-c3 #c3-pane-monitor .c3-mon-method.post{color:var(--t0);font-weight:700}
+#panel-c3 #c3-pane-monitor .c3-mon-size{color:var(--t1)}
+#panel-c3 #c3-pane-monitor .c3-ctx{display:flex;align-items:center;gap:4px}
+#panel-c3 #c3-pane-monitor .c3-tag{padding:1.5px 7px;gap:4px;font-size:9.5px}
+#panel-c3 #c3-pane-monitor .c3-tag::before{width:4px;height:4px}
+#panel-c3 #c3-pane-monitor .c3-pill{font-size:8.5px;padding:1.5px 7px;letter-spacing:.05em}
+#panel-c3 #c3-pane-monitor .c3-cap-val{font-size:10.5px;text-align:left}
+#panel-c3 #c3-pane-monitor .c3-cvv{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums
+}
+/* Fixed-width glyph slot, so the numbers line up whether or not a glyph shows. */
+#panel-c3 #c3-pane-monitor .c3-cvv i{font-style:normal;width:10px;text-align:center;font-size:9px}
 
 /* == 4 - ALERTS: THREAT INCIDENT CARDS ====================================== */
 #panel-c3 .c3-card{
@@ -2123,7 +2192,8 @@ input,textarea,select{font-family:inherit}
 #panel-c3 .c3-meter-lbl{font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em}
 #panel-c3 .c3-meter-val{
   font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
-  font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums
+  font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;
+  width:32px;flex-shrink:0
 }
 
 /* MITRE chips + quick actions on the incident card. */
@@ -2177,6 +2247,126 @@ input,textarea,select{font-family:inherit}
   background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.45);color:#a5f3fc
 }
 #panel-c3 .c3-blocked-badge{border-radius:20px;padding:2.5px 9px;letter-spacing:.07em}
+
+/* == 4b - ALERTS: PREVIOUS SESSIONS =========================================
+   Earlier sessions are history, not live incidents, so they render as a
+   compact list grouped by day rather than as full incident cards: static
+   verdict badges (no pulse), no glow shadows, no signal rings, and at most
+   _C3_PREV_PAGE rows drawn at a time (see _c3RenderPrevAlerts). Every row
+   opens the same detail popup a card does. */
+#panel-c3 .c3-alert-group{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+#panel-c3 .c3-alert-group:empty{display:none}
+#panel-c3 .c3-now-empty{
+  display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:12px;
+  border:1px dashed rgba(126,166,224,.22);background:rgba(255,255,255,.015);
+  font-size:11.5px;color:var(--t2)
+}
+#panel-c3 .c3-prev{
+  border-radius:12px;border:1px solid var(--c3-glass-brd);
+  background:linear-gradient(158deg,var(--c3-glass-a) 0%,var(--c3-glass-b) 100%);
+  box-shadow:var(--c3-inset)
+}
+#panel-c3 .c3-prev-head{
+  width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:none;border:none;border-radius:12px;color:inherit;font:inherit;
+  text-align:left;cursor:pointer;transition:background .15s ease
+}
+#panel-c3 .c3-prev.open .c3-prev-head{border-radius:12px 12px 0 0}
+#panel-c3 .c3-prev-head:hover{background:rgba(255,255,255,.025)}
+#panel-c3 .c3-prev-head:focus-visible{outline:2px solid var(--c3-cyan);outline-offset:-2px}
+#panel-c3 .c3-prev-icon{
+  width:32px;height:32px;border-radius:9px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;color:var(--c3-cyan);
+  background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.22)
+}
+#panel-c3 .c3-prev-icon svg{width:16px;height:16px}
+#panel-c3 .c3-prev-titles{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+#panel-c3 .c3-prev-title{font-size:12.5px;font-weight:700;color:var(--t0)}
+#panel-c3 .c3-prev-sub{font-size:11px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c3 .c3-prev-chips{display:flex;gap:6px;flex-shrink:0}
+#panel-c3 .c3-prev-chip{
+  font-size:10px;font-weight:700;letter-spacing:.03em;padding:3px 9px;border-radius:20px;white-space:nowrap
+}
+#panel-c3 .c3-prev-chip.beacon{color:var(--c3-danger-text);background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.28)}
+#panel-c3 .c3-prev-chip.suspicious{color:var(--warn);background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.28)}
+#panel-c3 .c3-prev-chip.safe{color:var(--safe);background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.28)}
+#panel-c3 .c3-prev-action{
+  display:inline-flex;align-items:center;gap:8px;flex-shrink:0;
+  font-size:11px;font-weight:700;color:var(--t1);padding:6px 13px;border-radius:20px;
+  border:1px solid rgba(255,255,255,.13);
+  transition:background .15s ease,border-color .15s ease,color .15s ease
+}
+#panel-c3 .c3-prev-head:hover .c3-prev-action{
+  background:rgba(34,211,238,.10);border-color:rgba(34,211,238,.45);color:#a5f3fc
+}
+#panel-c3 .c3-prev-chev{
+  width:6px;height:6px;border-right:1.8px solid currentColor;border-bottom:1.8px solid currentColor;
+  transform:translateY(-2px) rotate(45deg);transition:transform .2s ease
+}
+#panel-c3 .c3-prev.open .c3-prev-chev{transform:translateY(1px) rotate(-135deg)}
+#panel-c3 .c3-prev-body{
+  border-top:1px solid var(--c3-glass-brd);padding:4px 12px 12px;
+  animation:c3PrevIn .2s ease-out
+}
+@keyframes c3PrevIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+#panel-c3 .c3-prev-day-hdr{
+  display:flex;justify-content:space-between;align-items:baseline;padding:12px 4px 6px;
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)
+}
+#panel-c3 .c3-prev-list{display:flex;flex-direction:column;gap:4px}
+#panel-c3 .c3-prev-row{
+  display:grid;align-items:center;gap:12px;width:100%;
+  grid-template-columns:92px minmax(0,1fr) 190px 46px 64px 8px;
+  padding:8px 12px;border-radius:9px;cursor:pointer;text-align:left;color:inherit;font:inherit;
+  background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.05);border-left:3px solid var(--b2);
+  transition:background .12s ease,border-color .12s ease
+}
+#panel-c3 .c3-prev-row:hover{background:rgba(34,211,238,.05);border-color:rgba(34,211,238,.24)}
+#panel-c3 .c3-prev-row:focus-visible{outline:2px solid var(--c3-cyan);outline-offset:1px}
+#panel-c3 .c3-prev-row.beacon{border-left-color:var(--danger)}
+#panel-c3 .c3-prev-row.suspicious{border-left-color:var(--warn)}
+#panel-c3 .c3-prev-row.safe{border-left-color:var(--safe)}
+#panel-c3 .c3-prev-row .c3-pill{animation:none;justify-self:start}
+#panel-c3 .c3-prev-host,
+#panel-c3 .c3-prev-sigs b,
+#panel-c3 .c3-prev-score,
+#panel-c3 .c3-prev-time{
+  font-family:'JetBrains Mono','Cascadia Code','Fira Code',ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-variant-numeric:tabular-nums lining-nums
+}
+#panel-c3 .c3-prev-hostcell{display:flex;align-items:center;gap:8px;min-width:0}
+#panel-c3 .c3-prev-host{min-width:0;font-size:11px;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c3 .c3-prev-sigs{display:flex;gap:14px;font-size:10.5px;color:var(--t2);white-space:nowrap}
+#panel-c3 .c3-prev-sigs b{font-weight:700}
+#panel-c3 .c3-prev-review{
+  font-size:9.5px;font-weight:700;letter-spacing:.03em;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0
+}
+#panel-c3 .c3-prev-review.ok{color:var(--safe);background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.3)}
+#panel-c3 .c3-prev-review.fp{color:var(--warn);background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.3)}
+#panel-c3 .c3-prev-score{font-size:13px;font-weight:800;text-align:right}
+#panel-c3 .c3-prev-time{font-size:10.5px;color:var(--t2);text-align:right}
+#panel-c3 .c3-prev-go{
+  width:6px;height:6px;border-right:1.6px solid var(--t3);border-top:1.6px solid var(--t3);transform:rotate(45deg)
+}
+#panel-c3 .c3-prev-row:hover .c3-prev-go{border-color:var(--c3-cyan)}
+#panel-c3 .c3-prev-more{
+  display:block;margin:12px auto 2px;padding:6px 16px;border-radius:20px;cursor:pointer;
+  font:inherit;font-size:11px;font-weight:700;color:var(--t1);
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.13);
+  transition:background .15s ease,border-color .15s ease,color .15s ease
+}
+#panel-c3 .c3-prev-more span{color:var(--t3);font-weight:600}
+#panel-c3 .c3-prev-more:hover{background:rgba(34,211,238,.10);border-color:rgba(34,211,238,.45);color:#a5f3fc}
+#panel-c3 .c3-prev-note{text-align:center;font-size:10.5px;color:var(--t3);margin-top:8px}
+@media (max-width:1100px){
+  #panel-c3 .c3-prev-row{grid-template-columns:92px minmax(0,1fr) 46px 64px 8px}
+  #panel-c3 .c3-prev-sigs{display:none}
+}
+@media (max-width:760px){
+  #panel-c3 .c3-prev-chips{display:none}
+  #panel-c3 .c3-prev-row{grid-template-columns:92px minmax(0,1fr) 46px 64px}
+  #panel-c3 .c3-prev-go{display:none}
+}
 
 /* == 5 - DETECTION LAB ====================================================== */
 #panel-c3 .lab-card{padding:14px 16px}
@@ -2272,6 +2462,7 @@ input,textarea,select{font-family:inherit}
 
 /* Pipeline stages pick up the same lift-on-hover affordance. */
 #panel-c3 .c3-pipe-stage{
+  flex:1 1 0;max-width:none;
   transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease
 }
 #panel-c3 .c3-pipe-stage:hover{
@@ -2291,12 +2482,276 @@ input,textarea,select{font-family:inherit}
 #panel-c3 .lab-btn-unblock{border-radius:20px;padding:3px 11px;font-weight:700}
 #panel-c3 .c3-viz-wrap{border-radius:10px}
 #panel-c3 .c3-feat-group{border-radius:10px}
-#panel-c3 .c3-row-btn{font-family:'JetBrains Mono',ui-monospace,Consolas,monospace}
 
 /* First-time-user discovery hint under the Live Monitor / Alerts empty states,
    pointing at the Real-World Beacon Test already built into Detection Lab. */
 #panel-c3 .empty .ehint{font-size:10.5px;color:var(--t3);opacity:.85}
 #panel-c3 .empty .ehint b{color:var(--c3-cyan);font-weight:700}
+
+/* == 6 - SESSION DETECTION MIX (Detection Lab summary card) ================= */
+/* Ring, verdict legend and signal bars sit side by side while there is room,
+   then fold down a column at a time. The ring is a real Chart.js doughnut -
+   the library is already loaded once for the whole app - and the total in the
+   middle sits on top of the canvas as normal text rather than being drawn into
+   it, so it keeps the panel's own type ramp and tabular figures. */
+/* The legend is capped rather than stretched: three short rows spread across a
+   very wide column leave a canyon between each label and its number. The signal
+   bars take the remaining width instead, which is space a progress bar can
+   actually use. */
+#panel-c3 .c3-mix-body{
+  display:grid;
+  grid-template-columns:auto minmax(200px,400px) minmax(240px,1fr);
+  align-items:center;gap:20px;padding-top:13px
+}
+/* Replayed by c3ReplaySessionSummary() on every switch into Detection Lab
+   (class removed and re-added to restart it), so the card reads as a fresh
+   reveal each time even when the numbers behind it have not moved. */
+@keyframes c3MixReplay{
+  0%{opacity:.3;transform:translateY(6px)}
+  100%{opacity:1;transform:none}
+}
+#panel-c3 .lab-card-mix.c3-mix-replay{animation:c3MixReplay .5s cubic-bezier(.2,.7,.3,1) both}
+#panel-c3 .c3-mix-ring{position:relative;width:132px;height:132px;flex-shrink:0}
+#panel-c3 .c3-mix-ring canvas{display:block}
+#panel-c3 .c3-mix-center{
+  position:absolute;inset:0;display:flex;flex-direction:column;gap:1px;
+  align-items:center;justify-content:center;pointer-events:none
+}
+#panel-c3 .c3-mix-center-num{
+  font-size:27px;font-weight:800;color:var(--t0);line-height:1;letter-spacing:-.025em;
+  font-variant-numeric:tabular-nums lining-nums
+}
+#panel-c3 .c3-mix-center-lbl{
+  font-size:8.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--t3)
+}
+
+#panel-c3 .c3-mix-legend{display:flex;flex-direction:column;gap:6px;min-width:0}
+#panel-c3 .c3-mix-lg{
+  display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:9px;
+  background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.055);
+  transition:background .16s ease,border-color .16s ease
+}
+#panel-c3 .c3-mix-lg:hover{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.11)}
+#panel-c3 .c3-mix-lg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+#panel-c3 .c3-mix-lg-name{
+  font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t1)
+}
+#panel-c3 .c3-mix-lg-n{
+  margin-left:auto;font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  font-size:12px;font-weight:700;font-variant-numeric:tabular-nums
+}
+#panel-c3 .c3-mix-lg-pct{
+  font-size:9.5px;color:var(--t3);width:40px;text-align:right;flex-shrink:0;
+  font-variant-numeric:tabular-nums
+}
+
+#panel-c3 .c3-mix-signals{
+  display:flex;flex-direction:column;gap:9px;min-width:0;
+  border-left:1px solid var(--c3-glass-brd);padding-left:18px
+}
+#panel-c3 .c3-mix-sig-hdr{
+  font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--t3)
+}
+#panel-c3 .c3-mix-sig{display:flex;flex-direction:column;gap:5px}
+#panel-c3 .c3-mix-sig + .c3-mix-sig{margin-top:8px}
+#panel-c3 .c3-mix-sig-top{display:flex;align-items:baseline;gap:7px}
+#panel-c3 .c3-mix-sig-name{font-size:10.5px;font-weight:600;color:var(--t1)}
+#panel-c3 .c3-mix-sig-w{
+  font-size:9px;color:var(--t3);font-family:'JetBrains Mono',ui-monospace,Consolas,monospace
+}
+#panel-c3 .c3-mix-sig-val{
+  margin-left:auto;font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--t0)
+}
+#panel-c3 .c3-mix-sig-track{
+  height:6px;border-radius:20px;overflow:hidden;
+  background:rgba(255,255,255,.07);box-shadow:inset 0 1px 2px rgba(0,0,0,.4)
+}
+/* Same fill treatment as the Live Monitor's risk capsule, so a bar means the
+   same thing visually wherever it appears in this panel. */
+#panel-c3 .c3-mix-sig-fill{
+  height:100%;border-radius:20px;
+  background:linear-gradient(90deg,rgba(34,211,238,.5),var(--c3-cyan));
+  transition:width .55s cubic-bezier(.4,0,.2,1)
+}
+#panel-c3 .c3-mix-foot{font-size:9px;color:var(--t3);line-height:1.5;margin-top:2px}
+#panel-c3 .c3-mix-empty{font-size:10.5px;color:var(--t3);font-style:italic}
+
+@media (max-width:1100px){
+  #panel-c3 .c3-mix-body{grid-template-columns:auto minmax(150px,1fr)}
+  #panel-c3 .c3-mix-signals{
+    grid-column:1/-1;border-left:none;padding-left:0;padding-top:13px;
+    border-top:1px solid var(--c3-glass-brd)
+  }
+}
+@media (max-width:640px){
+  #panel-c3 .c3-mix-body{grid-template-columns:1fr;justify-items:center}
+  #panel-c3 .c3-mix-legend{width:100%}
+}
+
+/* == 7 - "THIS JUST HAPPENED" FEEDBACK ====================================== */
+/* Alert cards now get the same one-shot arrival flash the Live Monitor rows
+   already had, and on exactly the same terms: renderC3Alerts() rebuilds every
+   card on every render, so the class is applied ONLY to alerts whose key was
+   absent from the previous render (see _c3SeenAlertKeys). A poll that returns
+   the same alerts does not re-animate them, and neither does expanding the
+   previous-sessions group. The flash rides on `outline`, which nothing else on
+   the card uses, so it cannot fight the verdict border or the beacon glow. */
+@keyframes c3CardEnter{
+  0%  {opacity:0;transform:translateY(-7px);outline-color:rgba(34,211,238,.6)}
+  55% {opacity:1;transform:none;outline-color:rgba(34,211,238,.34)}
+  100%{opacity:1;transform:none;outline-color:rgba(34,211,238,0)}
+}
+#panel-c3 .c3-card.c3-card-new{
+  outline:1px solid rgba(34,211,238,0);outline-offset:2px;
+  animation:c3CardEnter 1.4s cubic-bezier(.16,1,.3,1)
+}
+
+/* One pass of light down the pipeline connectors when a poll actually brings in
+   newly-scored requests - never on a timer, so an idle session shows a
+   completely static diagram and costs nothing. Each stage and arrow carries its
+   own --i index from renderC3Pipeline(), so the pulse travels left to right in
+   the order the data really moves rather than flashing everything at once. */
+@keyframes c3PipeFlow{
+  0%  {color:var(--t3);text-shadow:none;transform:translateX(-1px)}
+  35% {color:var(--c3-cyan);text-shadow:0 0 10px rgba(34,211,238,.75);transform:translateX(2px)}
+  100%{color:var(--t3);text-shadow:none;transform:translateX(0)}
+}
+#panel-c3 .c3-pipeline.flowing .c3-pipe-arrow{
+  animation:c3PipeFlow .62s ease-out;animation-delay:calc(var(--i,0) * 95ms)
+}
+@keyframes c3PipeStageFlow{
+  0%,100%{box-shadow:var(--c3-inset)}
+  40%    {box-shadow:var(--c3-inset),0 0 0 1px rgba(34,211,238,.38),0 0 20px rgba(34,211,238,.17)}
+}
+#panel-c3 .c3-pipeline.flowing .c3-pipe-stage.on{
+  animation:c3PipeStageFlow .62s ease-out;animation-delay:calc(var(--i,0) * 95ms)
+}
+
+/* An empty tab in a live detector means "watching, nothing found yet", not
+   "broken" - so the empty-state icon carries the same slow radar ping as the
+   header status dot. Scoped to #panel-c3: the shared .empty styling that
+   C1/C2/C4 use is untouched. */
+#panel-c3 .empty .eicon{
+  opacity:1;position:relative;color:rgba(34,211,238,.55);
+  background:rgba(34,211,238,.05);border-color:rgba(34,211,238,.18)
+}
+#panel-c3 .empty .eicon::after{
+  content:'';position:absolute;inset:-1px;border-radius:50%;
+  border:1px solid rgba(34,211,238,.4);animation:c3EmptyPing 3.4s ease-out infinite
+}
+@keyframes c3EmptyPing{
+  0%  {transform:scale(.82);opacity:0}
+  25% {opacity:.7}
+  100%{transform:scale(1.5);opacity:0}
+}
+
+/* == 8 - TEXT LEGIBILITY =====================================================
+   Measured, not eyeballed. Every text element in this panel, in the detail
+   popup and in the beacon overlay was rendered in a headless browser and its
+   contrast computed against its real composited background (glass gradients
+   and tint layers included). 62 elements were below the WCAG AA 4.5:1 floor
+   for normal text, and two causes accounted for nearly all of them:
+
+     --t3  #30476a  rendered 1.65:1 - 2.20:1   (labels, captions, sub-headings,
+                                                inactive tabs, axis marks)
+     --t2  #5e7a9a  rendered 3.83:1 - 4.49:1   (body copy, hints, buttons)
+
+   Both are raised here to values measured against the LIGHTEST background this
+   panel paints on - rgb(31,36,47), the detail popup's score row - so every
+   other surface has more contrast, not less:
+
+     --t3  #7e94b9   5.05:1 worst case        --t2  #93a9c6   6.46:1 worst case
+
+   The luminance ladder t3 < t2 < t1 (0.291 < 0.387 < 0.512) is preserved, so
+   the visual hierarchy still reads - secondary text is still quieter than body
+   text, it is simply no longer below the readability floor. The dark theme is
+   unchanged: these are two text colours, not a palette change.
+
+   Scoped to C3's three surfaces deliberately. Custom properties inherit, so
+   this corrects the whole component at once while leaving C1, C2, C4 and the
+   Settings panel on the original global ramp. */
+#panel-c3,
+#c3-detail-modal,
+#c3-beacon-overlay{
+  --t3:#7e94b9;   /* labels, captions, secondary meta */
+  --t2:#93a9c6;   /* body copy, descriptions, hints   */
+}
+
+/* Three places dim TEXT with opacity, which no colour token can reach. Each is
+   re-pointed at the element that should actually be muted - the graphic - so
+   the words stay at full strength. */
+#panel-c3 .c3-spark-empty{opacity:1;color:var(--t3)}          /* was .5  -> 1.34:1 */
+#panel-c3 .c3-meter.na{opacity:1}                             /* was .45 -> 1.28:1 */
+#panel-c3 .c3-meter.na .c3-meter-track{opacity:.45}           /* mute the graphic only */
+#panel-c3 .c3-meter.na .c3-meter-lbl,
+#panel-c3 .c3-meter.na .c3-meter-val,
+#c3-detail-modal .c3-meter.na .c3-meter-lbl,
+#c3-detail-modal .c3-meter.na .c3-meter-val{color:var(--t3)}
+#c3-detail-modal .c3-modal-score-big span{opacity:.85}        /* was .7  -> 2.90:1 */
+
+/* Small red text sat on red-tinted card backgrounds, which pushed --danger
+   (#f04747) to 4.37-4.49:1 - just under the floor. A lighter red clears it at
+   5.9:1 and still reads as the same warning colour. Only TEXT is changed;
+   --danger itself still drives every bar, dot, border and chart fill, so the
+   panel's danger signalling looks identical. */
+#panel-c3,
+#c3-detail-modal,
+#c3-beacon-overlay{--c3-danger-text:#ff6b6b}
+#panel-c3 .c3-pill.beacon,
+#panel-c3 .c3-blocked-badge,
+#c3-detail-modal .c3-pill.beacon,
+#c3-detail-modal #c3-detail-modal-verdict.beacon,
+#c3-beacon-overlay #c3-beacon-mitre{color:var(--c3-danger-text)}
+#c3-beacon-overlay #c3-beacon-mitre{opacity:1}
+
+/* Type sizes: the panel leaned on 7.5-9.5px for a lot of real information.
+   Everything below moves up roughly one step. Nothing is re-laid-out - these
+   are the same rules that already existed, with a larger size - and the
+   4-column stat grid, the pipeline row and both tables were re-measured
+   afterwards for overflow. */
+#panel-c3 .c3-spark-empty{font-size:9px}
+#panel-c3 .c3-slbl{font-size:10.5px}
+#panel-c3 .c3-tag{font-size:10px}
+#panel-c3 .c3-cap-val{font-size:10px}
+#panel-c3 .c3-table th{font-size:10.5px}
+#panel-c3 .c3-table td{font-size:11px}
+#panel-c3 .c3-host{font-size:11px}
+#panel-c3 .c3-session-divider-label{font-size:10px}
+#panel-c3 .c3-mitre-tag{font-size:9.5px}
+#panel-c3 .c3-btn-block,
+#c3-detail-modal .c3-btn-block{font-size:10px}
+#panel-c3 .c3-card-toggle{font-size:10px}
+#panel-c3 .c3-pipe-status{font-size:10px}
+#panel-c3 .c3-pipe-name{font-size:11px}
+#panel-c3 .lab-card-sub{font-size:11px}
+#panel-c3 .lab-export-lbl{font-size:11px}
+#panel-c3 .lab-export-hint{font-size:10.5px}
+#panel-c3 .lab-blocked-empty{font-size:11px}
+#panel-c3 .lab-blocked-expiry{font-size:10px}
+#panel-c3 .lab-btn-unblock{font-size:10px}
+#panel-c3 .empty .ehint{font-size:11.5px}
+#panel-c3 .c3-mix-lg-name{font-size:10px}
+#panel-c3 .c3-mix-lg-pct{font-size:10.5px;width:44px}
+#panel-c3 .c3-mix-center-lbl{font-size:9.5px}
+#panel-c3 .c3-mix-sig-hdr{font-size:10px}
+#panel-c3 .c3-mix-sig-w{font-size:10px}
+#panel-c3 .c3-mix-sig-name{font-size:11px}
+#panel-c3 .c3-mix-foot{font-size:10px}
+#panel-c3 .c3-meter-lbl,
+#c3-detail-modal .c3-meter-lbl{font-size:10px}
+#panel-c3 .c3-meter-val,
+#c3-detail-modal .c3-meter-val{font-size:11px}
+#c3-detail-modal .c3-viz-title{font-size:10px}
+#c3-detail-modal .c3-viz-meta{font-size:10.5px}
+#c3-detail-modal .c3-viz-empty{font-size:11px}
+#c3-detail-modal .c3-feat-group-label{font-size:9.5px}
+#c3-detail-modal .c3-donut-legend{font-size:10px}
+#c3-detail-modal .c3-sig-label{font-size:10.5px}
+#c3-beacon-overlay .c3-bscore-lbl{font-size:9.5px}
+#c3-beacon-overlay #c3-beacon-mitre{font-size:10px}
+#c3-beacon-overlay .c3-beacon-ti-lbl{font-size:10.5px}
+#c3-beacon-overlay #c3-beacon-msg{font-size:12px}
 
 /* Respect a reduced-motion preference: keep every layout/colour change above,
    drop only the looping decorative animations. */
@@ -2304,10 +2759,17 @@ input,textarea,select{font-family:inherit}
   #panel-c3 .c3-sbox.pulsing,
   #panel-c3 .c3-card.beacon,
   #panel-c3 .c3-radar-dot::after,
-  #panel-c3 .lab-wave .wave-line,
-  #panel-c3 .lab-wave .wave-beat,
-  #panel-c3 .c3-table tbody tr.c3-row-new{animation:none}
-  #panel-c3 .btn-cyber-primary::after{transition:none}
+  #panel-c3 .c3-table tbody tr.c3-row-new,
+  #panel-c3 .c3-card.c3-card-new,
+  #panel-c3 .empty .eicon::after,
+  #panel-c3 .c3-pipeline.flowing .c3-pipe-arrow,
+  #panel-c3 .c3-pipeline.flowing .c3-pipe-stage.on,
+  #panel-c3 .lab-card-mix.c3-mix-replay,
+  #panel-c3 .c3-prev-body{animation:none}
+  #panel-c3 .btn-cyber-primary::after,
+  #panel-c3 .c3-prev-chev{transition:none}
+  /* The doughnut's own arc animation is disabled in renderC3VerdictChart(),
+     which reads the same media query from JS - CSS cannot reach into a canvas. */
 }
 
 </style>
@@ -2750,7 +3212,6 @@ input,textarea,select{font-family:inherit}
       <div class="c3-sbox" id="c3-sbox-hosts"><div class="c3-snum" id="c3-hosts">0</div><div class="c3-slbl">Hosts Seen</div><div class="c3-spark" id="c3-spark-hosts"></div></div>
       <div class="c3-sbox danger" id="c3-sbox-alerts"><div class="c3-snum danger" id="c3-alerts">0</div><div class="c3-slbl">Alerts</div><div class="c3-spark" id="c3-spark-alerts"></div></div>
       <div class="c3-sbox danger" id="c3-sbox-blocked"><div class="c3-snum danger" id="c3-blocked">0</div><div class="c3-slbl">Blocked</div><div class="c3-spark" id="c3-spark-blocked"></div></div>
-      <div class="c3-sbox" id="c3-sbox-engine"><div class="c3-snum" style="font-size:11px;padding-top:4px" id="c3-model-info">—</div><div class="c3-slbl">Engine</div><div class="c3-spark"></div></div>
     </div>
     <div class="c3-tabs">
       <button class="c3-tab active" data-c3tab="monitor"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Live Monitor</button>
@@ -2762,18 +3223,23 @@ input,textarea,select{font-family:inherit}
 
       <!-- LIVE MONITOR TAB -->
       <div class="c3-pane active" id="c3-pane-monitor">
-        <table class="c3-table">
+        <table class="c3-table c3-mon-table">
+          <colgroup>
+            <col class="c3-mc-time"><col><col class="c3-mc-method"><col class="c3-mc-size">
+            <col class="c3-mc-ctx"><col class="c3-mc-risk"><col class="c3-mc-cv">
+          </colgroup>
           <thead><tr>
-            <th>Host</th><th>Method</th><th>Bytes</th>
-            <th>Context</th>
-            <th>Score</th><th>Time</th>
+            <th>Time</th><th>Host</th><th>Method</th><th class="c3-num">Size</th>
+            <th title="FG/BG: was the tab visible? Active/Idle: was the user interacting?">Context</th>
+            <th title="Final risk score for this host (ML + Heuristic)">Risk</th>
+            <th title="Timing regularity (IAT CV). Near 0 = machine-like, evenly spaced requests. 0.000 = not enough requests yet.">Timing CV</th>
           </tr></thead>
           <tbody id="c3-request-rows"></tbody>
         </table>
         <div class="empty" id="c3-empty-requests">
           <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-          <div class="emsg">No requests captured yet &mdash; browsing activity will appear here</div>
-          <div class="ehint">Run the Real-World C2 Beacon Test in <b>Detection Lab</b> to see this populate</div>
+          <div class="emsg">No requests captured yet. Browsing activity will appear here.</div>
+          <div class="ehint">To try it, run the Real-World Beacon Test in <b>Detection Lab</b></div>
         </div>
       </div>
 
@@ -2781,8 +3247,8 @@ input,textarea,select{font-family:inherit}
       <div class="c3-pane" id="c3-pane-c3alerts">
         <div class="empty" id="c3-empty-alerts">
           <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
-          <div class="emsg">No beacon alerts yet &mdash; C3 is monitoring all outbound requests</div>
-          <div class="ehint">Run the Real-World C2 Beacon Test in <b>Detection Lab</b> to see this populate</div>
+          <div class="emsg">No beacon alerts yet. C3 is monitoring all outbound requests.</div>
+          <div class="ehint">To try it, run the Real-World Beacon Test in <b>Detection Lab</b></div>
         </div>
       </div>
 
@@ -2791,7 +3257,7 @@ input,textarea,select{font-family:inherit}
         <table class="c3-table" id="c3-host-table">
           <thead><tr>
             <th>Host</th><th>Requests</th><th>Risk Score</th>
-            <th>Verdict</th><th>ML</th><th>Heuristic</th><th style="width:260px">Detail</th>
+            <th>Verdict</th><th>ML</th><th>Heuristic</th>
           </tr></thead>
           <tbody id="c3-host-rows"></tbody>
         </table>
@@ -2804,123 +3270,127 @@ input,textarea,select{font-family:inherit}
       <!-- DETECTION LAB TAB -->
       <div class="c3-pane" id="c3-pane-lab">
 
-        <!-- Row 1: Blocked Hosts + Log Export side by side -->
+        <!-- Row 0: session summary, computed from the same c3Hosts list the
+             Host Analysis table renders (see renderC3VerdictChart). -->
+        <div class="lab-card lab-card-mix">
+          <div class="lab-card-hdr">
+            <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg></span>
+            <div>
+              <div class="lab-card-title">Session Summary</div>
+              <div class="lab-card-sub">Verdicts and average scores for the hosts seen in this session</div>
+            </div>
+          </div>
+          <div class="c3-mix-body">
+            <div class="c3-mix-ring">
+              <canvas id="c3-chart-verdicts" role="img" aria-label="Verdict counts for the hosts seen in this session"></canvas>
+              <div class="c3-mix-center" aria-hidden="true">
+                <div class="c3-mix-center-num" id="c3-mix-total">0</div>
+                <div class="c3-mix-center-lbl">Hosts</div>
+              </div>
+            </div>
+            <div class="c3-mix-legend" id="c3-mix-legend"></div>
+            <div class="c3-mix-signals">
+              <div class="c3-mix-sig-hdr">Average scores</div>
+              <div id="c3-mix-signal-rows"></div>
+              <div class="c3-mix-foot" id="c3-mix-foot"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 1: Blocked Hosts + Export side by side -->
         <div class="lab-top-row">
 
-          <!-- Blocked Hosts card -->
           <div class="lab-card lab-card-blocked">
             <div class="lab-card-hdr">
               <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg></span>
               <div>
                 <div class="lab-card-title">Blocked Hosts</div>
-                <div class="lab-card-sub" id="lab-blocked-sub">Auto-block off</div>
+                <div class="lab-card-sub" id="lab-blocked-sub">Auto-block is off</div>
               </div>
-              <label class="tog" title="Automatically block confirmed BEACON hosts (score ≥ 0.80) for 24 hours">
-                <input type="checkbox" id="tog-c3-autoblock" onchange="toggleC3AutoBlock(this.checked)">
+              <label class="tog" id="lab-autoblock-tog" title="Automatically block hosts confirmed as BEACON, for 24 hours">
+                <input type="checkbox" id="tog-c3-autoblock" onchange="toggleC3AutoBlock(this.checked)" aria-label="Automatically block confirmed beacons">
                 <span class="tslider"></span>
               </label>
               <span class="lab-badge-count" id="lab-blocked-count">0</span>
             </div>
             <div id="lab-blocked-list" class="lab-blocked-list">
-              <div class="lab-blocked-empty">No hosts blocked &mdash; system is monitoring</div>
+              <div class="lab-blocked-empty"><span class="c3-radar-dot" aria-hidden="true"></span>No hosts are currently blocked.</div>
             </div>
           </div>
 
-          <!-- Log Export card -->
           <div class="lab-card lab-card-export">
             <div class="lab-card-hdr">
               <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></span>
               <div>
-                <div class="lab-card-title">Detection Log</div>
-                <div class="lab-card-sub">Export all alerts — raw data or a formatted report</div>
+                <div class="lab-card-title">Export Alerts</div>
+                <div class="lab-card-sub">Download the alerts from the last 24 hours</div>
               </div>
             </div>
             <div class="lab-export-body">
               <div class="lab-export-stat" id="lab-log-count">
                 <span class="lab-export-num">0</span>
-                <span class="lab-export-lbl">alerts recorded this session</span>
+                <span class="lab-export-lbl">alerts in the last 24 hours</span>
               </div>
               <button type="button" class="lab-btn-export btn-cyber-primary" onclick="downloadC3Report()">
-                &#8659; Download HTML Report (last 24h)
+                &#8659; Download report (HTML)
               </button>
-              <div class="lab-export-hint">Confirmed beacons only, last 24h — timeline, feature-importance chart &amp; per-detection breakdown in a self-contained <code>.html</code> file</div>
+              <div class="lab-export-hint">Confirmed beacons, with a timeline and the evidence for each one</div>
               <button type="button" class="lab-btn-export lab-btn-export-secondary" onclick="downloadC3Log()">
-                &#8659; Download Log (last 24h)
+                &#8659; Download raw data (JSON)
               </button>
-              <div class="lab-export-hint">Downloads as <code>c3_detection_log.json</code></div>
+              <div class="lab-export-hint">Every alert, saved as <code>c3_detection_log.json</code></div>
             </div>
           </div>
 
         </div>
 
-        <!-- Row 1.5: Threat Intel API Keys — the reputation lookup that runs
-             on a confirmed BEACON (core/c3/reputation_engine.py). Its result
-             is shown as analyst evidence only; it is not part of the risk
-             score. Saving here uses the same /settings endpoint as the main
-             Settings panel; see saveLabApiKeys() below, which fetches current
-             settings first so it never clobbers layers/whitelist/home-url. -->
+        <!-- Row 2: threat-intel keys. The lookup runs only on a confirmed
+             BEACON (core/c3/reputation_engine.py) and is shown as evidence,
+             never scored. Saved through the same /settings endpoint as the
+             main Settings panel - see saveLabApiKeys(). -->
         <div class="lab-card">
           <div class="lab-card-hdr">
             <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/></svg></span>
             <div>
-              <div class="lab-card-title">Threat Intel API Keys</div>
-              <div class="lab-card-sub" id="lab-ti-sub">Reputation lookup shown as evidence on a confirmed beacon</div>
+              <div class="lab-card-title">Threat Intelligence Keys</div>
+              <div class="lab-card-sub" id="lab-ti-sub">Used to look up a host after a beacon is confirmed</div>
             </div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:10px;padding-top:6px">
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <label style="font-size:10px;color:var(--t2);font-weight:600" for="lab-abuseipdb-key" title="Free key at abuseipdb.com/api">AbuseIPDB API Key</label>
-              <input type="password" id="lab-abuseipdb-key" class="sinput" placeholder="Free key at abuseipdb.com/api">
+          <div class="lab-keys">
+            <div class="lab-key">
+              <label for="lab-abuseipdb-key">AbuseIPDB API key</label>
+              <input type="password" id="lab-abuseipdb-key" class="sinput" placeholder="Free key at abuseipdb.com/api" autocomplete="off">
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <label style="font-size:10px;color:var(--t2);font-weight:600" for="lab-virustotal-key" title="Free key at virustotal.com/gui/join-us">VirusTotal API Key</label>
-              <input type="password" id="lab-virustotal-key" class="sinput" placeholder="Free key at virustotal.com">
+            <div class="lab-key">
+              <label for="lab-virustotal-key">VirusTotal API key</label>
+              <input type="password" id="lab-virustotal-key" class="sinput" placeholder="Free key at virustotal.com" autocomplete="off">
             </div>
-            <button type="button" id="lab-btn-save-keys" class="lab-btn-export btn-cyber-primary" onclick="saveLabApiKeys()" style="align-self:flex-start">Save Threat Intel Keys</button>
+            <button type="button" id="lab-btn-save-keys" class="lab-btn-save btn-cyber-primary" onclick="saveLabApiKeys()">Save keys</button>
           </div>
+          <div class="lab-keys-note">Lookup results appear on the alert as extra evidence. They never change the risk score.</div>
         </div>
 
-        <!-- Row 2: Beacon Test -->
+        <!-- Row 3: Real-World Beacon Test - see openC3BeaconTest(). -->
         <div class="lab-card">
-          <div class="lab-card-hdr">
+          <div class="lab-card-hdr lab-card-hdr-center">
             <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"/></svg></span>
             <div>
               <div class="lab-card-title">Real-World Beacon Test</div>
-              <div class="lab-card-sub">Deploys a real ngrok-tunnelled C2 mimic, drives the monitored browser to it, and runs the full pipeline including a live threat-intel lookup (~3 min, needs ngrok)</div>
+              <div class="lab-card-sub">Starts a test beacon and sends this browser to it, so you can watch C3 detect it live. Takes about 3 minutes and needs ngrok.</div>
             </div>
             <button type="button" class="lab-btn-test btn-cyber-primary" onclick="openC3BeaconTest()">
               &#9654; Run Test
             </button>
           </div>
-
-          <!-- Illustration of the mimicry beacon's jittered ~1.5s POST cadence,
-               not a plot of captured traffic (see Host Analysis > Request Timing). -->
-          <div class="lab-wave">
-            <svg viewBox="0 0 480 56" preserveAspectRatio="none" aria-hidden="true">
-              <line class="wave-grid" x1="0" y1="42" x2="480" y2="42"></line>
-              <polyline class="wave-ghost" points="0,42 26,42 30,8 34,42 86,42 90,8 94,42 146,42 150,8 154,42 206,42 210,8 214,42 266,42 270,8 274,42 326,42 330,8 334,42 386,42 390,8 394,42 446,42 450,8 454,42 480,42"></polyline>
-              <polyline class="wave-line"  points="0,42 26,42 30,8 34,42 86,42 90,8 94,42 146,42 150,8 154,42 206,42 210,8 214,42 266,42 270,8 274,42 326,42 330,8 334,42 386,42 390,8 394,42 446,42 450,8 454,42 480,42"></polyline>
-              <circle class="wave-beat" cx="30" cy="8" r="2.8" style="animation-delay:0s"></circle>
-              <circle class="wave-beat" cx="90" cy="8" r="2.8" style="animation-delay:.3s"></circle>
-              <circle class="wave-beat" cx="150" cy="8" r="2.8" style="animation-delay:.6s"></circle>
-              <circle class="wave-beat" cx="210" cy="8" r="2.8" style="animation-delay:.9s"></circle>
-              <circle class="wave-beat" cx="270" cy="8" r="2.8" style="animation-delay:1.2s"></circle>
-              <circle class="wave-beat" cx="330" cy="8" r="2.8" style="animation-delay:1.5s"></circle>
-              <circle class="wave-beat" cx="390" cy="8" r="2.8" style="animation-delay:1.8s"></circle>
-              <circle class="wave-beat" cx="450" cy="8" r="2.8" style="animation-delay:2.1s"></circle>
-            </svg>
-            <div class="lab-wave-cap">
-              <span>POST every <b>~1.5 s</b> &plusmn; jitter</span>
-            </div>
-          </div>
         </div>
 
-        <!-- Row 3: Live Detection Pipeline -->
+        <!-- Row 4: pipeline status - every badge comes from a real /c3/status field -->
         <div class="lab-card">
           <div class="lab-card-hdr">
             <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6a3 3 0 0 1 3 3v6"/></svg></span>
             <div>
-              <div class="lab-card-title">Live Detection Pipeline</div>
+              <div class="lab-card-title">Detection Pipeline</div>
+              <div class="lab-card-sub">Live status of each stage</div>
             </div>
           </div>
           <div class="c3-pipeline" id="c3-pipeline"></div>
@@ -3270,21 +3740,21 @@ input,textarea,select{font-family:inherit}
     <div id="c3-beacon-title">C2 BEACON DETECTED</div>
     <div id="c3-beacon-host-wrap">
       <span id="c3-beacon-host-label">Host</span>
-      <span id="c3-beacon-host">—</span>
+      <span id="c3-beacon-host"></span>
     </div>
     <!-- Score row: fused risk + the two scoring signals -->
     <div id="c3-beacon-score-row">
       <div class="c3-bscore-item">
-        <div class="c3-bscore-val" id="c3-bscore-total" style="color:var(--danger)">—</div>
+        <div class="c3-bscore-val" id="c3-bscore-total" style="color:var(--danger)">0%</div>
         <div class="c3-bscore-lbl">Risk Score</div>
       </div>
       <div class="c3-bscore-sep"></div>
       <div class="c3-bscore-item">
-        <div class="c3-bscore-val" id="c3-bscore-ml" style="color:#22d3ee">—</div>
+        <div class="c3-bscore-val" id="c3-bscore-ml" style="color:#22d3ee">0%</div>
         <div class="c3-bscore-lbl">XGBoost</div>
       </div>
       <div class="c3-bscore-item">
-        <div class="c3-bscore-val" id="c3-bscore-heuristic" style="color:#a78bfa">—</div>
+        <div class="c3-bscore-val" id="c3-bscore-heuristic" style="color:#a78bfa">0%</div>
         <div class="c3-bscore-lbl">Heuristic</div>
       </div>
     </div>
@@ -3323,7 +3793,7 @@ input,textarea,select{font-family:inherit}
     <div id="c3-detail-modal-hdr">
       <div id="c3-detail-modal-hdr-main">
         <span class="c3-pill" id="c3-detail-modal-verdict">SAFE</span>
-        <span id="c3-detail-modal-host">—</span>
+        <span id="c3-detail-modal-host"></span>
       </div>
       <button type="button" id="c3-detail-modal-close" onclick="closeC3DetailModal()" aria-label="Close">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -3624,8 +4094,10 @@ function renderC3Stats() {
 
   // Trend sparklines under each counter, built from the real values shown above.
   c3RecordStatHistory(vals);
-  setHTML('c3-spark-reqs',    c3StatSparkSVG('reqs',    '#f59e0b'));
-  setHTML('c3-spark-hosts',   c3StatSparkSVG('hosts',   '#f59e0b'));
+  // Cyan for the two neutral activity counters, red for the two that mean
+  // something is wrong. Amber is reserved for SUSPICIOUS everywhere in C3.
+  setHTML('c3-spark-reqs',    c3StatSparkSVG('reqs',    '#22d3ee'));
+  setHTML('c3-spark-hosts',   c3StatSparkSVG('hosts',   '#22d3ee'));
   setHTML('c3-spark-alerts',  c3StatSparkSVG('alerts',  '#ef4444'));
   setHTML('c3-spark-blocked', c3StatSparkSVG('blocked', '#ef4444'));
 
@@ -3635,19 +4107,11 @@ function renderC3Stats() {
 
   const badge = document.getElementById('c3-status-badge');
   if (badge) {
-    const label = c3ModelLabel();
-    // Radar dot + the real engine label reported by /c3/status (never a fixed string).
-    badge.innerHTML = '<span class="c3-radar-dot"></span>' +
-      (label ? 'Active (' + esc(label) + ')' : 'Active');
-  }
-  const modelEl = document.getElementById('c3-model-info');
-  if (modelEl) {
-    if (c3Status.ml_model_loaded) {
-      modelEl.innerHTML = '<span style="color:var(--c3-cyan);font-weight:700">XGBoost</span> <span style="color:var(--t3);font-size:9px">+ Heuristic</span>';
-    } else {
-      modelEl.innerHTML = '<span style="color:var(--warn);font-weight:700">Heuristic</span>';
-    }
-    modelEl.style.fontSize = '';
+    // Radar dot + plain "Active". The engine name is deliberately not shown
+    // here: which model is loaded is already reported by the pipeline diagram
+    // (renderC3Pipeline reads the same /c3/status ml_model_loaded field), so
+    // repeating it in the header badge said the same thing twice.
+    badge.innerHTML = '<span class="c3-radar-dot"></span>Active';
   }
 }
 
@@ -3660,16 +4124,33 @@ function c3ReqKey(r) {
 
 let _c3LastRequestsSig = '';
 
+// Wall-clock time with seconds. The Live Monitor only redraws when something
+// changes, so a relative label ("just now") would sit there going stale.
+// Formatters are built once: toLocale*String() builds a new one per call,
+// which cost ~40 ms per 60-row render.
+const _c3ClockFmt = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+const _c3FullFmt = new Intl.DateTimeFormat([], { dateStyle: 'medium', timeStyle: 'medium' });
+function _c3ReqClock(d) {
+  return Number.isFinite(d.getTime()) ? _c3ClockFmt.format(d) : '';
+}
+
 function renderC3Requests() {
   const body = document.getElementById('c3-request-rows');
   if (!body) return;
-  // Cheap signature (count + newest key) so an idle poll that returns the same
-  // 80 rows skips the full innerHTML rebuild instead of repainting the table
-  // every 10s for no visible change.
-  const sig = c3Requests.length + '|' + (c3Requests[0] ? c3ReqKey(c3Requests[0]) : '');
+  // Cheap signature so an idle poll that changes nothing skips the rebuild.
+  // It covers the host scores too: a host's risk can change on an analyzer
+  // cycle with no new request (e.g. the persistence gate confirming it), and
+  // the rows must not keep showing the old score until the next request.
+  const hostSig = (c3Hosts || []).map(h =>
+    h.host + ':' + h.score + ':' + h.verdict + ':' + ((h.features || {}).iat_cv ?? '')).join(',');
+  const sig = c3Requests.length + '|' + (c3Requests[0] ? c3ReqKey(c3Requests[0]) : '') + '|' + hostSig;
   if (sig === _c3LastRequestsSig) return;
   _c3LastRequestsSig = sig;
   document.getElementById('c3-empty-requests').style.display = c3Requests.length ? 'none' : 'flex';
+  // A bare header row floating above the "nothing captured yet" panel reads as
+  // a broken table rather than an idle one, so the table goes with the rows.
+  const reqTable = document.querySelector('#c3-pane-monitor .c3-table');
+  if (reqTable) reqTable.style.display = c3Requests.length ? '' : 'none';
   // One host->result lookup map for the whole render instead of a linear
   // c3HostResult() scan per row (80 rows x N hosts every 10s poll).
   const hostMap = new Map((c3Hosts || []).map(h => [String(h.host || ''), h]));
@@ -3682,13 +4163,14 @@ function renderC3Requests() {
     // Same signal breakdown Host Analysis shows, surfaced here as a tooltip so
     // the "why" behind a score is visible without switching tabs.
     const sig = h.signal_breakdown || {};
-    const sigParts = [];
-    if (sig.ml != null) sigParts.push('ML ' + Math.round(Number(sig.ml) * 100) + '%');
-    if (sig.reputation != null) sigParts.push('Rep ' + Math.round(Number(sig.reputation) * 100) + '%');
-    if (sig.heuristic != null) sigParts.push('Heuristic ' + Math.round(Number(sig.heuristic) * 100) + '%');
-    const scoreTitle = verdict + ' — ' + (sigParts.length ? sigParts.join(' · ') : 'insufficient data yet');
+    const sigParts = ['ML ' + c3ScorePct(sig.ml) + '%', 'Heuristic ' + c3ScorePct(sig.heuristic) + '%'];
+    if (sig.reputation != null) sigParts.push('Reputation ' + Math.round(Number(sig.reputation) * 100) + '%');
+    const scoreTitle = verdict + ' - ' + sigParts.join(' · ');
     const feats = h.features || {};
     const iatCV = feats.iat_cv !== undefined ? Number(feats.iat_cv).toFixed(3) : null;
+    // Unknown reads as "0.000", muted, same rule as the ML/Heuristic "0%"
+    // fallback — never a bare dash. The tooltip still says why.
+    const iatCVDisplay = iatCV ?? '0.000';
     const iatCVColor = iatCV !== null
       ? (Number(iatCV) < 0.05 ? 'var(--danger)' : Number(iatCV) < 0.3 ? 'var(--warn)' : 'var(--safe)')
       : 'var(--t3)';
@@ -3696,36 +4178,38 @@ function renderC3Requests() {
     // color-only: a filled triangle for clockwork/dangerous regularity, a
     // ring for borderline, a dot for normal human-like irregularity.
     const iatCVGlyph = iatCV === null ? '' : Number(iatCV) < 0.05 ? '▲' : Number(iatCV) < 0.3 ? '◆' : '●';
-    const iatCVTitle = iatCV === null ? 'Not enough requests yet to compute timing regularity'
-      : `Inter-arrival timing CV ${iatCV} — ${Number(iatCV) < 0.05 ? 'near-perfect clockwork regularity' : Number(iatCV) < 0.3 ? 'somewhat regular timing' : 'irregular, human-like timing'}`;
-    // Context + User Activity merged into one two-icon cell (was two separate
-    // pill columns) — same two facts, half the visual width. Full wording
-    // stays in the title tooltip.
+    const iatCVTitle = iatCV === null ? 'Not enough requests yet to compute timing regularity - shown as 0.000'
+      : `Timing CV ${iatCV} - ${Number(iatCV) < 0.05 ? 'near-perfect clockwork regularity' : Number(iatCV) < 0.3 ? 'somewhat regular timing' : 'irregular, human-like timing'}`;
+    // Context + User Activity in one cell — same two facts, half the width.
+    // Full wording stays in the title tooltip.
     const ctxIcon = r.is_background_tab
       ? '<span class="c3-tag warnpill" title="Request fired from a tab the user was not viewing">BG</span>'
       : '<span class="c3-tag on" title="Request fired from the visible foreground tab">FG</span>';
     const userIcon = r.user_was_active
       ? '<span class="c3-tag on" title="User was interacting with the page when this fired">Active</span>'
       : '<span class="c3-tag off" title="No user interaction near this request">Idle</span>';
+    const method = String(r.method || '').toUpperCase();
+    const when = new Date(r.timestamp_iso);
+    const timeTitle = Number.isFinite(when.getTime()) ? _c3FullFmt.format(when) : '';
 
     const isNew = _c3RequestsInitialized && !_c3SeenRequestIds.has(c3ReqKey(r));
 
     return `<tr${isNew ? ' class="c3-row-new"' : ''}>
+      <td class="c3-mon-time" title="${esc(timeTitle)}">${_c3ReqClock(when)}</td>
       <td class="c3-host" title="${esc(r.url || r.host || '')}">${esc(r.host || '')}</td>
-      <td class="c3-mono" style="font-size:10.5px">${esc(r.method || '')}</td>
-      <td class="c3-mono" style="font-size:10.5px;color:var(--t1)">${fmtBytes(r.size_bytes)}</td>
-      <td style="display:flex;gap:4px;flex-wrap:wrap">${ctxIcon}${userIcon}</td>
+      <td class="c3-mon-method${method === 'POST' ? ' post' : ''}">${esc(method)}</td>
+      <td class="c3-mon-size c3-num">${fmtBytes(r.size_bytes)}</td>
+      <td><div class="c3-ctx">${ctxIcon}${userIcon}</div></td>
       <td>
         <div class="c3-cap" title="${esc(scoreTitle)}">
           <div class="c3-cap-track">
             <div class="c3-cap-fill" style="width:${pct}%;background:linear-gradient(90deg,${hex}80,${hex})"></div>
           </div>
           <span class="c3-cap-val" style="color:${hex}">${pct}%</span>
-          ${verdict !== 'SAFE' ? `<span class="c3-pill ${verdict.toLowerCase()}" style="font-size:9px;padding:1.5px 6px">${esc(verdict)}</span>` : ''}
-          <span class="c3-mono" style="font-size:9.5px;color:${iatCVColor}" title="${esc(iatCVTitle)}">${iatCVGlyph} ${iatCV ?? '—'}</span>
+          ${verdict !== 'SAFE' ? `<span class="c3-pill ${verdict.toLowerCase()}">${esc(verdict)}</span>` : ''}
         </div>
       </td>
-      <td class="c3-mono" style="font-size:10.5px;color:var(--t1)">${fmtTime(r.timestamp_iso)}</td>
+      <td><span class="c3-cvv" style="color:${iatCVColor}" title="${esc(iatCVTitle)}"><i aria-hidden="true">${iatCVGlyph}</i>${iatCVDisplay}</span></td>
     </tr>`;
   }).join('');
 
@@ -3734,46 +4218,253 @@ function renderC3Requests() {
   _c3RequestsInitialized = true;
 }
 
+// The current-session cards are rebuilt whenever their content changes, so
+// without this bookkeeping a card that landed one second ago and one that has
+// been sitting there for an hour look identical. Same approach as
+// _c3SeenRequestIds in renderC3Requests(): only alerts whose key was absent
+// from the previous render get the arrival flash. The set is refreshed from
+// the FULL alert list, so an alert that later moves into the previous-sessions
+// list is never treated as new.
+const _c3SeenAlertKeys = new Set();
+let _c3AlertsInitialized = false;
+
+function c3AlertKey(a) {
+  if (!a) return '';
+  if (a.id != null) return 'id:' + a.id;
+  return (a.host || '') + '|' + (a.timestamp || a.ts || '') + '|' + (a.score ?? '');
+}
+
+function c3AppendAlertCard(pane, a) {
+  const card = makeC3AlertCard(a);
+  if (_c3AlertsInitialized && !_c3SeenAlertKeys.has(c3AlertKey(a))) {
+    card.classList.add('c3-card-new');
+  }
+  pane.appendChild(card);
+}
+
+// The Alerts pane holds two groups that render independently:
+//   #c3-alerts-current - this session's live incident cards
+//   #c3-alerts-prev    - earlier sessions, as a compact history list
+// Each group is rebuilt only when its own content changes, so the 10 s status
+// poll does not repaint a long history list or reset its scroll position.
+// History rows are deliberately light (no pulsing badge, no glow, no rings),
+// grouped by day, drawn _C3_PREV_PAGE at a time, and share one delegated click
+// handler; every row opens the same detail popup as a card.
+const _C3_PREV_PAGE = 25;
+let _c3PrevShown = _C3_PREV_PAGE;
+let _c3PrevRows = [];
+let _c3LastCurrentSig = null;
+let _c3LastPrevSig = null;
+
+const _C3_HISTORY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/><polyline points="12 7 12 12 15.5 14"/></svg>';
+
 function renderC3Alerts() {
   const pane = document.getElementById('c3-pane-c3alerts');
   if (!pane) return;
-  // Remove previous renders
-  pane.querySelectorAll('.c3-card, .c3-session-divider, .c3-prev-section').forEach(e => e.remove());
-
   const current = c3Alerts.filter(a => _alertTs(a) >= SESSION_START_TS);
   const previous = c3Alerts.filter(a => _alertTs(a) < SESSION_START_TS);
 
-  const emptyEl = document.getElementById('c3-empty-alerts');
-  emptyEl.style.display = (current.length === 0 && previous.length === 0) ? 'flex' : 'none';
+  document.getElementById('c3-empty-alerts').style.display =
+    (current.length === 0 && previous.length === 0) ? 'flex' : 'none';
 
-  if (current.length > 0) {
+  const [curBox, prevBox] = _c3AlertGroups(pane);
+  _c3RenderCurrentAlerts(curBox, current, previous.length);
+  _c3RenderPrevAlerts(prevBox, previous);
+
+  _c3SeenAlertKeys.clear();
+  c3Alerts.forEach(a => _c3SeenAlertKeys.add(c3AlertKey(a)));
+  _c3AlertsInitialized = true;
+}
+
+function _c3AlertGroups(pane) {
+  let cur = document.getElementById('c3-alerts-current');
+  if (!cur) {
+    cur = document.createElement('div');
+    cur.id = 'c3-alerts-current';
+    cur.className = 'c3-alert-group';
+    pane.appendChild(cur);
+  }
+  let prev = document.getElementById('c3-alerts-prev');
+  if (!prev) {
+    prev = document.createElement('div');
+    prev.id = 'c3-alerts-prev';
+    prev.className = 'c3-alert-group';
+    prev.addEventListener('click', _c3PrevClick);
+    pane.appendChild(prev);
+  }
+  return [cur, prev];
+}
+
+function _c3AlertsSig(list) {
+  return list.map(a => c3AlertKey(a) + ':' + (a.analyst_verdict || '')).join('|');
+}
+
+function _c3RenderCurrentAlerts(box, current, previousCount) {
+  const blocked = (c3Hosts || []).filter(h => h.blocked).map(h => h.host).join(',');
+  // The 10 s bucket keeps relative times ("2m ago") fresh while cards exist.
+  const sig = [_c3AlertsSig(current), blocked, previousCount > 0,
+               current.length ? Math.floor(Date.now() / 10000) : 0].join('#');
+  if (sig === _c3LastCurrentSig) return;
+  _c3LastCurrentSig = sig;
+  box.textContent = '';
+  if (current.length) {
     const divider = document.createElement('div');
     divider.className = 'c3-session-divider';
     divider.innerHTML = `<div class="c3-session-divider-line"></div>
       <span class="c3-session-divider-label">This Session</span>
       <div class="c3-session-divider-line"></div>`;
-    pane.appendChild(divider);
-    current.forEach(a => pane.appendChild(makeC3AlertCard(a)));
-  }
-
-  if (previous.length > 0) {
-    const prevDivider = document.createElement('div');
-    prevDivider.className = 'c3-session-divider';
-    prevDivider.innerHTML = `<div class="c3-session-divider-line"></div>
-      <span class="c3-session-divider-label">Previous Sessions (${previous.length})</span>
-      <button class="c3-prev-toggle" onclick="togglePrevAlerts(this)">${_showPrevAlerts ? 'Hide' : 'Show'}</button>
-      <div class="c3-session-divider-line"></div>`;
-    pane.appendChild(prevDivider);
-    if (_showPrevAlerts) {
-      previous.forEach(a => pane.appendChild(makeC3AlertCard(a)));
-    }
+    box.appendChild(divider);
+    current.forEach(a => c3AppendAlertCard(box, a));
+  } else if (previousCount) {
+    box.innerHTML = `<div class="c3-now-empty">
+      <span class="c3-radar-dot" aria-hidden="true"></span>
+      No new alerts in this session. C3 is checking every outgoing request.
+    </div>`;
   }
 }
 
-function togglePrevAlerts(btn) {
-  _showPrevAlerts = !_showPrevAlerts;
-  btn.textContent = _showPrevAlerts ? 'Hide' : 'Show';
-  renderC3Alerts();
+function _c3RenderPrevAlerts(box, previous) {
+  const saved = Number((c3Status || {}).alerts_count || 0);
+  const sig = [_c3AlertsSig(previous), _showPrevAlerts, _c3PrevShown, saved].join('#');
+  if (sig === _c3LastPrevSig) return;
+  _c3LastPrevSig = sig;
+  if (!previous.length) {
+    box.textContent = '';
+    _c3PrevRows = [];
+    return;
+  }
+
+  const rows = previous.slice().sort((a, b) => _alertTs(b) - _alertTs(a));
+  _c3PrevRows = rows;
+  const hostCount = new Set(rows.map(a => a.host || '')).size;
+  const stamps = rows.map(_alertTs).filter(t => t > 0);
+  const range = stamps.length ? _c3DayRange(Math.min(...stamps), Math.max(...stamps)) : '';
+  const counts = {};
+  rows.forEach(a => {
+    const v = String(a.verdict || 'BEACON').toUpperCase();
+    counts[v] = (counts[v] || 0) + 1;
+  });
+  const chips = ['BEACON', 'SUSPICIOUS', 'SAFE'].filter(v => counts[v]).map(v =>
+    `<span class="c3-prev-chip ${v.toLowerCase()}">${counts[v]} ${v.toLowerCase()}</span>`).join('');
+  const sub = `${rows.length} alert${rows.length === 1 ? '' : 's'} · `
+            + `${hostCount} host${hostCount === 1 ? '' : 's'}${range ? ' · ' + range : ''}`;
+  const open = _showPrevAlerts;
+
+  let body = '';
+  if (open) {
+    const perDay = {};
+    rows.forEach(a => { const k = _c3DayKey(a); perDay[k] = (perDay[k] || 0) + 1; });
+    const shown = rows.slice(0, _c3PrevShown);
+    let html = '';
+    let day = null;
+    shown.forEach((a, i) => {
+      const k = _c3DayKey(a);
+      if (k !== day) {
+        if (day !== null) html += '</div></div>';
+        html += `<div class="c3-prev-day">
+          <div class="c3-prev-day-hdr"><span>${esc(_c3DayLabel(a))}</span>
+            <span>${perDay[k]} alert${perDay[k] === 1 ? '' : 's'}</span></div>
+          <div class="c3-prev-list">`;
+        day = k;
+      }
+      html += _c3PrevRowHTML(a, i);
+    });
+    if (day !== null) html += '</div></div>';
+    const left = rows.length - shown.length;
+    if (left > 0) {
+      html += `<button type="button" class="c3-prev-more" data-prev-more>
+        Show ${Math.min(left, _C3_PREV_PAGE)} more <span>(${left} left)</span></button>`;
+    }
+    if (saved > c3Alerts.length) {
+      html += `<div class="c3-prev-note">Showing the latest ${c3Alerts.length} of ${saved} saved alerts.</div>`;
+    }
+    body = `<div class="c3-prev-body" id="c3-prev-body">${html}</div>`;
+  }
+
+  box.innerHTML = `<section class="c3-prev${open ? ' open' : ''}" aria-label="Alerts from previous sessions">
+    <button type="button" class="c3-prev-head" data-prev-toggle aria-expanded="${open}"${open ? ' aria-controls="c3-prev-body"' : ''}>
+      <span class="c3-prev-icon" aria-hidden="true">${_C3_HISTORY_ICON}</span>
+      <span class="c3-prev-titles">
+        <span class="c3-prev-title">Previous sessions</span>
+        <span class="c3-prev-sub">${esc(sub)}</span>
+      </span>
+      <span class="c3-prev-chips">${chips}</span>
+      <span class="c3-prev-action">${open ? 'Hide' : 'Show'}<span class="c3-prev-chev" aria-hidden="true"></span></span>
+    </button>
+    ${body}
+  </section>`;
+}
+
+function _c3PrevRowHTML(a, i) {
+  const verdict = String(a.verdict || 'BEACON').toUpperCase();
+  const vc = verdict.toLowerCase();
+  const sig = a.signal_breakdown || a.signals || {};
+  const sigVal = (key) => {
+    const color = c3ScoreKnown(sig[key]) ? c3SignalColor(key, Number(sig[key])) : 'var(--t2)';
+    return `<b style="color:${color}">${c3ScorePct(sig[key])}%</b>`;
+  };
+  const scoreColor = vc === 'beacon' ? 'var(--c3-danger-text)' : vc === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
+  const review = a.analyst_verdict === 'correct'
+    ? '<span class="c3-prev-review ok">Reviewed: correct</span>'
+    : a.analyst_verdict === 'false_positive'
+      ? '<span class="c3-prev-review fp">False positive</span>' : '';
+  return `<button type="button" class="c3-prev-row ${vc}" data-i="${i}" title="Open the full detail for ${esc(a.host || '')}">
+    <span class="c3-pill ${vc}">${esc(verdict)}</span>
+    <span class="c3-prev-hostcell"><span class="c3-prev-host">${esc(a.host || '')}</span>${review}</span>
+    <span class="c3-prev-sigs"><span>ML ${sigVal('ml')}</span><span>Heuristic ${sigVal('heuristic')}</span></span>
+    <span class="c3-prev-score" style="color:${scoreColor}">${Math.round(clamp01(a.score) * 100)}%</span>
+    <span class="c3-prev-time">${esc(_c3ClockTime(a))}</span>
+    <span class="c3-prev-go" aria-hidden="true"></span>
+  </button>`;
+}
+
+function _c3PrevClick(e) {
+  if (e.target.closest('[data-prev-toggle]')) {
+    _showPrevAlerts = !_showPrevAlerts;
+    if (!_showPrevAlerts) _c3PrevShown = _C3_PREV_PAGE;
+    renderC3Alerts();
+    const head = document.querySelector('#c3-alerts-prev [data-prev-toggle]');
+    if (head) head.focus({ preventScroll: true });
+    return;
+  }
+  if (e.target.closest('[data-prev-more]')) {
+    const firstNew = _c3PrevShown;
+    _c3PrevShown += _C3_PREV_PAGE;
+    renderC3Alerts();
+    const row = document.querySelector(`#c3-alerts-prev .c3-prev-row[data-i="${firstNew}"]`);
+    if (row) row.focus({ preventScroll: true });
+    return;
+  }
+  const row = e.target.closest('.c3-prev-row');
+  if (row) {
+    const a = _c3PrevRows[Number(row.dataset.i)];
+    if (a) openC3AlertModal(a);
+  }
+}
+
+function _c3DayKey(a) {
+  const t = _alertTs(a);
+  return t ? new Date(t).toDateString() : 'unknown';
+}
+
+function _c3DayLabel(a) {
+  const t = _alertTs(a);
+  if (!t) return 'Unknown date';
+  const d = new Date(t).toDateString();
+  if (d === new Date().toDateString()) return 'Today';
+  if (d === new Date(Date.now() - 86400000).toDateString()) return 'Yesterday';
+  return new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function _c3ClockTime(a) {
+  const t = _alertTs(a);
+  return t ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+}
+
+function _c3DayRange(lo, hi) {
+  const f = t => new Date(t).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  const a = f(lo), b = f(hi);
+  return a === b ? a : `${a} – ${b}`;
 }
 
 function _alertTs(a) {
@@ -3812,20 +4503,41 @@ function makeC3AlertCard(a) {
   const heuristicRaw = signals.heuristic != null ? Number(signals.heuristic) : null;
   const reputationRaw = signals.reputation != null ? Number(signals.reputation) : null;
   const meterHtml = [
-    { key: 'ml',              label: 'ML',         val: mlRaw,         tip: 'XGBoost C2 classifier probability, isotonic-calibrated. 18 scale-free features (timing regularity, payload shape, URL shape, missing Referer) trained on real captures scoped to active periodic C2, so it scores beacons at any interval \u2014 including fast ones.' },
-    { key: 'heuristic',       label: 'Heuristic',  val: heuristicRaw,  tip: 'Rule-based browser-context score' },
-    { key: 'reputation',      label: 'Reputation', val: reputationRaw, tip: 'External threat-intelligence reputation \u2014 analyst evidence only, not part of the risk score (score = ML + Heuristic)' },
+    { key: 'ml',              label: 'ML',         val: mlRaw,         tip: 'ML model score. An XGBoost classifier reads 20 traffic-shape features (timing regularity, payload size, URL pattern, missing Referer). 50% is the point where the model calls the traffic C2.' },
+    { key: 'heuristic',       label: 'Heuristic',  val: heuristicRaw,  tip: 'Rule-based score. It first checks the timing for a beacon rhythm. Only then do an idle user, a hidden tab, one repeated endpoint and similar signs add to it.' },
+    { key: 'reputation',      label: 'Reputation', val: reputationRaw, tip: 'Threat-intelligence lookup (AbuseIPDB, VirusTotal). Shown as evidence only. It does not change the risk score, which is ML + Heuristic.' },
   ].map(m => {
     const color = c3SignalColor(m.key, m.val);
-    const pctTxt = m.val != null ? Math.round(m.val * 100) + '%' : 'n/a';
-    return `<span class="c3-meter${m.val == null ? ' na' : ''}" title="${esc(m.tip)}${m.val == null ? ' — not available for this host' : ''}">
-      ${c3MeterRingSVG(m.val, color)}
-      <span class="c3-meter-txt">
-        <span class="c3-meter-lbl">${m.label}</span>
-        <span class="c3-meter-val" style="color:${color}">${pctTxt}</span>
-      </span>
+    // Reputation keeps "n/a": it only runs on a confirmed beacon, and a real
+    // lookup that came back clean (0%) must stay distinguishable from no lookup.
+    const pctTxt = m.val != null ? Math.round(m.val * 100) + '%'
+      : (m.key === 'reputation' ? 'n/a' : '0%');
+    const pct = m.val != null ? Math.round(clamp01(m.val) * 100) : 0;
+    return `<span class="c3-meter${m.val == null ? ' na' : ''}" title="${esc(m.tip)}${m.val == null ? ' Not available for this host yet.' : ''}">
+      <span class="c3-meter-lbl">${m.label}</span>
+      <span class="c3-meter-track"><span class="c3-meter-fill" style="width:${pct}%;background:${color}"></span></span>
+      <span class="c3-meter-val" style="color:${color}">${pctTxt}</span>
     </span>`;
   }).join('');
+
+  // Context quality (Step 3). A low heuristic score means two very different
+  // things depending on this: "we looked and the context was benign" versus
+  // "we could not look, so benign defaults were substituted". The second used
+  // to be indistinguishable from the first anywhere in the UI.
+  //
+  // MIRRORED LITERAL WARNING: 0.50 duplicates DEGRADED_CONTEXT_LABEL_THRESHOLD
+  // in core/c3/risk_fusion.py. The backend boolean is preferred whenever it is
+  // present (every live result and every alert written since 2026-09-11); the
+  // literal is only a fallback for older persisted alerts, which predate the
+  // field entirely and will read 0 anyway. If that constant changes, change it
+  // here too.
+  const ctxDegraded = Number(feats.degraded_context_ratio || 0);
+  const ctxUnavailable = (a.context_unavailable != null)
+    ? !!a.context_unavailable
+    : (ctxDegraded >= 0.50);
+  const ctxBadge = ctxUnavailable
+    ? `<span class="c3-ctx-badge" title="Browser context could not be measured for ${Math.round(ctxDegraded * 100)}% of these requests - the heuristic half of this score used substituted defaults, not observations. Treat a low heuristic score here as 'unknown', not 'safe'.">CONTEXT UNAVAILABLE</span>`
+    : '';
 
   const hostAttr = esc(a.host || '');
   const blockBtn = c3BlockBtnHTML(isBlocked, `event.stopPropagation();blockHostFromAlert(this,'${hostAttr}')`);
@@ -3847,9 +4559,10 @@ function makeC3AlertCard(a) {
       <span class="c3-pill ${vc}">${esc(a.verdict || 'BEACON')}</span>
       <span class="c3-card-title" title="${esc(a.host || '')}">${esc(a.host || '')}</span>
       ${isBlocked ? '<span class="c3-blocked-badge">BLOCKED</span>' : ''}
-      <span class="c3-mitre-tag" title="MITRE ATT&amp;CK T1071.001 — Application Layer Protocol: Web Protocols">T1071.001</span>
-      ${(feats.http_post_ratio || 0) > 0.5 ? '<span class="c3-mitre-tag" title="MITRE ATT&amp;CK T1041 — Exfiltration Over C2 Channel (this host\'s traffic is majority POST)">T1041</span>' : ''}
-      ${(feats.extension_origin_ratio || 0) > 0.5 ? '<span class="c3-mitre-tag" title="MITRE ATT&amp;CK T1176 — Browser Extensions (majority of these requests were initiated by an extension)">T1176</span>' : ''}
+      ${ctxBadge}
+      <span class="c3-mitre-tag" title="MITRE ATT&amp;CK T1071.001 - Application Layer Protocol: Web Protocols">T1071.001</span>
+      ${(feats.http_post_ratio || 0) > 0.5 ? '<span class="c3-mitre-tag" title="MITRE ATT&amp;CK T1041 - Exfiltration Over C2 Channel (this host\'s traffic is majority POST)">T1041</span>' : ''}
+      ${(feats.extension_origin_ratio || 0) > 0.5 ? '<span class="c3-mitre-tag" title="MITRE ATT&amp;CK T1176 - Browser Extensions (majority of these requests were initiated by an extension)">T1176</span>' : ''}
       <span class="c3-card-score" style="color:${scoreColor}">${scorePct}%</span>
       <span class="atime">${fmtTime(a.timestamp)}</span>
     </div>
@@ -3888,7 +4601,67 @@ function openC3AlertModal(a) {
     blocked: !!c3HostResult(a.host).blocked,
     events: null,          // alerts don't carry a raw event window
     showSparkline: true,   // this host may already have score history client-side
+    // Analyst feedback (Step 8) is only offered for persisted ALERTS, which
+    // are the things that have an id to label. The same modal also opens from
+    // a Host Analysis row, where there is no alert to attach a judgement to.
+    alertId: (a.id != null) ? a.id : null,
+    analystVerdict: a.analyst_verdict || null,
   });
+}
+
+// Records an analyst's judgement on one alert. Section 3.7: nothing in C3
+// recorded whether a verdict was right, so every false-positive measurement
+// had to be redone by hand and post-deployment drift was invisible.
+async function c3SubmitFeedback(alertId, verdict, btn) {
+  const panel = btn && btn.closest('.c3-fb');
+  try {
+    if (panel) panel.classList.add('busy');
+    const res = await fetch(`${API}/c3/alerts/${alertId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verdict }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // Update the cached alert so reopening the modal shows the saved state
+    // rather than silently reverting to unlabelled.
+    const cached = (typeof c3Alerts !== 'undefined' ? c3Alerts : [])
+      .find(x => String(x.id) === String(alertId));
+    if (cached) cached.analyst_verdict = verdict;
+    if (panel) {
+      panel.classList.remove('busy');
+      panel.innerHTML = c3FeedbackSavedHTML(verdict);
+    }
+  } catch (err) {
+    if (panel) {
+      panel.classList.remove('busy');
+      const msg = panel.querySelector('.c3-fb-msg');
+      if (msg) msg.textContent = 'Could not save - ' + err.message;
+    }
+  }
+}
+
+function c3FeedbackSavedHTML(verdict) {
+  const isFp = verdict === 'false_positive';
+  return `<span class="c3-fb-lbl">Analyst review</span>
+    <span class="c3-fb-saved ${isFp ? 'fp' : 'ok'}">
+      ${isFp ? 'Marked FALSE POSITIVE' : 'Marked CORRECT'}
+    </span>
+    <span class="c3-fb-msg">Saved - exported via /c3/alerts/feedback/export</span>`;
+}
+
+function c3FeedbackPanelHTML(alertId, existing) {
+  if (alertId == null) return '';
+  if (existing) return `<div class="c3-fb">${c3FeedbackSavedHTML(existing)}</div>`;
+  return `<div class="c3-fb">
+    <span class="c3-fb-lbl">Was this verdict right?</span>
+    <button type="button" class="c3-fb-btn ok"
+      onclick="c3SubmitFeedback(${alertId},'correct',this)"
+      title="This really was a C2 beacon">Correct</button>
+    <button type="button" class="c3-fb-btn fp"
+      onclick="c3SubmitFeedback(${alertId},'false_positive',this)"
+      title="This was benign traffic - record it as a false positive">False positive</button>
+    <span class="c3-fb-msg">Labels are evidence only and never change scoring.</span>
+  </div>`;
 }
 
 // Opens the popup for one host row — fetches the richer /c3/hosts/{host}
@@ -3942,7 +4715,7 @@ document.addEventListener('keydown', (e) => {
 
 // Single render path shared by both entry points above — builds the full
 // evidence view (score header, signal donut, evidence radar, per-signal
-// bars, all 16 behavioural feature bars, plain-language reasoning, and — for
+// bars, all 32 behavioural feature bars, plain-language reasoning, and — for
 // hosts with a real event window — a request timeline + recent requests).
 function c3RenderDetailModal(d) {
   const overlay = document.getElementById('c3-detail-modal-overlay');
@@ -3963,7 +4736,7 @@ function c3RenderDetailModal(d) {
     <div class="c3-modal-score-row">
       <div class="c3-modal-score-big" style="color:${scoreColor}">${scorePct}<span>%</span></div>
       <div class="c3-modal-score-meta">
-        <div class="c3-modal-score-label">Fused risk score</div>
+        <div class="c3-modal-score-label">Risk score</div>
         ${d.detail ? `<div class="c3-reason-line" style="margin-top:6px;padding-top:0;border-top:none">${esc(d.detail)}</div>` : ''}
       </div>
       <div class="c3-modal-score-actions">
@@ -3982,6 +4755,7 @@ function c3RenderDetailModal(d) {
         ${c3RadarSVG(d.features)}
       </div>
     </div>
+    ${c3FeedbackPanelHTML(d.alertId, d.analystVerdict)}
     ${c3SignalBarsDetailed(d.signals, d.signalDetail)}
     ${c3FeatureBarsSection(d.features)}
     ${d.showSparkline ? `<div class="c3-viz-wrap">
@@ -4022,6 +4796,8 @@ function renderC3Hosts() {
   if (sig === _c3LastHostsSig) return;
   _c3LastHostsSig = sig;
   document.getElementById('c3-empty-hosts').style.display = c3Hosts.length ? 'none' : 'flex';
+  const hostTable = document.getElementById('c3-host-table');
+  if (hostTable) hostTable.style.display = c3Hosts.length ? '' : 'none';
   body.innerHTML = c3Hosts.map(h => {
     const score = Number(h.score || 0);
     const scorePct = Math.round(score * 100);
@@ -4029,8 +4805,10 @@ function renderC3Hosts() {
     const vc = verdict.toLowerCase();
     const scoreColor = c3RiskColor(score);
     const signals = h.signal_breakdown || {};
-    const mlPct = signals.ml != null ? Math.round(Number(signals.ml) * 100) : null;
-    const heuristicPct = signals.heuristic != null ? Math.round(Number(signals.heuristic) * 100) : null;
+    const mlCell = c3SignalCellHTML('ml', signals.ml,
+      'No ML score yet - the model needs at least 6 requests to this host');
+    const heuristicCell = c3SignalCellHTML('heuristic', signals.heuristic,
+      'Not scored yet - waiting for more requests to this host');
     const blocked = h.blocked ? '<span class="c3-blocked-badge" style="font-size:8px;padding:1px 5px">BLK</span>' : '';
     // The whole row opens the shared detail popup (see openC3HostModal) —
     // previously this expanded an inline row with the same evidence, now
@@ -4048,9 +4826,8 @@ function renderC3Hosts() {
         </div>
       </td>
       <td><span class="c3-pill ${vc}">${esc(verdict)}</span></td>
-      <td style="font-size:10.5px;font-weight:600;color:${mlPct != null ? c3SignalColor('ml', mlPct/100) : 'var(--t2)'}">${mlPct != null ? mlPct + '%' : '—'}</td>
-      <td style="font-size:10.5px;font-weight:600;color:${heuristicPct != null ? c3RiskColor(heuristicPct/100) : 'var(--t2)'}">${heuristicPct != null ? heuristicPct + '%' : '—'}</td>
-      <td class="c3-detail-cell" title="${esc(h.detail || '')}">${esc(h.detail || '')}</td>
+      ${mlCell}
+      ${heuristicCell}
     </tr>`;
   }).join('');
   body.querySelectorAll('.c3-host-row').forEach(row => {
@@ -4064,14 +4841,237 @@ function renderC3Collection() {
   renderLabBlockedHosts();
   renderLabLogCount();
   renderC3Pipeline();
+  renderC3VerdictChart();
+  c3MaybePulsePipeline();
+}
+
+// ── Session Summary (Detection Lab summary card) ───────────────────────────
+// Every other C3 view is per-request or per-host; this is the one that answers
+// "how is this session going" in a glance. Both halves are derived from the
+// live c3Hosts array the Host Analysis table already renders — no new endpoint,
+// no second copy of state, and no number that isn't sourced from real data.
+//
+// Chart.js is already loaded once for the whole app. C3 keeps its OWN chart
+// handle and its own render path here, so this neither depends on nor disturbs
+// any other component's charts. It also only ever runs while the Detection Lab
+// is the visible pane (renderC3 gates renderC3Collection on that), which avoids
+// the usual Chart.js trap of measuring a display:none container and sizing the
+// canvas to zero.
+let _c3VerdictChart = null;
+let _c3LastMixSig = '';
+// Set for exactly one renderC3VerdictChart() call by c3ReplaySessionSummary()
+// (below), so switching INTO Detection Lab draws the signal bars in from
+// zero even when the counts behind them have not changed since last time -
+// otherwise the memoised-signature guard a few lines down would skip the
+// whole rebuild and the card would just sit there looking unchanged.
+let _c3MixForceAnim = false;
+
+const _C3_MIX_BANDS = [
+  { key: 'SAFE',       label: 'Safe',       hex: '#10b981' },
+  { key: 'SUSPICIOUS', label: 'Suspicious', hex: '#f59e0b' },
+  { key: 'BEACON',     label: 'Beacon',     hex: '#ef4444' },
+];
+
+function renderC3VerdictChart() {
+  const canvas = document.getElementById('c3-chart-verdicts');
+  if (!canvas) return;
+
+  const hosts = Array.isArray(c3Hosts) ? c3Hosts : [];
+  const counts = _C3_MIX_BANDS.map(b =>
+    hosts.filter(h => String(h.verdict || 'SAFE').toUpperCase() === b.key).length);
+  const total = counts.reduce((a, b) => a + b, 0);
+
+  // Mean over the hosts that actually reported the signal. A host still
+  // collecting requests reports null rather than 0, and averaging those in
+  // would drag both bars toward zero and understate what the engines are doing.
+  const meanOf = (key) => {
+    const vals = hosts
+      .map(h => (h.signal_breakdown || {})[key])
+      .filter(v => v != null && Number.isFinite(Number(v)))
+      .map(Number);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const mlMean = meanOf('ml');
+  const heuMean = meanOf('heuristic');
+
+  const sig = counts.join(',') + '|' + mlMean + '|' + heuMean;
+  if (sig === _c3LastMixSig && _c3VerdictChart && !_c3MixForceAnim) return;
+  _c3LastMixSig = sig;
+  // Consumed once, into a local, right away: whatever happens for the rest of
+  // THIS call, the module flag is spent and will not leak into some later,
+  // unrelated re-render.
+  const forceAnim = _c3MixForceAnim;
+  _c3MixForceAnim = false;
+  const reduceMotion = !!(window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  setText('c3-mix-total', total);
+
+  setHTML('c3-mix-legend', _C3_MIX_BANDS.map((b, i) => {
+    const n = counts[i];
+    const pct = total ? Math.round((n / total) * 100) : 0;
+    return `<div class="c3-mix-lg">
+      <span class="c3-mix-lg-dot" style="background:${b.hex}"></span>
+      <span class="c3-mix-lg-name">${b.label}</span>
+      <span class="c3-mix-lg-n" style="color:${n ? b.hex : 'var(--t3)'}">${n}</span>
+      <span class="c3-mix-lg-pct">${pct}%</span>
+    </div>`;
+  }).join(''));
+
+  // Weights come from c3FusionWeights(), which reads them out of /c3/status —
+  // the same single-source-of-truth rule the contribution donut follows, so
+  // these labels cannot drift away from risk_fusion.py.
+  const weights = c3FusionWeights({ ml: 0, heuristic: 0 });
+  const bars = [
+    { key: 'ml',        label: 'ML model',        mean: mlMean,  w: weights.ml },
+    { key: 'heuristic', label: 'Heuristic rules', mean: heuMean, w: weights.heuristic },
+  ];
+  setHTML('c3-mix-signal-rows', bars.map(r => {
+    const wTxt = Number.isFinite(r.w) ? `weight ${Math.round(r.w * 100)}%` : '';
+    if (r.mean == null) {
+      return `<div class="c3-mix-sig">
+        <div class="c3-mix-sig-top">
+          <span class="c3-mix-sig-name">${r.label}</span>
+          <span class="c3-mix-sig-w">${wTxt}</span>
+          <span class="c3-mix-sig-val" style="color:var(--t3)" title="No host has this score yet">0%</span>
+        </div>
+        <div class="c3-mix-sig-track"><div class="c3-mix-sig-fill" style="width:0"></div></div>
+      </div>`;
+    }
+    // Both bars are drawn on the same neutral accent scale, deliberately. These
+    // are session MEANS, not verdicts, and ML and heuristic alarm at different
+    // thresholds (c3SignalColor: 0.70 vs 0.50) - colouring each by its own
+    // threshold made 33% render green next to 28% amber, which reads as a bug
+    // and destroys the one thing the pair is here for: comparing their lengths.
+    // Verdict colour lives in the ring; measurement colour is the panel accent.
+    const pct = Math.round(r.mean * 100);
+    // On a forced replay (switching into this tab) start every fill at 0 and
+    // let the rAF below animate it up to `pct` - otherwise the bar would just
+    // appear at its final width with nothing to actually watch. A routine
+    // data-driven update (this tab already open, a score changed) skips that
+    // and paints the real width immediately, as before.
+    const startPct = (forceAnim && !reduceMotion) ? 0 : pct;
+    return `<div class="c3-mix-sig">
+      <div class="c3-mix-sig-top">
+        <span class="c3-mix-sig-name">${r.label}</span>
+        <span class="c3-mix-sig-w">${wTxt}</span>
+        <span class="c3-mix-sig-val">${pct}%</span>
+      </div>
+      <div class="c3-mix-sig-track">
+        <div class="c3-mix-sig-fill" data-pct="${pct}" style="width:${startPct}%"></div>
+      </div>
+    </div>`;
+  }).join(''));
+  if (forceAnim && !reduceMotion) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.querySelectorAll('#c3-mix-signal-rows .c3-mix-sig-fill[data-pct]')
+        .forEach(el => { el.style.width = el.dataset.pct + '%'; });
+    }));
+  }
+
+  setHTML('c3-mix-foot', total
+    ? `Based on ${total} host${total === 1 ? '' : 's'}. A host is marked BEACON when its risk score reaches ${Math.round(c3BeaconThreshold() * 100)}%.`
+    : '<span class="c3-mix-empty">No hosts yet. This fills in as the browser makes requests.</span>');
+
+  // The counts and bars above are plain DOM and render even when the Chart.js
+  // CDN is unreachable (this app can run offline); only the ring needs it.
+  if (typeof Chart === 'undefined') return;
+
+  const empty = total === 0;
+  const labels = empty ? ['No hosts yet'] : _C3_MIX_BANDS.map(b => b.label);
+  const data = empty ? [1] : counts;
+  const colors = empty ? ['rgba(255,255,255,.06)'] : _C3_MIX_BANDS.map(b => b.hex);
+
+  if (_c3VerdictChart && forceAnim && !reduceMotion) {
+    // A plain .update() only animates properties that actually changed, so a
+    // replay triggered by nothing more than re-opening this tab would move
+    // nothing - Chart.js has no "play the entrance animation again" call, so
+    // the instance is torn down and rebuilt below instead, which does.
+    _c3VerdictChart.destroy();
+    _c3VerdictChart = null;
+  } else if (_c3VerdictChart) {
+    const ds = _c3VerdictChart.data.datasets[0];
+    _c3VerdictChart.data.labels = labels;
+    ds.data = data;
+    ds.backgroundColor = colors;
+    ds.hoverOffset = empty ? 0 : 6;
+    _c3VerdictChart.options.plugins.tooltip.enabled = !empty;
+    _c3VerdictChart.update();
+    return;
+  }
+
+  _c3VerdictChart = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: colors,
+        // Matches the panel's glass fill, so the arcs read as separated slices
+        // rather than one continuous ring.
+        borderColor: 'rgba(10,18,32,.95)',
+        borderWidth: 2,
+        hoverOffset: empty ? 0 : 6,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '72%',
+      animation: reduceMotion ? false : { duration: 620, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: false },   // the HTML legend beside it carries the numbers
+        tooltip: {
+          enabled: !empty,
+          backgroundColor: 'rgba(10,18,32,.96)',
+          borderColor: 'rgba(126,166,224,.22)',
+          borderWidth: 1,
+          titleColor: '#e8f0fe',
+          bodyColor: '#b0c4de',
+          padding: 9,
+          boxPadding: 3,
+          callbacks: {
+            label: (ctx) => ` ${ctx.parsed} host${ctx.parsed === 1 ? '' : 's'}`,
+          },
+        },
+      },
+    },
+  });
+}
+
+// One pass of light down the pipeline connectors, triggered only when the
+// interceptor's own captured-request counter actually moves. requests_captured
+// arrives on every /c3/status tick regardless of which tab is open, which is
+// what makes this correct while the user is looking at the Detection Lab (the
+// Live Monitor's row list is not re-rendered on that tab at all).
+let _c3LastFlowCount = null;
+let _c3PipeFlowTimer = null;
+
+function c3MaybePulsePipeline() {
+  const n = Number((c3Status || {}).requests_captured || 0);
+  if (_c3LastFlowCount === null) { _c3LastFlowCount = n; return; }  // no pulse on first paint
+  if (n === _c3LastFlowCount) return;
+  const grew = n > _c3LastFlowCount;
+  _c3LastFlowCount = n;                       // a smaller value means the session restarted
+  if (grew) c3PulsePipeline();
+}
+
+function c3PulsePipeline() {
+  const el = document.getElementById('c3-pipeline');
+  if (!el || !el.children.length) return;
+  el.classList.remove('flowing');
+  void el.offsetWidth;                        // forces a restart on a rapid re-trigger
+  el.classList.add('flowing');
+  clearTimeout(_c3PipeFlowTimer);
+  _c3PipeFlowTimer = setTimeout(() => el.classList.remove('flowing'), 1400);
 }
 
 // Live pipeline diagram — every status badge below reflects a real field from
 // /c3/status, not a fixed claim. See core/c3/analyzer.py status()/interceptor.py
 // status() for the source of each value. Kept to icon + name + status only.
-function c3PipeStage(icon, name, status) {
+function c3PipeStage(icon, name, status, i) {
   const label = status === 'up' ? 'Active' : status === 'down' ? 'Offline' : 'Idle';
-  return `<div class="c3-pipe-stage ${status === 'up' ? 'on' : ''}">
+  return `<div class="c3-pipe-stage ${status === 'up' ? 'on' : ''}" style="--i:${i}">
     <div class="c3-pipe-icon">${icon}</div>
     <div class="c3-pipe-name">${esc(name)}</div>
     <span class="c3-pipe-status ${status}">${label}</span>
@@ -4100,15 +5100,24 @@ function renderC3Pipeline() {
   _c3LastPipelineSig = sig;
   const running = !!s.running;
   const stages = [
-    c3PipeStage(_C3_PIPE_ICONS.interceptor, 'Interceptor', running ? 'up' : 'down'),
-    c3PipeStage(_C3_PIPE_ICONS.context, 'Context Tagger', running ? 'up' : 'down'),
-    c3PipeStage(_C3_PIPE_ICONS.feature, 'Feature Engine', (s.hosts_monitored || 0) > 0 ? 'up' : 'neutral'),
-    c3PipeStage(_C3_PIPE_ICONS.model, 'XGBoost Classifier', s.ml_model_loaded ? 'up' : 'down'),
-    c3PipeStage(_C3_PIPE_ICONS.rules, 'Heuristic Rules', 'up'),
-    c3PipeStage(_C3_PIPE_ICONS.fusion, 'Risk Fusion', 'up'),
-    c3PipeStage(_C3_PIPE_ICONS.alerts, 'Alerts', 'up'),
+    [_C3_PIPE_ICONS.interceptor, 'Request Capture',  running ? 'up' : 'down'],
+    [_C3_PIPE_ICONS.context,     'Browser Context',  running ? 'up' : 'down'],
+    [_C3_PIPE_ICONS.feature,     'Features',         (s.hosts_monitored || 0) > 0 ? 'up' : 'neutral'],
+    [_C3_PIPE_ICONS.model,       'ML Model',         s.ml_model_loaded ? 'up' : 'down'],
+    [_C3_PIPE_ICONS.rules,       'Heuristic Rules',  'up'],
+    [_C3_PIPE_ICONS.fusion,      'Risk Score',       'up'],
+    [_C3_PIPE_ICONS.alerts,      'Alerts',           'up'],
   ];
-  el.innerHTML = stages.join('<div class="c3-pipe-arrow">&#8594;</div>');
+  // Each stage and connector carries its own index, so the flow pulse
+  // (c3PulsePipeline) travels left to right in the order data actually moves
+  // instead of every element flashing at once. A connector sits half a step
+  // behind the stage it leaves.
+  el.innerHTML = stages.map(([icon, name, st], i) => {
+    const arrow = i < stages.length - 1
+      ? `<div class="c3-pipe-arrow" style="--i:${i + 0.5}" aria-hidden="true">&#8594;</div>`
+      : '';
+    return c3PipeStage(icon, name, st, i) + arrow;
+  }).join('');
 }
 
 function renderLabBlockedHosts() {
@@ -4120,7 +5129,16 @@ function renderLabBlockedHosts() {
   if (toggle && document.activeElement !== toggle) toggle.checked = autoBlockOn;
   const sub = document.getElementById('lab-blocked-sub');
   if (sub) {
-    sub.textContent = autoBlockOn ? 'Auto-block on · 24h' : 'Auto-block off';
+    sub.textContent = autoBlockOn ? 'Auto-block is on. Blocks last 24 hours.' : 'Auto-block is off';
+  }
+  // Tooltip carries the real floor from /c3/status (AUTO_BLOCK_SCORE_FLOOR in
+  // analyzer.py) rather than a copy that can drift.
+  const tog = document.getElementById('lab-autoblock-tog');
+  const floor = Number(c3Status.auto_block_score_floor);
+  if (tog) {
+    tog.title = Number.isFinite(floor)
+      ? `Automatically block hosts confirmed as BEACON with a risk score of ${Math.round(floor * 100)}% or more, for 24 hours`
+      : 'Automatically block hosts confirmed as BEACON, for 24 hours';
   }
 
   if (!list) return;
@@ -4131,7 +5149,7 @@ function renderLabBlockedHosts() {
   const blocked = c3Status.blocked_hosts || [];
   if (badge) badge.textContent = blocked.length;
   if (blocked.length === 0) {
-    list.innerHTML = '<div class="lab-blocked-empty">No hosts blocked &mdash; system is monitoring</div>';
+    list.innerHTML = '<div class="lab-blocked-empty"><span class="c3-radar-dot" aria-hidden="true"></span>No hosts are currently blocked.</div>';
     return;
   }
   list.innerHTML = blocked.map(rec => {
@@ -4140,18 +5158,20 @@ function renderLabBlockedHosts() {
     const remaining = expiresAt ? c3FormatTimeRemaining(expiresAt) : null;
     return `
     <div class="lab-blocked-row">
-      <span class="lab-blocked-host" title="${esc(host)}${rec.reason ? ' — ' + esc(rec.reason) : ''}">${esc(host)}</span>
-      ${remaining ? `<span class="lab-blocked-expiry" title="Automatically unblocks 24h after it was blocked">${esc(remaining)} left</span>` : ''}
+      <span class="lab-blocked-host" title="${esc(host)}${rec.reason ? ' - ' + esc(rec.reason) : ''}">${esc(host)}</span>
+      ${remaining ? `<span class="lab-blocked-expiry" title="Unblocks automatically 24 hours after it was blocked">${esc(remaining)} left</span>` : ''}
       <button class="lab-btn-unblock" onclick="unblockHost('${esc(host)}')">Unblock</button>
     </div>`;
   }).join('');
 }
 
+// The same set both export buttons download (_c3RecentAlerts), so the number
+// always matches what the user gets.
 function renderLabLogCount() {
   const el = document.getElementById('lab-log-count');
   if (!el) return;
-  const total = c3Alerts.length;
-  el.innerHTML = `<span class="lab-export-num">${total}</span><span class="lab-export-lbl">alerts recorded this session</span>`;
+  const total = _c3RecentAlerts().length;
+  el.innerHTML = `<span class="lab-export-num">${total}</span><span class="lab-export-lbl">alert${total === 1 ? '' : 's'} in the last 24 hours</span>`;
 }
 
 async function toggleC3AutoBlock(enabled) {
@@ -4216,30 +5236,74 @@ function downloadC3Report() {
   showToast('HTML report downloaded (' + recent.length + ' alerts)');
 }
 
-// One sentence, generated from the real numbers being reported — never a
-// canned line. Read this alongside the stat tiles, not instead of them.
-function _c3ExecutiveSummaryHTML(total, beaconAlerts, blockedCount, hostsSeen) {
-  if (!beaconAlerts.length) {
-    return `<div class="rpt-exec">WebSentinel's C3 engine reviewed <b>${total}</b> detection event${total === 1 ? '' : 's'}
-      across <b>${hostsSeen}</b> host${hostsSeen === 1 ? '' : 's'} in the last 24 hours and confirmed
-      <b>no beacon activity</b>.</div>`;
+// The finding, stated in the first line, built from the real numbers being
+// reported — never a canned sentence. Every figure here also appears in the
+// tiles below, so the two can be checked against each other.
+function _c3ExecutiveSummaryHTML(total, beaconAlerts, blockedHosts, hostsSeen) {
+  const beaconPct = Math.round(c3BeaconThreshold() * 100);
+  if (!total) {
+    return `<div class="rpt-exec"><b>No detection events were recorded in the last 24 hours.</b>
+      Nothing observed in the monitored session scored above the reporting threshold.</div>`;
   }
-  const uniqueBeaconHosts = new Set(beaconAlerts.map(a => a.host)).size;
-  return `<div class="rpt-exec">In the last 24 hours, WebSentinel's C3 engine confirmed
-    <b>${beaconAlerts.length}</b> beacon detection${beaconAlerts.length === 1 ? '' : 's'}
-    across <b>${uniqueBeaconHosts}</b> host${uniqueBeaconHosts === 1 ? '' : 's'}
-    (out of ${total} total detection event${total === 1 ? '' : 's'} reviewed).
-    <b>${blockedCount}</b> host${blockedCount === 1 ? ' was' : 's were'} automatically blocked.</div>`;
+  if (!beaconAlerts.length) {
+    return `<div class="rpt-exec"><b>No C2 beacon activity was confirmed in the last 24 hours.</b>
+      ${total} detection event${total === 1 ? '' : 's'} across
+      ${hostsSeen} host${hostsSeen === 1 ? '' : 's'} ${total === 1 ? 'was' : 'were'} scored, and
+      none reached the ${beaconPct}% threshold at which a host is reported as a beacon.</div>`;
+  }
+  const hosts = new Set(beaconAlerts.map(a => a.host)).size;
+  const n = beaconAlerts.length;
+  const blockedTxt = blockedHosts
+    ? `${blockedHosts} of them ${blockedHosts === 1 ? 'is' : 'are'} currently blocked.`
+    : 'None are currently blocked - auto-blocking was off, or the block has since expired.';
+  const extra = total > n
+    ? ` A further ${total - n} event${total - n === 1 ? '' : 's'} scored below the beacon threshold; ${total - n === 1 ? 'it is' : 'they are'} counted in the totals but not detailed below.`
+    : '';
+  return `<div class="rpt-exec"><b>${hosts} host${hosts === 1 ? '' : 's'} showed confirmed C2 beacon
+    behaviour in the last 24 hours.</b> ${blockedTxt} Each detection below records the timing and
+    payload evidence behind the verdict, and what each scoring engine contributed.${extra}</div>`;
+}
+
+// Scope and method, stated up front. A reader who did not run the scan needs
+// to know what was looked at and how it was scored before the numbers mean
+// anything — and every value here is read from the engine's own /c3/status,
+// so the report cannot describe a configuration the system isn't running.
+function _c3ScopeHTML() {
+  const w = c3FusionWeights({ ml: 1 });
+  const st = (typeof c3Status === 'object' && c3Status) ? c3Status : {};
+  const featCount = Object.keys(st.ml_feature_importance || {}).length;
+  const model = st.ml_model_loaded
+    ? `XGBoost classifier${featCount ? `, ${featCount} features` : ''}`
+    : 'No classifier loaded - heuristic rules only';
+  const floor = Number(st.auto_block_score_floor);
+  return `<div class="rpt-scope">
+    <div class="rpt-scope-item"><span class="rpt-scope-k">Scope</span>
+      Outbound requests made by the monitored browser session, last 24 hours.</div>
+    <div class="rpt-scope-item"><span class="rpt-scope-k">Scoring</span>
+      ${Math.round(w.ml * 100)}% classifier + ${Math.round(w.heuristic * 100)}% heuristic rules;
+      reported as a beacon at ${Math.round(c3BeaconThreshold() * 100)}% fused
+      risk${Number.isFinite(floor) ? `, auto-blocked at ${Math.round(floor * 100)}%` : ''}.</div>
+    <div class="rpt-scope-item"><span class="rpt-scope-k">Model</span> ${esc(model)}.</div>
+  </div>`;
 }
 
 // Real, trained feature_importances_ from the live XGBoost model (see
-// core/c3/anomaly_engine.py's feature_importance()) -- ranked, not asserted.
+// core/c3/ml_classifier.py's feature_importance()) -- ranked, not asserted.
 function _c3FeatureImportanceChartHTML(importance) {
   const entries = Object.entries(importance || {})
     .filter(([k]) => _C3_FEATURE_META[k])
     .sort((a, b) => b[1] - a[1]);
   if (!entries.length) {
-    return '<div class="rpt-empty-inline">No ML model was loaded — feature importance unavailable.</div>';
+    // Two different situations, and saying the wrong one contradicts the Model
+    // line in the scope block above: no model at all, versus a model that is
+    // scoring but reported no importances.
+    const st = (typeof c3Status === 'object' && c3Status) ? c3Status : {};
+    const loaded = !!st.ml_model_loaded;
+    return loaded
+      ? '<div class="rpt-empty-inline">The deployed classifier did not report feature weights, '
+        + 'so this chart is unavailable. Detection scores are unaffected.</div>'
+      : '<div class="rpt-empty-inline">No classifier is loaded, so feature weights cannot be shown. '
+        + 'The scores in this report came from the heuristic rules alone.</div>';
   }
   const maxW = entries[0][1] || 1;
   const rows = entries.map(([k, v]) => {
@@ -4260,7 +5324,7 @@ function _c3FeatureImportanceChartHTML(importance) {
 // real timestamp. Cyan dots mark hosts that are currently blocked.
 function _c3TimelineHTML(beaconAlerts) {
   if (!beaconAlerts.length) {
-    return '<div class="rpt-empty-inline">No beacon detections to plot in this window.</div>';
+    return '<div class="rpt-empty-inline">Nothing to plot - no beacon was confirmed in this window.</div>';
   }
   const now = Date.now();
   const windowMs = 86400000;
@@ -4275,7 +5339,7 @@ function _c3TimelineHTML(beaconAlerts) {
     const clamped = Math.max(start, Math.min(now, t));
     const x = ((clamped - start) / windowMs) * 100;
     const blocked = !!c3HostResult(a.host).blocked;
-    return `<div class="rpt-tl-dot${blocked ? ' blocked' : ''}" style="left:${x.toFixed(2)}%" title="${esc(a.host || '')} — ${esc(fmtDateTime(a.timestamp))}"></div>`;
+    return `<div class="rpt-tl-dot${blocked ? ' blocked' : ''}" style="left:${x.toFixed(2)}%" title="${esc(a.host || '')} - ${esc(fmtDateTime(a.timestamp))}"></div>`;
   }).join('');
   return `
     <div class="rpt-timeline">
@@ -4289,13 +5353,14 @@ function _c3TimelineHTML(beaconAlerts) {
 }
 
 // Parses analyzer.py's own signal_detail.heuristic string (e.g. "Heuristic:
-// regular timing, same endpoint, high POST ratio") into individual chips --
-// this is the analyzer's real, per-alert rule-firing result, not re-derived
-// client-side, so it can never drift from what actually triggered BEACON.
+// clockwork timing (near-identical gaps), same endpoint every time") into
+// individual chips -- this is the analyzer's real, per-alert rule-firing
+// result, not re-derived client-side, so it can never drift from what actually
+// triggered BEACON. "no indicators" is the wording older saved alerts carry.
 function _c3RuleChipsHTML(signalDetail) {
   const raw = String((signalDetail || {}).heuristic || '').replace(/^Heuristic:\s*/i, '').trim();
-  if (!raw || /^no indicators$/i.test(raw)) {
-    return '<div class="rpt-no-rules">No heuristic rules were flagged for this detection.</div>';
+  if (!raw || /^no indicators$/i.test(raw) || /^no beacon rhythm/i.test(raw)) {
+    return '<div class="rpt-no-rules">No beacon rhythm in the timing, so no heuristic rule counted - the score above comes from the ML model.</div>';
   }
   const rules = raw.split(/,\s*/).filter(Boolean);
   return `<div class="rpt-rule-chips">${rules.map(r => `<span class="rpt-rule-chip">${esc(r)}</span>`).join('')}</div>`;
@@ -4324,7 +5389,7 @@ function _c3TopFeaturesHTML(feats, importance) {
           <span class="rpt-topfeat-name">${esc(meta.name)}</span>
           <span class="rpt-topfeat-weight">model weight ${Math.round(e.weight * 100)}%</span>
         </div>
-        <div class="rpt-topfeat-val">${esc(display)}${hint ? ' — ' + esc(hint) : ''}</div>
+        <div class="rpt-topfeat-val">${esc(display)}${hint ? ' - ' + esc(hint) : ''}</div>
       </div>`;
   }).join('');
   return `
@@ -4336,15 +5401,25 @@ function _c3TopFeaturesHTML(feats, importance) {
 
 function _c3BuildReportHTML(alerts) {
   const genAt = new Date();
+  // A stable reference a reader can quote back. Derived from the generation
+  // time, so re-exporting the same window twice gives two distinct refs and
+  // the report can be cited unambiguously in a review.
+  const _p2 = n => String(n).padStart(2, '0');
+  const reportRef = `C3-${genAt.getFullYear()}${_p2(genAt.getMonth() + 1)}${_p2(genAt.getDate())}`
+                  + `-${_p2(genAt.getHours())}${_p2(genAt.getMinutes())}`;
   const counts = { BEACON: 0, SUSPICIOUS: 0, SAFE: 0 };
   const hostsSeen = new Set();
-  let blockedCount = 0;
+  // Counted as unique HOSTS, not as alerts. Two alerts for one blocked host is
+  // one blocked host, and this tile sits beside "Unique Hosts" — counting
+  // alerts here reported a number that could exceed the host count above it.
+  const blockedHostSet = new Set();
   alerts.forEach(a => {
     const v = String(a.verdict || '').toUpperCase();
     if (counts[v] != null) counts[v]++;
     if (a.host) hostsSeen.add(a.host);
-    if (c3HostResult(a.host).blocked) blockedCount++;
+    if (a.host && c3HostResult(a.host).blocked) blockedHostSet.add(a.host);
   });
+  const blockedCount = blockedHostSet.size;
   const total = alerts.length;
   // The card list below is rendered in whatever order `alerts` arrives in
   // (newest-first, matching the live Alerts tab and the JSON export) -- but
@@ -4352,9 +5427,13 @@ function _c3BuildReportHTML(alerts) {
   // rather than assumed from array position, so it stays correct even if
   // that ordering assumption is ever violated upstream.
   const stamps = alerts.map(a => new Date(a.timestamp || a.ts || '').getTime()).filter(Number.isFinite);
-  const rangeText = stamps.length
-    ? `${esc(fmtDateTime(new Date(Math.min(...stamps)).toISOString()))} &ndash; ${esc(fmtDateTime(new Date(Math.max(...stamps)).toISOString()))}`
-    : 'No detections in range';
+  // When every detection lands in the same minute the old "A - A" range read
+  // as a broken field, and an empty window printed nothing useful at all.
+  const _lo = stamps.length ? esc(fmtDateTime(new Date(Math.min(...stamps)).toISOString())) : '';
+  const _hi = stamps.length ? esc(fmtDateTime(new Date(Math.max(...stamps)).toISOString())) : '';
+  const rangeText = !stamps.length
+    ? `24-hour window ending ${esc(fmtDateTime(genAt.toISOString()))}`
+    : _lo === _hi ? `Detection at ${_lo}` : `Detections ${_lo} &ndash; ${_hi}`;
 
   const pct = n => total ? Math.round((n / total) * 100) : 0;
   const distributionHtml = total ? `
@@ -4380,7 +5459,8 @@ function _c3BuildReportHTML(alerts) {
     ? beaconAlerts.map((a, i) => _c3ReportAlertCard(a, importance, i)).join('')
     : `<div class="rpt-empty rpt-reveal" style="animation-delay:.3s">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
-        <p>No confirmed beacon detections in this period.</p>
+        <p>No confirmed beacons in this period.</p>
+        <p class="rpt-empty-sub">Hosts that scored below the beacon threshold are counted in the summary above; the JSON export beside this report lists every event in full.</p>
       </div>`;
 
   return `<!DOCTYPE html>
@@ -4388,13 +5468,23 @@ function _c3BuildReportHTML(alerts) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>C3 Detection Report — ${esc(genAt.toLocaleDateString())}</title>
+<title>C3 Detection Report - ${esc(genAt.toLocaleDateString())}</title>
 <style>
 :root{
   --bg0:#080d18;--bg1:#0d1525;--bg2:#111d30;--bg3:#16243a;
   --b1:#1c2e47;--b2:#253a56;--b3:#2d4668;
-  --t0:#e8f0fe;--t1:#b0c4de;--t2:#6e8aab;--t3:#3a5070;
+  /* Text ramp. --t2 and --t3 were #6e8aab / #3a5070, which rendered at 2.20:1
+     and 2.23:1 against this report's panels - every stat label, axis mark,
+     timestamp and caption in the document was below the WCAG AA 4.5:1 floor.
+     Measured replacements: --t3 6.31:1, --t2 8.06:1 on the lightest panel
+     (#111d30), with the t3 < t2 < t1 hierarchy intact. Same two values the
+     live C3 panel now uses, so the report and the dashboard read alike. */
+  --t0:#e8f0fe;--t1:#b0c4de;--t2:#93a9c6;--t3:#7e94b9;
   --danger:#ef4444;--warn:#f59e0b;--safe:#10b981;
+  /* Small red text on a red-tinted chip only reaches 4.37:1 at --danger.
+     This lighter red clears the floor at 6.5:1 and reads as the same colour.
+     --danger still drives every bar, ring and border. */
+  --danger-text:#ff6b6b;
   --danger-bg:rgba(239,68,68,.12);--warn-bg:rgba(245,158,11,.12);--safe-bg:rgba(16,185,129,.12);
   --cyan:#22d3ee;--purple:#a78bfa;
   --radius:10px;--radius-lg:14px;
@@ -4431,7 +5521,7 @@ body{
   background:var(--safe);animation:rptRadarPing 2s ease-out infinite}
 @keyframes rptRadarPing{0%{transform:scale(.6);opacity:.85}70%,100%{transform:scale(2.4);opacity:0}}
 @media (prefers-reduced-motion:reduce){.rpt-radar-dot::after{animation:none;display:none}}
-.rpt-eyebrow-tag{font-family:var(--font-mono);font-size:9.5px;font-weight:700;color:var(--cyan);
+.rpt-eyebrow-tag{font-family:var(--font-mono);font-size:10.5px;font-weight:700;color:var(--cyan);
   text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}
 .rpt-title{font-family:var(--font-mono);font-size:19px;font-weight:800;letter-spacing:.1px;color:var(--t0)}
 .rpt-subtitle{font-size:11.5px;color:var(--t2);margin-top:2px}
@@ -4449,7 +5539,7 @@ body{
 @media (prefers-reduced-motion:reduce){.rpt-scanline::after{animation:none;left:0;width:100%;opacity:.4}}
 
 /* ── Eyebrow label above the stat tiles ─────────────────────── */
-.rpt-eyebrow{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--t3);
+.rpt-eyebrow{font-family:var(--font-mono);font-size:10.5px;font-weight:700;color:var(--t3);
   text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
 
 /* ── Summary stat tiles ─────────────────────────────────── */
@@ -4460,7 +5550,7 @@ body{
 .rpt-stat::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--b2)}
 .rpt-stat:hover{transform:translateY(-2px);border-color:var(--b2)}
 .rpt-stat-num{font-family:var(--font-mono);font-size:22px;font-weight:700;line-height:1;color:var(--t0)}
-.rpt-stat-lbl{font-size:9.5px;color:var(--t3);margin-top:6px;text-transform:uppercase;letter-spacing:.4px}
+.rpt-stat-lbl{font-size:10.5px;color:var(--t3);margin-top:6px;text-transform:uppercase;letter-spacing:.4px}
 .rpt-stat.beacon::before{background:var(--danger)}
 .rpt-stat.beacon .rpt-stat-num{color:var(--danger)}
 .rpt-stat.suspicious::before{background:var(--warn)}
@@ -4482,7 +5572,7 @@ body{
 .rpt-section-lbl{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--t1);
   text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:baseline;gap:8px}
 .rpt-section-lbl::after{content:'';flex:1;height:1px;background:var(--b1);align-self:center}
-.rpt-section-sub{font-weight:500;text-transform:none;letter-spacing:0;color:var(--t3);font-size:10px}
+.rpt-section-sub{font-weight:500;text-transform:none;letter-spacing:0;color:var(--t3);font-size:10.5px}
 
 /* ── Alert cards ────────────────────────────────────────── */
 .rpt-card{background:var(--bg1);border:1px solid var(--b1);border-left:3px solid var(--t3);
@@ -4497,7 +5587,7 @@ body{
 .rpt-card.safe:hover{border-color:rgba(16,185,129,.35)}
 .rpt-card-hdr{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .rpt-pill{font-size:10px;font-weight:800;letter-spacing:.4px;padding:3px 9px;border-radius:99px;text-transform:uppercase}
-.rpt-pill.beacon{background:var(--danger-bg);color:var(--danger)}
+.rpt-pill.beacon{background:var(--danger-bg);color:var(--danger-text)}
 .rpt-pill.suspicious{background:var(--warn-bg);color:var(--warn)}
 .rpt-pill.safe{background:var(--safe-bg);color:var(--safe)}
 .rpt-host{font-weight:700;font-size:13.5px;color:var(--t0)}
@@ -4505,7 +5595,7 @@ body{
   padding:2px 8px;border-radius:99px}
 .rpt-score{margin-left:auto;font-size:17px;font-weight:900}
 .rpt-card-sub{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap}
-.rpt-time{font-size:10.5px;color:var(--t3)}
+.rpt-time{font-size:11px;color:var(--t3)}
 .rpt-mitre{font-size:9px;font-weight:700;color:var(--t2);border:1px solid var(--b2);border-radius:5px;
   padding:1px 6px;cursor:default}
 .rpt-reason{font-size:12px;color:var(--t1);margin-top:10px;line-height:1.5}
@@ -4540,6 +5630,21 @@ body{
   color:var(--t1);line-height:1.6}
 .rpt-exec b{color:var(--t0)}
 
+/* Scope and method, directly under the finding. Three short labelled lines
+   rather than a paragraph: a reviewer checking "what was measured, and how"
+   should find it without reading prose. */
+.rpt-scope{display:grid;gap:7px;margin:-12px 0 24px;padding:13px 18px;
+  background:rgba(34,211,238,.035);border:1px solid rgba(34,211,238,.16);
+  border-radius:var(--radius)}
+.rpt-scope-item{font-size:11.5px;color:var(--t2);line-height:1.55}
+.rpt-scope-k{display:inline-block;min-width:58px;margin-right:6px;
+  font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--cyan);
+  text-transform:uppercase;letter-spacing:.08em}
+.rpt-ref{margin-top:3px;font-family:var(--font-mono);font-size:10px;color:var(--t3);
+  letter-spacing:.06em}
+.rpt-empty-sub{font-size:11.5px;color:var(--t2);margin-top:8px;
+  max-width:440px;margin-left:auto;margin-right:auto;line-height:1.55}
+
 /* ── Panel wrapper shared by the timeline / importance sections ────────── */
 .rpt-panel{background:var(--bg1);border:1px solid var(--b1);border-radius:var(--radius-lg);
   padding:18px 20px;margin-bottom:24px}
@@ -4567,7 +5672,7 @@ body{
 .rpt-topfeat-row{margin-top:8px}
 .rpt-topfeat-top{display:flex;justify-content:space-between;align-items:baseline}
 .rpt-topfeat-name{font-size:11.5px;font-weight:700;color:var(--t0)}
-.rpt-topfeat-weight{font-size:9px;color:var(--cyan);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.rpt-topfeat-weight{font-size:10px;color:var(--cyan);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .rpt-topfeat-val{font-size:10.5px;color:var(--t2);margin-top:2px;line-height:1.4}
 
 /* ── Global feature-importance chart ─────────────────────────────────── */
@@ -4586,16 +5691,16 @@ body{
   background:var(--danger);border:2px solid var(--bg1);box-shadow:0 0 0 1px var(--danger)}
 .rpt-tl-dot.blocked{background:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
 .rpt-tl-axis{position:relative;height:16px;margin-top:4px}
-.rpt-tl-mark{position:absolute;top:0;transform:translateX(-50%);font-size:8.5px;color:var(--t3);
+.rpt-tl-mark{position:absolute;top:0;transform:translateX(-50%);font-size:9.5px;color:var(--t3);
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.rpt-tl-legend{display:flex;gap:16px;margin-top:12px;font-size:9.5px;color:var(--t3)}
+.rpt-tl-legend{display:flex;gap:16px;margin-top:12px;font-size:10.5px;color:var(--t3)}
 .rpt-tl-legend span{display:inline-flex;align-items:center;gap:5px}
 .rpt-tl-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
 
 .rpt-footer{margin-top:36px;padding-top:20px;border-top:1px solid var(--b1);text-align:center}
 .rpt-footer-method{font-size:11px;color:var(--t2);line-height:1.6;max-width:520px;margin:0 auto}
 .rpt-footer-method b{color:var(--t1)}
-.rpt-footer-sig{font-family:var(--font-mono);font-size:9.5px;color:var(--t3);
+.rpt-footer-sig{font-family:var(--font-mono);font-size:10.5px;color:var(--t3);
   text-transform:uppercase;letter-spacing:1px;margin-top:14px}
 
 @media (max-width:640px){
@@ -4607,6 +5712,26 @@ body{
 }
 
 @media print{
+  /* The page turns white here, so the whole text ramp has to invert with it.
+     Without this the screen ramp (light text, tuned for a #080d18 ground)
+     prints at 1.9:1 - 2.3:1 on paper. Measured on white: t3 6.50:1,
+     t2 9.02:1, t1 14.7:1, and the red chips 6.47:1. */
+  :root{
+    --t0:#0b1220;--t1:#1e2a3d;--t2:#364a66;--t3:#4a5f7e;
+    --danger-text:#b91c1c;
+    /* The cyan accent carries real text on paper too (the eyebrow, the scope
+       keys, the per-feature model weights) and #22d3ee is 1.6:1 on white.
+       This darker cyan reads as the same accent at 5.36:1. */
+    --cyan:#0e7490;
+    /* The verdict colours are printed as text as well as painted as bars —
+       scores, signal percentages, donut legend values. On white the screen
+       hues measure 3.76:1 (danger), 2.15:1 (warn) and 2.54:1 (safe). These
+       print at 6.47:1, 7.09:1 and 5.48:1 and stay recognisably red / amber /
+       green. Both sets are also distinguishable in greyscale. */
+    --danger:#b91c1c;--warn:#92400e;--safe:#047857;
+  }
+  /* White on the darkened cyan chip, not the dark ink the screen version uses. */
+  .rpt-blocked{color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   body{background:#fff;color:#111;padding:0}
   .rpt-wrap{max-width:100%}
   .rpt-reveal{animation:none}
@@ -4631,19 +5756,22 @@ body{
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v6l-2 4a4 4 0 0 0 3.46 6h5.08a4 4 0 0 0 3.46-6l-2-4V2"/><line x1="6" y1="2" x2="18" y2="2"/></svg>
       </div>
       <div>
-        <div class="rpt-eyebrow-tag">Automated Detection Report</div>
-        <div class="rpt-title">C3 Beacon Detection</div>
-        <div class="rpt-subtitle">WebSentinel &middot; Browser-Execution-Aware C2 Detector</div>
+        <div class="rpt-eyebrow-tag">Detection Report</div>
+        <div class="rpt-title">C2 Beacon Activity</div>
+        <div class="rpt-subtitle">WebSentinel C3 &middot; browser-execution-aware beacon detection</div>
       </div>
     </div>
     <div class="rpt-meta">
       <div>Generated <b>${esc(fmtDateTime(genAt.toISOString()))}</b></div>
       <div class="rpt-range">${rangeText}</div>
+      <div class="rpt-ref">Ref ${esc(reportRef)}</div>
     </div>
   </header>
   <div class="rpt-scanline rpt-reveal" style="animation-delay:.05s"></div>
 
   <div class="rpt-reveal" style="animation-delay:.1s">${execHtml}</div>
+
+  <div class="rpt-reveal" style="animation-delay:.12s">${_c3ScopeHTML()}</div>
 
   <div class="rpt-reveal" style="animation-delay:.15s">
     <div class="rpt-eyebrow">24-Hour Activity Summary</div>
@@ -4659,14 +5787,14 @@ body{
   </div>
 
   <div class="rpt-reveal" style="animation-delay:.2s">
-    <div class="rpt-section-lbl">Detection Timeline <span class="rpt-section-sub">Last 24 hours</span></div>
+    <div class="rpt-section-lbl">Detection Timeline <span class="rpt-section-sub">When each beacon was confirmed</span></div>
     <div class="rpt-panel">
       ${timelineHtml}
     </div>
   </div>
 
   <div class="rpt-reveal" style="animation-delay:.25s">
-    <div class="rpt-section-lbl">Feature Importance <span class="rpt-section-sub">Trained XGBoost feature weights (live model)</span></div>
+    <div class="rpt-section-lbl">What the Model Weighs <span class="rpt-section-sub">Global feature weights from the deployed classifier &mdash; not a per-detection explanation</span></div>
     <div class="rpt-panel">
       ${importanceHtml}
     </div>
@@ -4676,8 +5804,12 @@ body{
   ${cardsHtml}
 
   <div class="rpt-footer">
-    <div class="rpt-footer-method"><b>Risk score:</b> ${Math.round(c3FusionWeights({ ml: 1 }).ml * 100)}% ML (XGBoost, isotonic-calibrated) + ${Math.round(c3FusionWeights({ ml: 1 }).heuristic * 100)}% Heuristic. Reputation is analyst evidence only and never affects scoring or verdict.</div>
-    <div class="rpt-footer-sig">WebSentinel C3 &middot; Automated Beacon Detection</div>
+    <div class="rpt-footer-method"><b>How the score is built.</b>
+      ${Math.round(c3FusionWeights({ ml: 1 }).ml * 100)}% classifier (XGBoost)
+      + ${Math.round(c3FusionWeights({ ml: 1 }).heuristic * 100)}% heuristic rules.
+      Threat-intelligence reputation is recorded as supporting evidence only: it never moves the
+      score and never decides the verdict.</div>
+    <div class="rpt-footer-sig">WebSentinel C3 &middot; Ref ${esc(reportRef)}</div>
   </div>
 
 </div>
@@ -4713,9 +5845,12 @@ function _c3ReportAlertCard(a, importance, index) {
     const pct = has ? Math.round(Number(raw) * 100) : 0;
     const color = has ? c3SignalColor(s.key, Number(raw)) : 'var(--t3)';
     const detailTxt = signalDetail[s.key] ? esc(String(signalDetail[s.key])) : '';
+    // ML / heuristic always read as a percentage; reputation keeps "n/a"
+    // when no lookup ran (a clean lookup is a real 0%).
+    const valTxt = has ? pct + '%' : (s.key === 'reputation' ? 'n/a' : '0%');
     return `
       <div>
-        <div class="rpt-sig-top"><span class="rpt-sig-lbl">${s.label}</span><span class="rpt-sig-val" style="color:${color}">${has ? pct + '%' : 'n/a'}</span></div>
+        <div class="rpt-sig-top"><span class="rpt-sig-lbl">${s.label}</span><span class="rpt-sig-val" style="color:${color}">${valTxt}</span></div>
         <div class="rpt-sig-track"><div class="rpt-sig-fill" style="width:${pct}%;background:${color}"></div></div>
         ${detailTxt ? `<div class="rpt-sig-detail">${detailTxt}</div>` : ''}
       </div>`;
@@ -4728,11 +5863,11 @@ function _c3ReportAlertCard(a, importance, index) {
     : '';
 
   const mitreHtml = [
-    '<span class="rpt-mitre" title="MITRE ATT&amp;CK T1071.001 — Application Layer Protocol: Web Protocols">T1071.001</span>',
+    '<span class="rpt-mitre" title="MITRE ATT&amp;CK T1071.001 - Application Layer Protocol: Web Protocols">T1071.001</span>',
     Number(feats.http_post_ratio || 0) > 0.5
-      ? '<span class="rpt-mitre" title="MITRE ATT&amp;CK T1041 — Exfiltration Over C2 Channel">T1041</span>' : '',
+      ? '<span class="rpt-mitre" title="MITRE ATT&amp;CK T1041 - Exfiltration Over C2 Channel">T1041</span>' : '',
     Number(feats.extension_origin_ratio || 0) > 0.5
-      ? '<span class="rpt-mitre" title="MITRE ATT&amp;CK T1176 — Browser Extensions">T1176</span>' : '',
+      ? '<span class="rpt-mitre" title="MITRE ATT&amp;CK T1176 - Browser Extensions">T1176</span>' : '',
   ].join('');
 
   const featKeys = Object.keys(_C3_FEATURE_META).filter(k => Object.prototype.hasOwnProperty.call(feats, k));
@@ -4804,7 +5939,7 @@ async function openC3BeaconTest() {
     connectPwWs();
     const tab = document.querySelector('.c3-tab[data-c3tab="monitor"]');
     if (tab) tab.click();
-    showToast('Real-world beacon test running in a new console window — it deploys an ngrok C2 mimic and drives this browser to it. BEACON confirms in ~3 min; watch Live Monitor and Alerts (and that window for setup progress / errors).');
+    showToast('Test started in a new window. A beacon should be confirmed in about 3 minutes. Watch Live Monitor and Alerts, and check that window if something fails to start.', 8000);
   } finally {
     setTimeout(restore, 6000);
   }
@@ -4827,22 +5962,17 @@ function c3RiskColor(score) {
   return cls === 'beacon' ? 'var(--danger)' : cls === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
 }
 
-function c3ModelLabel() {
-  return c3Status.ml_model_loaded ? 'XGBoost+Heuristic' : 'heuristic';
-}
-
-// Per-signal color thresholds that reflect what each signal *alone* means.
-// ML: XGBoost C2 classifier, isotonic-calibrated; only alarming above 0.70.
-// Heuristic: rule-based; flags above 0.5 are meaningful.
-// Reputation: external TI; anything above 0.3 warrants concern.
+// Per-signal colour bands - what each score means on its own.
+// ML: shown on the model's decision scale, where 0.50 is exactly the point the
+//   model calls a window C2 (the backend maps the uncalibrated output there).
+//   Amber from that point, red from 0.70.
+// Heuristic: rule-based; amber from 0.25, red from 0.50.
+// Reputation: external threat intel; amber from 0.30, red from 0.60.
 function c3SignalColor(key, value) {
   if (value == null) return 'var(--t3)';
   const v = Number(value);
   if (key === 'ml') {
-    // XGBoost: calibrated probability of C2 class; >= 0.70 = high confidence.
-    // Scale-free features -- scores beacons at any speed, not just the native
-    // cadence. See the meter tooltip.
-    return v >= 0.70 ? 'var(--danger)' : v >= 0.49 ? 'var(--warn)' : 'var(--safe)';
+    return v >= 0.70 ? 'var(--danger)' : v >= c3MlThreshold() ? 'var(--warn)' : 'var(--safe)';
   }
   if (key === 'heuristic') {
     return v >= 0.50 ? 'var(--danger)' : v >= 0.25 ? 'var(--warn)' : 'var(--safe)';
@@ -4851,6 +5981,35 @@ function c3SignalColor(key, value) {
     return v >= 0.60 ? 'var(--danger)' : v >= 0.30 ? 'var(--warn)' : 'var(--safe)';
   }
   return c3RiskColor(v);
+}
+
+// Where the model calls C2 on the displayed scale, from /c3/status (see
+// C3XGBoostEngine.decision_point - always 0.50). 0.50 is also the fallback
+// before the first status arrives.
+function c3MlThreshold() {
+  const st = (typeof c3Status === 'object' && c3Status) ? c3Status : {};
+  const v = Number(st.ml_threshold);
+  return Number.isFinite(v) && v > 0 && v < 0.70 ? v : 0.50;
+}
+
+// ML and heuristic scores always display as a percentage. A score that does
+// not exist yet (too few requests, or a host not scored yet) reads "0%" - in a
+// muted colour, with the reason in a tooltip - so it is never mistaken for a
+// measured value.
+function c3ScorePct(raw) {
+  const v = Number(raw);
+  return raw != null && Number.isFinite(v) ? Math.round(clamp01(v) * 100) : 0;
+}
+
+function c3ScoreKnown(raw) {
+  return raw != null && Number.isFinite(Number(raw));
+}
+
+function c3SignalCellHTML(key, raw, emptyTitle) {
+  const known = c3ScoreKnown(raw);
+  const color = known ? c3SignalColor(key, Number(raw)) : 'var(--t2)';
+  const title = known ? '' : ` title="${esc(emptyTitle)}"`;
+  return `<td style="font-size:10.5px;font-weight:600;color:${color}"${title}>${c3ScorePct(raw)}%</td>`;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -5030,7 +6189,7 @@ function c3DonutSVG(signals, scorePct) {
     <div class="c3-donut-legend-item">
       <span class="c3-viz-legend-sq" style="background:${it.color}"></span>
       <span>${esc(it.label)} <span style="color:var(--t3)">w=${it.weight.toFixed(2)}</span></span>
-      <span class="c3-donut-legend-val" style="color:${it.color}">${it.raw != null ? Math.round(it.raw * 100) + '%' : 'n/a'}</span>
+      <span class="c3-donut-legend-val" style="color:${it.color}">${c3ScorePct(it.raw)}%</span>
     </div>`).join('');
 
   return `<div class="c3-donut-box">
@@ -5044,17 +6203,17 @@ function c3DonutSVG(signals, scorePct) {
   </div>`;
 }
 
-// A focused 8-of-16-feature radar. All 16 stay visible in the detailed
-// bars right below it — this reuses the exact same c3FeatureRisk() scoring
-// used there, so the radar and the bars can never disagree with each other.
+// A focused 8-axis radar; every feature stays visible in the detailed bars
+// below it. It reuses c3FeatureRisk(), so the radar and the bars can never
+// disagree. referrer_absent_ratio is the deployed model's strongest feature.
 const _C3_RADAR_AXES = [
-  'iat_cv', 'iat_mad_ms', 'requests_per_hour', 'payload_size_mean',
+  'iat_cv', 'referrer_absent_ratio', 'requests_per_hour', 'payload_size_mean',
   'http_post_ratio', 'avg_idle_time_ms', 'background_tab_ratio', 'url_path_entropy',
 ];
 
 function c3RadarSVG(features) {
   const present = _C3_RADAR_AXES.filter(k => Object.prototype.hasOwnProperty.call(features || {}, k));
-  if (present.length < 3) return '';
+  if (present.length < 3) return '<div class="c3-viz-empty">Not enough requests to draw the evidence shape yet.</div>';
 
   const cx = 55, cy = 55, maxR = 42, n = present.length;
   const angle = i => (i / n) * 2 * Math.PI - Math.PI / 2;
@@ -5156,7 +6315,7 @@ function c3RecordScoreHistory(hosts) {
 function c3SparklineSVG(host) {
   const arr = _C3_SCORE_HISTORY[host] || [];
   if (arr.length < 2) {
-    return '<div class="c3-viz-empty">Watching for score changes — history builds as the analyzer re-scores this host (~every 10s).</div>';
+    return '<div class="c3-viz-empty">Watching for score changes - history builds as the analyzer re-scores this host (~every 10s).</div>';
   }
   const W = 560, H = 60, marginX = 8, marginY = 6;
   // Index-based spacing rather than true time-proportional spacing: polls arrive
@@ -5214,7 +6373,9 @@ function c3SignalBarsDetailed(signals, detail) {
     const value = known ? Number(item.raw) : null;
     const pct = known ? Math.round(value * 100) : 0;
     const color = known ? c3SignalColor(item.colorKey, value) : 'var(--b1)';
-    const label = known ? `${pct}%` : 'n/a';
+    // ML / heuristic read "0%" when absent; threat-intel rows keep "n/a"
+    // (no lookup has run), which is different from a clean 0% result.
+    const label = known ? `${pct}%` : (item.colorKey === 'reputation' ? 'n/a' : '0%');
     return `<div class="c3-sig">
       <div class="c3-sig-label">${item.label}</div>
       <div class="c3-sig-val" style="color:${known ? color : 'var(--t3)'}">${label}</div>
@@ -5241,14 +6402,14 @@ function c3FeatureBarsSection(features) {
 // here so there is exactly one name per feature, everywhere it's shown),
 // group label, value formatter, and plain-English interpretation.
 const _C3_FEATURE_META = {
-    // ── The 13 features added by the 18-feature model (2026-09-02) ──────────
-    // These were missing here until 2026-09-03. That was not cosmetic: the
-    // Feature Importance chart and the radar both do
-    // `.filter(k => _C3_FEATURE_META[k])`, so every unmapped feature was
-    // silently DROPPED from the report -- including referrer_absent_ratio,
-    // the model's single highest-weighted feature (31.8%). The chart was
-    // showing 5 of 18 features and implying that was the whole model.
-    // Directions below match MONOTONE_18 in scripts/train_c3_18feat.py.
+    // Every key in feature_engine.FEATURE_ORDER (32) must have an entry here.
+    // The report's importance chart, its top-feature list and the radar all
+    // filter through this table, so a missing key is silently DROPPED - which
+    // is how path_only_entropy (the deployed model's #2 feature) went missing
+    // from the report after the 2026-09-11 retrain. Groups must be listed in
+    // c3FeatureBars()'s groupOrder, or the popup skips the whole group.
+    // Risk directions in c3FeatureRisk() follow MONOTONE in
+    // scripts/train_c3_final_model.py.
     iat_norm_mad: {
       name: 'Timing deviation', shortName: 'IAT nMAD', group: 'Timing',
       fmt: v => v.toFixed(3),
@@ -5276,13 +6437,13 @@ const _C3_FEATURE_META = {
     iat_clock_share: {
       name: 'Clock alignment', shortName: 'Clock', group: 'Timing',
       fmt: v => (v * 100).toFixed(0) + '%',
-      hint: v => v > 0.8 ? 'Fires on round clock boundaries — timer-driven'
+      hint: v => v > 0.8 ? 'Fires on round clock boundaries - timer-driven'
         : v > 0.3 ? 'Partly clock-aligned' : 'Not clock-aligned'
     },
     iat_entropy_norm: {
       name: 'Interval entropy', shortName: 'IAT entropy', group: 'Timing',
       fmt: v => v.toFixed(3),
-      hint: v => v < 0.3 ? 'Few distinct interval values — scripted'
+      hint: v => v < 0.3 ? 'Few distinct interval values - scripted'
         : v < 0.7 ? 'Some interval variety' : 'Highly varied intervals'
     },
     payload_cv: {
@@ -5294,19 +6455,19 @@ const _C3_FEATURE_META = {
     payload_repeat_ratio: {
       name: 'Repeated payload size', shortName: 'Size repeat', group: 'Size',
       fmt: v => (v * 100).toFixed(0) + '%',
-      hint: v => v > 0.8 ? 'Same payload size repeating — check-in shaped'
+      hint: v => v > 0.8 ? 'Same payload size repeating - check-in shaped'
         : v > 0.4 ? 'Some repeated sizes' : 'Sizes rarely repeat'
     },
     upload_download_ratio: {
       name: 'Upload / download ratio', shortName: 'Up/down', group: 'Size',
       fmt: v => v.toFixed(3),
-      hint: v => v > 1 ? 'Sends more than it receives — exfiltration shaped'
+      hint: v => v > 1 ? 'Sends more than it receives - exfiltration shaped'
         : v > 0.05 ? 'Balanced upload and download' : 'Mostly downloading'
     },
     unique_path_ratio: {
       name: 'Unique path ratio', shortName: 'Uniq paths', group: 'URL',
       fmt: v => (v * 100).toFixed(0) + '%',
-      hint: v => v < 0.1 ? 'Hits one fixed endpoint — beacon shaped'
+      hint: v => v < 0.1 ? 'Hits one fixed endpoint - beacon shaped'
         : v < 0.5 ? 'A few repeated endpoints' : 'Many distinct endpoints'
     },
     uri_len_norm: {
@@ -5318,13 +6479,25 @@ const _C3_FEATURE_META = {
     uri_char_entropy_norm: {
       name: 'URI character entropy', shortName: 'URI entropy', group: 'URL',
       fmt: v => v.toFixed(3),
-      hint: v => v > 0.75 ? 'Random-looking URI text — encoded or generated'
+      hint: v => v > 0.75 ? 'Random-looking URI text - encoded or generated'
         : v > 0.4 ? 'Mixed URI text' : 'Plain, readable URI text'
     },
-    referrer_absent_ratio: {
-      name: 'Missing Referer', shortName: 'No Referer', group: 'Behaviour',
+    path_only_entropy: {
+      name: 'Endpoint diversity', shortName: 'Endpoints', group: 'URL',
+      fmt: v => v.toFixed(2) + ' bits',
+      hint: v => v <= 0.5 ? 'One fixed endpoint, ignoring the query string'
+        : v <= 1.5 ? 'A few endpoints' : 'Many different endpoints'
+    },
+    unique_path_only_ratio: {
+      name: 'Unique endpoint ratio', shortName: 'Uniq endpoints', group: 'URL',
       fmt: v => (v * 100).toFixed(0) + '%',
-      hint: v => v > 0.9 ? 'No Referer at all — not triggered by a click'
+      hint: v => v < 0.1 ? 'Same endpoint every time, beacon shaped'
+        : v < 0.5 ? 'A few repeated endpoints' : 'Many distinct endpoints'
+    },
+    referrer_absent_ratio: {
+      name: 'Missing Referer', shortName: 'No Referer', group: 'Request',
+      fmt: v => (v * 100).toFixed(0) + '%',
+      hint: v => v > 0.9 ? 'No Referer at all - not triggered by a click'
         : v > 0.4 ? 'Often missing a Referer' : 'Usually carries a Referer'
     },
     iat_mean_ms: {
@@ -5373,7 +6546,7 @@ const _C3_FEATURE_META = {
     payload_size_mean: {
       name: 'Average payload',
       shortName: 'Size mean',
-      group: 'Volume',
+      group: 'Size',
       fmt: v => fmtBytes(v),
       hint: v => v === 0 ? 'No request body'
         : v < 1000 ? 'Small payloads (' + fmtBytes(v) + ')'
@@ -5382,7 +6555,7 @@ const _C3_FEATURE_META = {
     payload_size_std: {
       name: 'Payload variation',
       shortName: 'Size std',
-      group: 'Volume',
+      group: 'Size',
       fmt: v => '±' + fmtBytes(v),
       hint: v => v < 250 ? 'Near-constant payload size'
         : v < 1500 ? 'Moderate payload-size variation'
@@ -5391,7 +6564,7 @@ const _C3_FEATURE_META = {
     http_post_ratio: {
       name: 'POST ratio',
       shortName: 'POST ratio',
-      group: 'Protocol',
+      group: 'Request',
       fmt: v => Math.round(v * 100) + '% POST',
       hint: v => v > 0.7 ? 'Mostly POST'
         : v > 0.3 ? 'Mixed GET / POST'
@@ -5436,7 +6609,7 @@ const _C3_FEATURE_META = {
     url_path_entropy: {
       name: 'URL diversity',
       shortName: 'Path entropy',
-      group: 'Protocol',
+      group: 'URL',
       fmt: v => v.toFixed(2) + ' bits',
       hint: v => v <= 0.5 ? 'Single fixed URL path'
         : v <= 1.5 ? 'Few distinct endpoints'
@@ -5465,11 +6638,20 @@ const _C3_FEATURE_META = {
     script_initiator_ratio: {
       name: 'Script-initiated',
       shortName: 'Script-init',
-      group: 'Protocol',
+      group: 'Request',
       fmt: v => Math.round(v * 100) + '% via script',
       hint: v => v > 0.7 ? 'Mostly script-initiated (not the HTML parser)'
         : v > 0.3 ? 'Mixed script / parser initiated'
         : 'Mostly parser-initiated'
+    },
+    degraded_context_ratio: {
+      name: 'Context not measured',
+      shortName: 'No context',
+      group: 'Browser Context',
+      fmt: v => Math.round(v * 100) + '% of requests',
+      hint: v => v <= 0 ? 'Browser context measured for every request'
+        : v < 0.5 ? 'Context missing for some requests'
+        : 'Context missing for most requests, so the heuristic score is less reliable'
     },
 };
 
@@ -5486,7 +6668,9 @@ function c3FeatureBars(features) {
     groups[g].push(k);
   });
 
-  const groupOrder = ['Timing', 'Volume', 'Protocol', 'Browser Context'];
+  // Must list every group used in _C3_FEATURE_META - a group missing here is
+  // never rendered.
+  const groupOrder = ['Timing', 'Size', 'Volume', 'URL', 'Request', 'Browser Context'];
   let html = '';
   groupOrder.forEach(g => {
     if (!groups[g]) return;
@@ -5534,12 +6718,33 @@ function c3FeatureRisk(name, value) {
   if (name === 'avg_idle_time_ms') return Math.min(100, Math.round(value / 72000));
   if (name === 'payload_size_mean') return value > 0 && value < 1000 ? 70 : value < 5000 ? 35 : 15;
   if (name === 'payload_size_std') return value < 250 ? 65 : value < 1500 ? 30 : 15;
-  // Exculpatory signal only (Rule 9 dampens, never adds suspicion on its own) —
-  // capped low so a high same-site ratio never renders as a "risky" red bar.
+  // Exculpatory signal only (the same-site dampener reduces, never adds
+  // suspicion) — capped low so a high same-site ratio never reads as risky.
   if (name === 'same_site_ratio') return Math.round((1 - clamp01(value)) * 30);
-  // Weak supporting signal only (Rule 6 requires regular timing too, capped
-  // moderate so this feature alone never reads as high risk).
+  // Weak supporting signal only (the heuristic counts it only on top of a
+  // timing rhythm) — capped moderate so it alone never reads as high risk.
   if (name === 'script_initiator_ratio') return Math.round(clamp01(value) * 45);
+  // Scale-free features the ML model reads. Each bar rises in the direction
+  // the model's monotone priors call C2-like (MONOTONE in
+  // scripts/train_c3_final_model.py): lower spread / entropy / variety, or a
+  // higher share of repeats, clock-aligned gaps and missing Referers.
+  if (name === 'iat_norm_mad') return value < 0.05 ? 90 : value < 0.2 ? 60 : value < 0.5 ? 30 : 10;
+  if (name === 'iat_spread_ratio') return value < 0.1 ? 90 : value < 0.5 ? 60 : value < 2 ? 30 : 10;
+  if (name === 'iat_burstiness') return value <= -0.7 ? 85 : value <= -0.3 ? 55 : value <= 0.2 ? 30 : 10;
+  if (name === 'iat_entropy_norm') return Math.round((1 - clamp01(value)) * 90);
+  if (name === 'iat_clock_share' || name === 'payload_repeat_ratio' || name === 'referrer_absent_ratio') {
+    return Math.round(clamp01(value) * 100);
+  }
+  if (name === 'payload_cv') return value < 0.05 ? 85 : value < 0.25 ? 55 : value < 0.75 ? 25 : 10;
+  if (name === 'upload_download_ratio') return value > 1 ? 85 : value > 0.2 ? 55 : value > 0.05 ? 30 : 10;
+  if (name === 'unique_path_ratio' || name === 'unique_path_only_ratio') return Math.round((1 - clamp01(value)) * 90);
+  if (name === 'path_only_entropy') return value <= 0.5 ? 85 : value <= 1.5 ? 45 : value <= 3.0 ? 15 : 10;
+  // Evidence quality, not suspicion: missing context never adds risk.
+  if (name === 'degraded_context_ratio') return 0;
+  // Everything else is neutral: features with no fixed direction
+  // (iat_bowley_skewness, iat_autocorr_lag1, uri_len_norm,
+  // uri_char_entropy_norm) and absolute-scale context values
+  // (iat_mean_ms, iat_mad_ms, requests_per_hour).
   return 20;
 }
 
@@ -5866,9 +7071,31 @@ document.querySelectorAll('.c3-tab').forEach(t => {
     // Panes stop receiving DOM updates while hidden (see renderC3()), so the
     // tab we just switched into may be stale - catch it up immediately.
     _c3ActiveTab = t.dataset.c3tab;
+    if (_c3ActiveTab === 'lab') c3ReplaySessionSummary();
     renderC3(true);
   });
 });
+
+// The Session Summary card is Detection Lab's "at a glance" view, so it
+// should read as alive every time an analyst switches to this tab - not only
+// the first time, or only when a host's score happens to change while the
+// tab already sits open. renderC3VerdictChart() otherwise skips its whole
+// rebuild whenever nothing behind it has changed (see _c3LastMixSig); this
+// clears that memo and the live chart instance so the very next call redraws
+// the ring and refills the bars from scratch, and replays a small entrance
+// on the card itself so the reveal is visible even for the plain-DOM parts
+// (the legend numbers, the "Based on N hosts" line) that would otherwise just
+// swap text with nothing to actually see change.
+function c3ReplaySessionSummary() {
+  _c3LastMixSig = '';
+  _c3MixForceAnim = true;
+  const card = document.querySelector('#c3-pane-lab .lab-card-mix');
+  if (card) {
+    card.classList.remove('c3-mix-replay');
+    void card.offsetWidth;   // force a reflow so the animation restarts
+    card.classList.add('c3-mix-replay');
+  }
+}
 
 // ══════════════════════════════════════════════════════════════
 //  Settings — load on startup
@@ -5959,7 +7186,7 @@ async function saveC2Settings() {
   btn.textContent = '\u2713 Saved!'; setTimeout(() => btn.textContent = orig, 1800);
 }
 
-// ── Detection Lab: Threat Intel API Keys ───────────────────────
+// ── Detection Lab: Threat Intelligence Keys ────────────────────
 // Small status line under the card title -- "Ready" once AbuseIPDB or
 // VirusTotal is configured (matches core/c3/reputation_engine.py's
 // ti_available()). VirusTotal replaced Google Safe Browsing here on
@@ -5968,10 +7195,10 @@ async function saveC2Settings() {
 function c3UpdateLabTiSub(s) {
   const sub = document.getElementById('lab-ti-sub');
   if (!sub) return;
-  const ready = !!(s && (s.abuseipdb_key || s.virustotal_key));
-  sub.innerHTML = ready
-    ? '<span style="color:var(--safe)">Ready</span>'
-    : '<span style="color:var(--warn)">No keys set</span> &mdash; reputation lookup has no source to query';
+  const names = [s && s.abuseipdb_key && 'AbuseIPDB', s && s.virustotal_key && 'VirusTotal'].filter(Boolean);
+  sub.innerHTML = names.length
+    ? `<span style="color:var(--safe)">Ready.</span> Confirmed beacons are checked on ${names.join(' and ')}.`
+    : '<span style="color:var(--warn)">No keys added.</span> Add a key to check confirmed beacons against threat databases.';
 }
 
 async function saveLabApiKeys() {
@@ -6168,19 +7395,21 @@ function showBeaconOverlay(alert) {
   const score = Number(alert.score || 0);
   const scorePct = Math.round(score * 100);
   const signals = alert.signal_breakdown || {};
-  const mlPct         = signals.ml != null         ? Math.round(Number(signals.ml) * 100)         : null;
-  const heuristicPct  = signals.heuristic != null  ? Math.round(Number(signals.heuristic) * 100)  : null;
-  const autoBlockFloor = Number(c3Status.auto_block_score_floor ?? 0.8);
-  const willBlock = score >= autoBlockFloor;
+  const autoBlockFloor = Number(c3Status.auto_block_score_floor ?? 0.75);
+  // Mirrors the backend exactly (analyzer._handle_beacon): a host is only
+  // blocked when auto-block is switched ON and the score reaches the floor.
+  // Checking the score alone announced a block that never happened whenever
+  // auto-block was off, which is the default.
+  const willBlock = !!c3Status.auto_block_enabled && score >= autoBlockFloor;
 
   // Populate signal values
   document.getElementById('c3-beacon-host').textContent = alert.host || 'unknown host';
   document.getElementById('c3-bscore-total').textContent      = scorePct + '%';
-  document.getElementById('c3-bscore-ml').textContent         = mlPct        != null ? mlPct        + '%' : 'n/a';
-  document.getElementById('c3-bscore-heuristic').textContent  = heuristicPct != null ? heuristicPct + '%' : 'n/a';
+  document.getElementById('c3-bscore-ml').textContent         = c3ScorePct(signals.ml) + '%';
+  document.getElementById('c3-bscore-heuristic').textContent  = c3ScorePct(signals.heuristic) + '%';
 
   const mlEl = document.getElementById('c3-bscore-ml');
-  if (mlEl && mlPct != null) mlEl.style.color = c3SignalColor('ml', mlPct / 100);
+  if (mlEl && c3ScoreKnown(signals.ml)) mlEl.style.color = c3SignalColor('ml', Number(signals.ml));
 
   // Threat-intel reputation, per source, out of 100%.
   const repSrc = signals.reputation_sources || {};
@@ -6208,7 +7437,9 @@ function showBeaconOverlay(alert) {
     if (cntEl)   { cntEl.style.display = ''; cntEl.textContent = '5'; }
     if (barFill) { barFill.style.transition = 'none'; barFill.style.width = '100%'; }
   } else {
-    if (msgEl)   msgEl.textContent = `Below the ${Math.round(autoBlockFloor * 100)}% auto-block threshold`;
+    if (msgEl)   msgEl.textContent = !c3Status.auto_block_enabled
+      ? 'Auto-block is off. You can block this host from the Alerts tab.'
+      : `Below the ${Math.round(autoBlockFloor * 100)}% auto-block threshold`;
     if (cntEl)   cntEl.style.display = 'none';
     if (barFill) barFill.style.width = '0%';
   }
