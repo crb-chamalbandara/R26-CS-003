@@ -53,14 +53,16 @@ def run_cooccurrence(events):
     For each 2-min window, group events by domain.
     Count how many artifact types touch the same domain.
     """
-    results = []
     # Use all events as anchors — risk_flag is a score booster, not a gate.
     # Restricting to pre-flagged events caused the algorithm to silently produce
     # zero results whenever the rule engine found nothing individually suspicious.
     candidates = [e for e in events if e.get("timestamp")]
     candidates.sort(key=lambda x: x["timestamp"])
 
-    seen = set()
+    # Keyed by (domain, artifact-type set): consecutive anchors slide over the same
+    # evidence and re-detect one pattern dozens of times, so only the strongest
+    # window of each pattern is reported, with a count of how often it recurred.
+    best = {}
     for anchor in candidates:
         t0 = _ts(anchor["timestamp"])
         if not t0: continue
@@ -80,9 +82,6 @@ def run_cooccurrence(events):
 
         for dom, type_map in domain_map.items():
             if len(type_map) < 2: continue
-            key = f"{dom}_{anchor['timestamp']}"
-            if key in seen: continue
-            seen.add(key)
             base_score = COOCCURRENCE_SCORES.get(len(type_map),
                                                  min(100, len(type_map)*20))
             # Boost score when individual events are already rule-flagged
@@ -91,18 +90,33 @@ def run_cooccurrence(events):
                 for e in elist if e.get("risk_flag")
             )
             score = min(100, base_score + flagged_count * 5)
-            results.append({
+            window_events = [e for elist in type_map.values() for e in elist]
+            stamps = sorted(e["timestamp"] for e in window_events if e.get("timestamp"))
+            finding = {
                 "algorithm":    "co_occurrence",
                 "domain":       dom,
                 "artifact_types": sorted(list(type_map.keys())),
                 "type_count":   len(type_map),
                 "score":        score,
-                "window_start": anchor["timestamp"],
+                "window_start": stamps[0] if stamps else anchor["timestamp"],
+                "window_end":   stamps[-1] if stamps else anchor["timestamp"],
+                "window_count": 1,
                 "description":  f"{len(type_map)} artifact types linked to '{dom}' within 2 minutes",
-                "events":       [e for elist in type_map.values() for e in elist]
-            })
+                "events":       window_events,
+            }
 
-    results.sort(key=lambda x: x["score"], reverse=True)
+            key = (dom, tuple(finding["artifact_types"]))
+            previous = best.get(key)
+            if previous is None:
+                best[key] = finding
+                continue
+            keep = finding if score > previous["score"] else previous
+            keep["window_count"] = previous["window_count"] + 1
+            keep["window_start"] = min(previous["window_start"], finding["window_start"])
+            keep["window_end"] = max(previous["window_end"], finding["window_end"])
+            best[key] = keep
+
+    results = sorted(best.values(), key=lambda x: x["score"], reverse=True)
     return results
 
 
@@ -201,6 +215,7 @@ def run_temporal_anomaly(events):
             anomalies.append({
                 "algorithm":    "temporal_anomaly",
                 "artifact_type": atype,
+                "domain":       _event_domain(e),
                 "hour":         t.hour,
                 "normal_count": hour_counts.get(t.hour, 0),
                 "score":        score,
@@ -240,8 +255,9 @@ def run_attack_chain_detection(events):
         if domain and ts:
             domain_events[domain].append((ts, event))
 
-    chains = []
-    seen = set()
+    # Keyed by (domain, pattern) for the same reason co-occurrence is deduplicated:
+    # every anchor inside the window re-matches the identical ordered chain.
+    best = {}
     for domain, items in domain_events.items():
         items.sort(key=lambda item: item[0])
         for i, (start_ts, _start_event) in enumerate(items):
@@ -260,30 +276,39 @@ def run_attack_chain_detection(events):
                 if cursor != len(pattern):
                     continue
 
-                key = (domain, pattern, matched[0].get("timestamp"), matched[-1].get("timestamp"))
-                if key in seen:
-                    continue
-                seen.add(key)
-
                 risk_bonus = min(10, sum(1 for event in matched if event.get("risk_flag")) * 3)
                 score = min(100, base_score + risk_bonus)
-                chains.append({
+                finding = {
                     "algorithm": "attack_chain",
                     "domain": domain,
                     "artifact_types": list(pattern),
                     "score": score,
                     "window_start": matched[0].get("timestamp"),
                     "window_end": matched[-1].get("timestamp"),
+                    "chain_count": 1,
                     "description": f"{description} for '{domain}' within 2 minutes",
                     "events": matched,
-                })
+                }
 
+                key = (domain, pattern)
+                previous = best.get(key)
+                if previous is None:
+                    best[key] = finding
+                else:
+                    keep = finding if score > previous["score"] else previous
+                    keep["chain_count"] = previous["chain_count"] + 1
+                    best[key] = keep
+
+                reason = f"CHAIN: {' -> '.join(pattern)} on {domain}"
                 for event in matched:
                     event["risk_flag"] = True
-                    event["anomaly_score"] += score // len(pattern)
-                    event["anomaly_reasons"].append(f"CHAIN: {' -> '.join(pattern)} on {domain}")
+                    # One chain scores an event once, however many overlapping
+                    # windows rediscover it.
+                    if reason not in event["anomaly_reasons"]:
+                        event["anomaly_score"] += score // len(pattern)
+                        event["anomaly_reasons"].append(reason)
 
-    chains.sort(key=lambda finding: finding["score"], reverse=True)
+    chains = sorted(best.values(), key=lambda finding: finding["score"], reverse=True)
     return chains
 
 
