@@ -170,16 +170,7 @@ test/            Tests for C1, C2, C3 and C4
 docs/            README assets
 ```
 
-## Testing
 
-Each component has its own tests under `test/`, for example:
-
-```bash
-python test/C3/test_c3_units.py
-```
-
-C1 tests live in `test/C1/`, C2 in `test/C2/` and C4 in `test/C4/` (`python test/C4/test_units.py`). Component research notes, evaluation results
-and test cases are in [`researches/`](researches).
 
 ## Troubleshooting
 
