@@ -35,9 +35,11 @@ popd
 
 echo.
 echo Done. Installer: electron\dist\
+pause
 exit /b 0
 
 :fail
 echo.
-echo BUILD FAILED.
+echo BUILD FAILED. Scroll up to see the error above.
+pause
 exit /b 1
