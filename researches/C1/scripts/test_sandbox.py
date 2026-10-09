@@ -2,7 +2,7 @@
 WebSentinel C1 — Sandbox verification script.
 
 Run from the project root:
-    python core/c1/scripts/test_sandbox.py
+    python researches/C1/scripts/test_sandbox.py
 
 What this tests:
   1. Static analysis on the synthetic test extension (should score ~55-60, verdict SUSPICIOUS)
@@ -26,7 +26,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-_EXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test_malicious_ext")
+_EXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "core", "c1", "test_malicious_ext")
 
 
 def _sep(title: str) -> None:

@@ -16,7 +16,7 @@ Why this was needed:
 Output: benign_power_extensions.csv — automatically included by retrain_with_new_data.py.
 
 Run from project root:
-    python core/c1/scripts/collect_benign_power_extensions.py
+    python researches/C1/scripts/collect_benign_power_extensions.py
 """
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))   # add project roo
 
 ROOT      = Path(__file__).resolve().parents[3]
 C1_DIR    = ROOT / "core" / "c1"
-DATA_DIR  = C1_DIR / "data"
-FEAT_JSON = DATA_DIR / "dataset_clean_v3_features.json"   # 33 feature column names in correct order
+DATA_DIR  = ROOT / "researches" / "C1" / "data"
+FEAT_JSON = ROOT / "core" / "c1" / "data" / "dataset_clean_v3_features.json"   # 33 feature column names in correct order
 OUT_CSV   = DATA_DIR / "benign_power_extensions.csv"      # output file consumed by retrain script
 
 # Known safe extensions with complex permission profiles.

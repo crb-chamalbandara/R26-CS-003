@@ -10,7 +10,7 @@ Source: popular, long-standing Chrome Web Store extensions with millions of user
 manually verified as benign by the security community.
 
 Run from project root:
-    python core/c1/scripts/collect_benign_complex_extensions.py
+    python researches/C1/scripts/collect_benign_complex_extensions.py
 """
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 ROOT      = Path(__file__).resolve().parents[3]
-DATA_DIR  = ROOT / "core" / "c1" / "data"
-FEAT_JSON = DATA_DIR / "dataset_clean_v3_features.json"
+DATA_DIR  = ROOT / "researches" / "C1" / "data"
+FEAT_JSON = ROOT / "core" / "c1" / "data" / "dataset_clean_v3_features.json"
 OUT_CSV   = DATA_DIR / "benign_complex_extensions.csv"
 
 # These extensions were specifically chosen because they have:

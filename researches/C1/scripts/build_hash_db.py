@@ -8,7 +8,7 @@ Role    : Run ONCE during dataset preparation. The output JSON is used
           whose ID is in this list is instantly flagged MALICIOUS.
 
 Run from project root:
-    python core/c1/scripts/build_hash_db.py
+    python researches/C1/scripts/build_hash_db.py
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build malicious_ids.json for C1.")
     parser.add_argument(
         "--input",
-        default=os.path.join("core", "c1", "data", "final_extention_id_lookup.csv"),
+        default=os.path.join("researches", "C1", "data", "final_extention_id_lookup.csv"),
         help="CSV with extension_id and label columns",
     )
     parser.add_argument(

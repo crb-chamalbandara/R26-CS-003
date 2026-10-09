@@ -9,7 +9,7 @@ Same 1,259 rows, same 33 features + label, but:
   - Label                    0 / 1    →  BENIGN / MALICIOUS
 
 Run from project root:
-    python core/c1/scripts/build_raw_full_dataset.py
+    python researches/C1/scripts/build_raw_full_dataset.py
 """
 import os, sys
 import pandas as pd
@@ -17,7 +17,7 @@ import numpy as np
 from pathlib import Path
 
 ROOT     = Path(__file__).resolve().parents[3]
-DATA_DIR = ROOT / "core" / "c1" / "data"
+DATA_DIR = ROOT / "researches" / "C1" / "data"
 IN_CSV   = DATA_DIR / "dataset_clean_v4.csv"
 OUT_CSV  = DATA_DIR / "dataset_raw_v4.csv"
 

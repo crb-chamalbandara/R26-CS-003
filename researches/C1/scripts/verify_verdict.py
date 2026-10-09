@@ -1,8 +1,8 @@
-"""Run from project root: python core/c1/scripts/verify_verdict.py"""
+"""Run from project root: python researches/C1/scripts/verify_verdict.py"""
 import asyncio, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
-EXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test_malicious_ext")
+EXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "core", "c1", "test_malicious_ext")
 
 async def main():
     from core.c1.analyzer import analyze_extension

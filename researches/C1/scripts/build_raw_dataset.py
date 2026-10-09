@@ -12,7 +12,7 @@ Columns produced:
   external_urls_sample, label (BENIGN / MALICIOUS)
 
 Run from project root:
-    python core/c1/scripts/build_raw_dataset.py
+    python researches/C1/scripts/build_raw_dataset.py
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 import pandas as pd
 
 ROOT     = Path(__file__).resolve().parents[3]
-DATA_DIR = ROOT / "core" / "c1" / "data"
+DATA_DIR = ROOT / "researches" / "C1" / "data"
 OUT_CSV  = DATA_DIR / "dataset_raw_demo.csv"
 
 MAL_FOLDERS = [

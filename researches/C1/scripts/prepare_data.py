@@ -12,7 +12,7 @@ Role    : Run ONCE during dataset preparation.  Produces dataset_clean.csv (v1).
           Later versions (v3, v4) were built with the same logic via retrain_with_new_data.py.
 
 Run from project root:
-    python core/c1/scripts/prepare_data.py
+    python researches/C1/scripts/prepare_data.py
 """
 from __future__ import annotations
 
@@ -49,12 +49,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Prepare C1 dataset for training.")
     parser.add_argument(
         "--input",
-        default=os.path.join("core", "c1", "data", "master_dataset.csv"),
+        default=os.path.join("researches", "C1", "data", "master_dataset.csv"),
         help="Input CSV path",
     )
     parser.add_argument(
         "--output",
-        default=os.path.join("core", "c1", "data", "dataset_clean.csv"),
+        default=os.path.join("researches", "C1", "data", "dataset_clean.csv"),
         help="Output cleaned CSV path",
     )
     parser.add_argument("--label-col", default="label", help="Label column name")
