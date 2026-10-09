@@ -98,21 +98,9 @@ Details: [`core/c4/ARCHITECTURE.md`](core/c4/ARCHITECTURE.md)
 
 ## Architecture
 
-```
- +----------------------------------------------------------------+
- |  Electron desktop app  (electron/main.js)                      |
- |  Dashboard UI  (frontend/dashboard.html)                       |
- +---------------+---------------------------^--------------------+
-                 | REST                      | WebSocket /ws/events
- +---------------v---------------------------+--------------------+
- |  FastAPI backend  127.0.0.1:8765   (core/main.py)              |
- |   - Playwright session: persistent Chromium                    |
- |   - C1  core/c1   extension analysis + sandbox                 |
- |   - C2  core/c2   BiTB / phishing layers                       |
- |   - C3  core/c3   beacon detection                             |
- |   - C4  core/c4   forensic correlation                         |
- +----------------------------------------------------------------+
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="WebSentinel system architecture" width="100%">
+</p>
 
 In the installed app the backend is a PyInstaller executable (`core/server_entry.py`) that Electron
 launches and health-checks before opening the window. In development it runs under Uvicorn.
