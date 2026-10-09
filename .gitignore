@@ -34,6 +34,9 @@ models/*.bin
 # data/c3_training_dataset_clear.csv is its exact training data, and
 # core/c3/C3_ML_Train.ipynb retrains it from that file and checks the match.
 !models/c3_beacon_classifier.pkl
+# C1's deployed models (moved here from core/c1/models/).
+!models/extension_detector_model.pkl
+!models/isolation_forest_model.pkl
 
 # ── Runtime data / generated files ───────────────────────────
 data/urls_labeled.csv
@@ -87,6 +90,10 @@ core/settings.json
 core/c1/data/MaliciousBrowserExtensions/
 /core/c1/data/MalCryptoExt_malicious_extensions
 core/c1/data/malext_sentry and chrome_mal_ids Finalized Blocklist IDs.xlsx
+# Same corpora when kept under the research folder
+/researches/C1/data/GoogleChromeExtension
+/researches/C1/data/MaliciousBrowserExtensions/
+/researches/C1/data/MalCryptoExt_malicious_extensions
 
 # 184 MB across 103,802 files. enrich.find_local_manifest() reads it to
 # recover the manifest of an extension the store has already delisted, and
@@ -114,3 +121,6 @@ C3 - Train Score.png
 notebooks/IF_model_training.ipynb
 notebooks/RF_model_training.ipynb
 models/archive/c3_ctu13_rf_ip_botnet_label_OBSOLETE.pkl
+
+# Installer build output
+.buildvenv/

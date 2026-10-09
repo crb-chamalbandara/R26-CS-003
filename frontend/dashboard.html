@@ -3370,20 +3370,6 @@ input,textarea,select{font-family:inherit}
           <div class="lab-keys-note">Lookup results appear on the alert as extra evidence. They never change the risk score.</div>
         </div>
 
-        <!-- Row 3: Real-World Beacon Test - see openC3BeaconTest(). -->
-        <div class="lab-card">
-          <div class="lab-card-hdr lab-card-hdr-center">
-            <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"/></svg></span>
-            <div>
-              <div class="lab-card-title">Real-World Beacon Test</div>
-              <div class="lab-card-sub">Starts a test beacon and sends this browser to it, so you can watch C3 detect it live. Takes about 3 minutes and needs ngrok.</div>
-            </div>
-            <button type="button" class="lab-btn-test btn-cyber-primary" onclick="openC3BeaconTest()">
-              &#9654; Run Test
-            </button>
-          </div>
-        </div>
-
         <!-- Row 4: pipeline status - every badge comes from a real /c3/status field -->
         <div class="lab-card">
           <div class="lab-card-hdr">
@@ -5907,42 +5893,6 @@ function _c3ReportAlertCard(a, importance, index) {
       <table class="rpt-feat-table"><tbody>${featureRowsHtml}</tbody></table>
     </details>` : ''}
   </section>`;
-}
-
-// Real-world beacon test. Launches test_c3_real_world_beacon.bat (POST
-// /c3/test/real-world-beacon) in its own console window: that script deploys
-// a real, publicly-reachable C2 mimicry beacon over an ngrok tunnel, drives
-// THIS already-running browser session to it, and waits for C3 to confirm
-// BEACON end-to-end -- including a real threat-intel lookup against the
-// tunnel's public IP. ~3 minutes; it cleans up its own ngrok/mimic
-// processes on exit. Requires ngrok installed + authenticated (the .bat
-// prints a clear error in its window if not).
-async function openC3BeaconTest() {
-  const btn = document.querySelector('#c3-pane-lab .lab-btn-test');
-  if (btn && btn.disabled) return;
-  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
-  const restore = () => { if (btn) { btn.disabled = false; btn.style.opacity = ''; } };
-
-  try {
-    showToast('Launching the real-world beacon test…');
-    let res;
-    try {
-      res = await (await fetch(API + '/c3/test/real-world-beacon', { method: 'POST' })).json();
-    } catch (e) {
-      showToast('Could not reach the backend to launch the test.');
-      return;
-    }
-    if (!res || res.status !== 'started') {
-      showToast((res && res.detail) || 'Could not launch the real-world beacon test.');
-      return;
-    }
-    connectPwWs();
-    const tab = document.querySelector('.c3-tab[data-c3tab="monitor"]');
-    if (tab) tab.click();
-    showToast('Test started in a new window. A beacon should be confirmed in about 3 minutes. Watch Live Monitor and Alerts, and check that window if something fails to start.', 8000);
-  } finally {
-    setTimeout(restore, 6000);
-  }
 }
 
 function c3HostResult(host) {
@@ -10596,7 +10546,7 @@ function _testsUpdateItem(msg) {
 }
 
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
 
 <!-- C4 stat drawer -->
 <div class="c4-drawer-overlay" id="c4-drawer-overlay" onclick="closeC4Drawer()"></div>

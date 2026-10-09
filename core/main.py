@@ -249,7 +249,14 @@ def _store_c2_alert(record: dict) -> dict:
         print(f"[C2] Could not persist alert: {exc}")
         return {}
 
-_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+# Packaged (PyInstaller) builds live in a read-only install dir, so mutable
+# settings go to the per-user data dir instead of next to this file.
+if getattr(sys, "frozen", False):
+    _USER_DATA_DIR = os.path.join(os.path.expanduser("~"), ".websentinel")
+    os.makedirs(_USER_DATA_DIR, exist_ok=True)
+    _SETTINGS_FILE = os.path.join(_USER_DATA_DIR, "settings.json")
+else:
+    _SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 
 _SETTINGS_DEFAULTS: dict = {
     "layers": {"l1": True, "l2": True, "l3": True, "l4": True, "l5": True, "l6": True},
@@ -1882,14 +1889,12 @@ async def _tc_c3_live_beacon():
 # finally block. Nothing harmful is exchanged -- every check-in gets the same
 # fixed, inert reply; see TEST_CASE_03's ethics section.
 #
-# Until 2026-09-17 this scenario existed only behind Detection Lab's "Run Test"
-# button, which shells out to test_c3_real_world_beacon.bat in its own console
-# window, so the Live Test Runner had no row for it. That launcher still works
-# and is unchanged; this row is the same scenario run in-process, so C3's test
-# cases are complete in the runner like C1, C2 and C4's are.
+# This scenario runs in-process from the Live Test Runner, so C3's test cases
+# are complete in the runner like C1, C2 and C4's are. (It used to be launched
+# from a separate .bat file in its own console window; that launcher is gone.)
 _C3_NGROK_PORT = 8080
-_C3_NGROK_INTERVAL_MS = 1500   # matches test_c3_real_world_beacon.bat
-_C3_NGROK_JITTER_PCT = 2       # see that file for the measured reason
+_C3_NGROK_INTERVAL_MS = 1500   # see test/C3/tc03_real_world_c2_beacon.py for the measured reason
+_C3_NGROK_JITTER_PCT = 2       # ditto
 
 
 def _c3_find_ngrok() -> Optional[str]:
@@ -3165,58 +3170,6 @@ async def c3_test_beacon_page(interval: int = 30000, method: str = "GET"):
   </script>
 </body>
 </html>"""
-
-
-# The Detection Lab "Run Test" button used to just navigate the live browser to
-# the toy /c3/test/beacon-page above. It now runs the real scenario instead:
-# test_c3_real_world_beacon.bat deploys a genuine, publicly-reachable C2 mimicry
-# beacon over an ngrok tunnel, drives the already-running Playwright session to
-# it, and waits for C3's ML + heuristic engines to confirm BEACON (the batch
-# owns ngrok, the mimicry server, and its own cleanup). It runs in its own
-# console window so its live progress and final PASS/FAIL validation stay on
-# screen next to the dashboard.
-_C3_REALWORLD_BAT = os.path.join(_REPO_ROOT, "test_c3_real_world_beacon.bat")
-_c3_realworld_proc: Optional[subprocess.Popen] = None
-
-
-@app.post("/c3/test/real-world-beacon")
-async def c3_test_real_world_beacon():
-    global _c3_realworld_proc
-    if sys.platform != "win32":
-        raise HTTPException(
-            status_code=400,
-            detail="The real-world beacon test is Windows-only "
-                   "(test_c3_real_world_beacon.bat).",
-        )
-    if not os.path.isfile(_C3_REALWORLD_BAT):
-        raise HTTPException(
-            status_code=500,
-            detail=f"Batch script not found: {_C3_REALWORLD_BAT}",
-        )
-    if _c3_realworld_proc is not None and _c3_realworld_proc.poll() is None:
-        return {"status": "already_running", "pid": _c3_realworld_proc.pid,
-                "detail": "A real-world beacon test is already running in its "
-                          "console window."}
-    try:
-        _c3_realworld_proc = subprocess.Popen(
-            ["cmd", "/c", _C3_REALWORLD_BAT],
-            cwd=_REPO_ROOT,
-            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=500,
-                            detail=f"Could not launch the test: {exc}")
-    return {
-        # "started", not "launched" -- the dashboard's openC3BeaconTest() only
-        # treats an exact "started" as success (anything else, including a
-        # merely-truthy response, falls through to its generic failure toast
-        # using this same `detail` string). Keep these in sync.
-        "status": "started",
-        "pid": _c3_realworld_proc.pid,
-        "detail": "Real-world C2 beacon test launched in a new console window. "
-                  "It deploys an ngrok-tunnelled mimicry beacon and drives the "
-                  "live browser to it. Watch the C3 dashboard for detection.",
-    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════

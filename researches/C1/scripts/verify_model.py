@@ -1,6 +1,6 @@
 """
 Verify the retrained model is genuine.
-Run from project root: python core/c1/scripts/verify_model.py
+Run from project root: python researches/C1/scripts/verify_model.py
 """
 import json, sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
@@ -17,7 +17,7 @@ def sep(title):
     print('='*55)
 
 sep("1. TRAINING META (what the script recorded)")
-with open(os.path.join(ROOT, "core/c1/models/training_meta.json")) as f:
+with open(os.path.join(ROOT, "models/training_meta.json")) as f:
     meta = json.load(f)
 print(f"  Input CSV        : {meta['input']}")
 print(f"  n_malicious      : {meta['n_malicious']}   (was 22 before)")
@@ -27,13 +27,13 @@ print(f"  CV F1            : {meta['cv_f1_mean']:.3f} +/- {meta['cv_f1_std']:.3f
 print(f"  Holdout F1       : {meta['holdout_f1']:.3f}  (was 0.444)")
 
 sep("2. DATASET v4 ROW COUNT")
-df = pd.read_csv(os.path.join(ROOT, "core/c1/data/dataset_clean_v4.csv"))
+df = pd.read_csv(os.path.join(ROOT, "researches/C1/data/dataset_clean_v4.csv"))
 print(f"  Total rows : {len(df)}  (was 944)")
 print(f"  Benign     : {(df.label==0).sum()}")
 print(f"  Malicious  : {(df.label==1).sum()}  (was 22)")
 
 sep("3. MODEL INTERNALS (XGBoost object)")
-model = joblib.load(os.path.join(ROOT, "core/c1/models/extension_detector_model.pkl"))
+model = joblib.load(os.path.join(ROOT, "models/extension_detector_model.pkl"))
 print(f"  Type                : {type(model).__name__}")
 print(f"  n_estimators        : {model.n_estimators}")
 print(f"  scale_pos_weight    : {model.scale_pos_weight:.4f}")
@@ -43,7 +43,7 @@ n_trees = len(booster.get_dump())
 print(f"  Trees in booster    : {n_trees}  (300 = trained fully)")
 
 sep("4. TOP 10 FEATURE IMPORTANCES")
-fi = pd.read_csv(os.path.join(ROOT, "core/c1/models/feature_importance.csv"))
+fi = pd.read_csv(os.path.join(ROOT, "models/feature_importance.csv"))
 for _, row in fi.head(10).iterrows():
     bar = "#" * int(row['importance'] * 300)
     print(f"  {row['feature']:30s}  {row['importance']:.4f}  {bar}")

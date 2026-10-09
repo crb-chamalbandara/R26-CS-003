@@ -9,7 +9,7 @@ Role    : Run ONCE (or whenever you want to retrain from a specific CSV).
           new CRX files, use retrain_with_new_data.py instead.
 
 Run from project root:
-    python core/c1/scripts/train_model.py --input core/c1/data/dataset_clean_v4.csv
+    python researches/C1/scripts/train_model.py --input researches/C1/data/dataset_clean_v4.csv
 """
 from __future__ import annotations
 
@@ -53,11 +53,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train C1 XGBoost model.")
     parser.add_argument(
         "--input",
-        default=os.path.join("core", "c1", "data", "dataset_clean_v4.csv"),   # v4 = final dataset with 322 malicious
+        default=os.path.join("researches", "C1", "data", "dataset_clean_v4.csv"),   # v4 = final dataset with 322 malicious
     )
     parser.add_argument(
         "--model-out",
-        default=os.path.join("core", "c1", "models", "extension_detector_model.pkl"),
+        default=os.path.join("models", "extension_detector_model.pkl"),
     )
     parser.add_argument("--label-col", default="label")
     args = parser.parse_args()

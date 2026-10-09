@@ -220,7 +220,7 @@ class TestIsolationForestFusion(unittest.TestCase):
         real, legitimate, complex extensions as ZERO_DAY_ANOMALY even though
         every one of them is in the model's own benign training set — see
         scripts/README.md. They must never trigger the flag."""
-        power_csv = os.path.join(_ROOT, "core", "c1", "data", "benign_power_extensions.csv")
+        power_csv = os.path.join(_ROOT, "researches", "C1", "data", "benign_power_extensions.csv")
         if not os.path.exists(power_csv):
             self.skipTest("benign_power_extensions.csv not present")
 

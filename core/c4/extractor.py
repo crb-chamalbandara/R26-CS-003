@@ -1,4 +1,4 @@
-import os, shutil, sqlite3, json, hashlib, re as _re
+import os, sys, shutil, sqlite3, json, hashlib, re as _re
 from datetime import datetime, timedelta
 from .crypto import load_master_key, decrypt_password
 
@@ -501,7 +501,10 @@ def run_extraction(profile_path=None, tmp_dir=None, live_cookies=None):
     if not profile_path or not os.path.exists(profile_path):
         raise FileNotFoundError(f"Chrome profile not found: {profile_path}")
     if not tmp_dir:
-        tmp_dir = os.path.join(os.path.dirname(__file__), "..", "output", "tmp")
+        if getattr(sys, "frozen", False):
+            tmp_dir = os.path.join(os.path.expanduser("~"), ".websentinel", "c4_tmp")
+        else:
+            tmp_dir = os.path.join(os.path.dirname(__file__), "..", "output", "tmp")
     os.makedirs(tmp_dir, exist_ok=True)
 
     warnings = []

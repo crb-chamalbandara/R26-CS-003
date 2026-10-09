@@ -1,13 +1,13 @@
 """
 Check Google Translate and the test malicious extension against
 the recalibrated rule boosters.
-Run from project root: python core/c1/scripts/check_false_positive.py
+Run from project root: python researches/C1/scripts/check_false_positive.py
 """
 import asyncio, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 GOOGLE_TRANSLATE = "aapbdbdomjkkjkaonfhkkikfgjlloleb"
-TEST_EXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test_malicious_ext")
+TEST_EXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "core", "c1", "test_malicious_ext")
 
 async def score(label, manifest_str, source, ext_id):
     from core.c1.analyzer import analyze_extension

@@ -38,7 +38,7 @@ Safety
     update server signals rate-limiting. Re-running resumes where it left off.
 
 Run from project root:
-    python core/c1/scripts/collect_modern_benign_mv3.py --target 500
+    python researches/C1/scripts/collect_modern_benign_mv3.py --target 500
 """
 from __future__ import annotations
 
@@ -55,12 +55,12 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 C1_DIR = ROOT / "core" / "c1"
-DATA_DIR = C1_DIR / "data"
+DATA_DIR = ROOT / "researches" / "C1" / "data"
 
 MANIFESTS_DIR = DATA_DIR / "chrome-extension-manifests-dataset" / "manifests"
 CONTAMINATED_CSV = DATA_DIR / "manifest_dataset_contaminated_ids.csv"
-BLOCKLIST_CSV = DATA_DIR / "malext_sentry and chrome_mal_ids Finalized Blocklist IDs.csv"
-FEATURES_JSON = DATA_DIR / "dataset_clean_v3_features.json"
+BLOCKLIST_CSV = ROOT / "core" / "c1" / "data" / "malext_sentry and chrome_mal_ids Finalized Blocklist IDs.csv"
+FEATURES_JSON = ROOT / "core" / "c1" / "data" / "dataset_clean_v3_features.json"
 OUT_CSV = DATA_DIR / "benign_modern_mv3_extensions.csv"
 
 CHECKPOINT_EVERY = 25

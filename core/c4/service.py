@@ -6,6 +6,7 @@ forensic pipeline intact and exposes it as functions that core/main.py can call.
 """
 import json
 import os
+import sys
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -15,7 +16,11 @@ from .mitre import run_mitre_mapping
 from .reporter import generate_html_report, generate_siem_export, save_all_outputs
 from .rules import apply_single_artifact_rules
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+if getattr(sys, "frozen", False):
+    # Packaged build: install dir is read-only, write forensic output per-user.
+    OUTPUT_DIR = os.path.join(os.path.expanduser("~"), ".websentinel", "c4_output")
+else:
+    OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 LAST_RESULT: Dict[str, Any] = {}
 
 

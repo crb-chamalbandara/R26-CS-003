@@ -216,7 +216,7 @@ Coverage as loaded (6,656 rows): 3,614 fully documented, 3,042 with at least one
 gap — 597 missing a name, 573 missing a reason, 578 missing a date, 681 missing a
 store, 2,988 missing a version, 2,194 missing a hash.
 
-Sweeping the rest offline: `python -m core.c1.scripts.backfill_blocklist_evidence
+Sweeping the rest offline: `python researches/C1/scripts/backfill_blocklist_evidence.py
 --all`. Most undocumented IDs are undocumented precisely because the store
 already removed the extension, so the CRX cannot be downloaded; those rows come
 back `unavailable` and are left exactly as they were. Where the repo's archived

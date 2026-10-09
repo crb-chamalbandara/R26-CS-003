@@ -20,11 +20,11 @@ are left exactly as they were: a delisted extension gives us nothing to observe,
 and inventing evidence for it would be worse than an honest gap.
 
 Usage (from the repo root, with the venv active):
-    python -m core.c1.scripts.backfill_blocklist_evidence --limit 50
-    python -m core.c1.scripts.backfill_blocklist_evidence --all --concurrency 6
-    python -m core.c1.scripts.backfill_blocklist_evidence --limit 10 --sandbox
-    python -m core.c1.scripts.backfill_blocklist_evidence --ids abc...,def...
-    python -m core.c1.scripts.backfill_blocklist_evidence --limit 20 --dry-run
+    python researches/C1/scripts/backfill_blocklist_evidence.py --limit 50
+    python researches/C1/scripts/backfill_blocklist_evidence.py --all --concurrency 6
+    python researches/C1/scripts/backfill_blocklist_evidence.py --limit 10 --sandbox
+    python researches/C1/scripts/backfill_blocklist_evidence.py --ids abc...,def...
+    python researches/C1/scripts/backfill_blocklist_evidence.py --limit 20 --dry-run
 
 Flags:
     --limit N       document at most N undocumented rows (default 25)
@@ -38,9 +38,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from collections import Counter
 from typing import List
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 if sys.platform == "win32":
     # Playwright needs the Proactor loop to spawn Chromium (same reason
