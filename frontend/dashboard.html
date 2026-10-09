@@ -2398,6 +2398,31 @@ input,textarea,select{font-family:inherit}
 #panel-c3 .lab-btn-export.btn-cyber-primary{width:100%;padding:9px 18px;font-size:11.5px}
 #panel-c3 .lab-btn-test.btn-cyber-primary{margin-left:auto;padding:8px 16px;font-size:11px;flex-shrink:0}
 
+/* Real-World Beacon Test: one header row - title, a line of text and the
+   Run Test button, vertically centred; the ngrok authtoken field sits under it. */
+#panel-c3 .lab-card-hdr-center{align-items:center}
+
+/* Threat-intelligence keys and the ngrok authtoken: inputs and the action
+   button share one row while there is room, and stack on narrow windows. */
+#panel-c3 .lab-keys{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:12px;align-items:end;margin-top:12px
+}
+#panel-c3 .lab-keys.lab-keys-one{grid-template-columns:minmax(0,1fr) auto}
+#panel-c3 .lab-key{display:flex;flex-direction:column;gap:5px;min-width:0}
+#panel-c3 .lab-key label{font-size:10.5px;font-weight:600;color:var(--t2)}
+#panel-c3 .lab-btn-save.btn-cyber-primary{padding:8.5px 20px;font-size:11.5px;white-space:nowrap}
+#panel-c3 .lab-btn-clear{
+  background:transparent;border:1px solid var(--b2);color:var(--t2);border-radius:var(--radius);
+  padding:8.5px 16px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;
+  transition:background .15s ease,color .15s ease,border-color .15s ease
+}
+#panel-c3 .lab-btn-clear:hover:not(:disabled){background:var(--bg3);color:var(--t0)}
+#panel-c3 .lab-btn-clear:disabled{opacity:.4;cursor:default}
+#panel-c3 .lab-keys-note{font-size:10.5px;color:var(--t3);margin-top:9px}
+#panel-c3 .lab-ngrok-status{font-weight:600}
+@media (max-width:820px){#panel-c3 .lab-keys,#panel-c3 .lab-keys.lab-keys-one{grid-template-columns:1fr}}
+
 /* Animated waveform pulse for the Real-World Beacon Test card. The dash offset
    scrolls a fixed polyline; the beat markers sit on the pulse peaks, which
    represent the mimicry beacon's jittered ~1.5 s POST cadence (see
@@ -3367,7 +3392,32 @@ input,textarea,select{font-family:inherit}
             </div>
             <button type="button" id="lab-btn-save-keys" class="lab-btn-save btn-cyber-primary" onclick="saveLabApiKeys()">Save keys</button>
           </div>
-          <div class="lab-keys-note">Lookup results appear on the alert as extra evidence. They never change the risk score.</div>
+          <div class="lab-keys-note">Lookup results appear on the alert as extra evidence. They never change the risk score. Keys save automatically as you paste them and stay until you replace them. <span id="lab-ti-status" class="lab-ngrok-status"></span></div>
+        </div>
+
+        <!-- Row 3: Real-World Beacon Test. The ngrok authtoken is saved by the
+             backend (POST /c3/ngrok-auth -> settings.json) as it is typed and
+             stays saved until Clear is pressed; the test hands it to ngrok when
+             it opens the tunnel. See c3NgrokAuthSave() / openC3BeaconTest(). -->
+        <div class="lab-card">
+          <div class="lab-card-hdr lab-card-hdr-center">
+            <span class="lab-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"/></svg></span>
+            <div>
+              <div class="lab-card-title">Real-World Beacon Test</div>
+              <div class="lab-card-sub" id="lab-ngrok-sub">Starts a test beacon and sends this browser to it, so you can watch C3 detect it live. Takes about 3 minutes and needs ngrok.</div>
+            </div>
+            <button type="button" id="lab-btn-run-beacon" class="lab-btn-test btn-cyber-primary" onclick="openC3BeaconTest()">
+              &#9654; Run Test
+            </button>
+          </div>
+          <div class="lab-keys lab-keys-one">
+            <div class="lab-key">
+              <label for="lab-ngrok-authtoken">ngrok authtoken</label>
+              <input type="password" id="lab-ngrok-authtoken" class="sinput" placeholder="Paste your authtoken from dashboard.ngrok.com/get-started/your-authtoken" autocomplete="off" spellcheck="false">
+            </div>
+            <button type="button" id="lab-btn-clear-ngrok" class="lab-btn-clear" onclick="c3NgrokAuthClear()" disabled>Clear</button>
+          </div>
+          <div class="lab-keys-note" id="lab-ngrok-note">Saved automatically as you paste it, and kept until you press Clear.</div>
         </div>
 
         <!-- Row 4: pipeline status - every badge comes from a real /c3/status field -->
@@ -7065,7 +7115,12 @@ async function loadSettings() {
     const labAbuse = document.getElementById('lab-abuseipdb-key');
     if (labVt    && s.virustotal_key) labVt.value    = s.virustotal_key;
     if (labAbuse && s.abuseipdb_key)  labAbuse.value = s.abuseipdb_key;
+    _tiSaved = { abuseipdb_key: s.abuseipdb_key || '', virustotal_key: s.virustotal_key || '' };
+    c3TiKeysInit();
     c3UpdateLabTiSub(s);
+    c3NgrokAuthInit();
+    c3NgrokAuthRender({ configured: !!s.ngrok_authtoken_set, hint: '' });
+    c3NgrokAuthLoad();            // adds the "ends ...abcd" hint
     if (s.whitelist)   document.getElementById('whitelist').value    = s.whitelist.join('\n');
     if (s.layers) {
       ['l1','l2','l3','l4','l5','l6'].forEach(k => {
@@ -7151,20 +7206,84 @@ function c3UpdateLabTiSub(s) {
     : '<span style="color:var(--warn)">No keys added.</span> Add a key to check confirmed beacons against threat databases.';
 }
 
+// Threat-intel keys are saved by the backend (POST /c3/ti-keys -> settings.json)
+// and stay until replaced. Two ways in:
+//   - autosave: typing/pasting into either field saves it ~0.8 s after the last
+//     keystroke and again on blur. Only the changed, non-empty field is sent,
+//     so an empty box can never wipe a saved key and one field never disturbs
+//     the other.
+//   - the Save keys button: explicit, sends both fields as shown (the way to
+//     deliberately remove a key is to empty it and press this).
+let _tiSaved = { abuseipdb_key: '', virustotal_key: '' };   // last value the backend has
+const _tiTimers = {};
+const _TI_FIELDS = { abuseipdb_key: 'lab-abuseipdb-key', virustotal_key: 'lab-virustotal-key' };
+
+function c3TiStatus(ok, msg) {
+  const el = document.getElementById('lab-ti-status');
+  if (!el) return;
+  el.style.color = ok ? 'var(--safe)' : 'var(--danger)';
+  el.textContent = msg;
+  clearTimeout(c3TiStatus._t);
+  if (ok) c3TiStatus._t = setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
+async function c3TiPost(body) {
+  const r = await fetch(API + '/c3/ti-keys', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  let data = {};
+  try { data = await r.json(); } catch {}
+  if (!r.ok) throw new Error(data.detail || ('HTTP ' + r.status));
+  return data;
+}
+
+async function c3TiAutosave(field) {
+  clearTimeout(_tiTimers[field]);
+  const el = document.getElementById(_TI_FIELDS[field]);
+  if (!el || !backendUp) return;
+  const v = el.value.trim();
+  if (!v || v === _tiSaved[field]) return;       // empty never clears; unchanged needs no save
+  try {
+    const res = await c3TiPost({ [field]: v });
+    _tiSaved[field] = v;
+    c3UpdateLabTiSub(res);
+    if (field === 'abuseipdb_key') {
+      const mainAbuse = document.getElementById('abuseipdb-key');
+      if (mainAbuse) mainAbuse.value = v;
+    }
+    c3TiStatus(true, '✓ Saved');
+  } catch (e) {
+    c3TiStatus(false, 'Not saved: ' + e.message);
+  }
+}
+
+function c3TiKeysInit() {
+  Object.entries(_TI_FIELDS).forEach(([field, id]) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.wired) return;
+    el.dataset.wired = '1';
+    el.addEventListener('input', () => {
+      clearTimeout(_tiTimers[field]);
+      _tiTimers[field] = setTimeout(() => c3TiAutosave(field), 800);
+    });
+    el.addEventListener('blur', () => c3TiAutosave(field));
+  });
+}
+
 async function saveLabApiKeys() {
+  Object.keys(_tiTimers).forEach(k => clearTimeout(_tiTimers[k]));
   const abuseipdb_key  = document.getElementById('lab-abuseipdb-key').value.trim();
   const virustotal_key = document.getElementById('lab-virustotal-key').value.trim();
   if (backendUp) {
     try {
-      // Fetch current settings first -- /settings POST replaces the whole
-      // record (see core/main.py's save_settings()), so layers/whitelist/
-      // pw_home_url / gsb_key must be re-sent unchanged, not left to fall
-      // back to empty Pydantic defaults.
-      const current = await (await fetch(API + '/settings')).json();
-      const payload = { ...current, abuseipdb_key, virustotal_key };
-      await fetch(API + '/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      c3UpdateLabTiSub(payload);
-    } catch {}
+      const res = await c3TiPost({ abuseipdb_key, virustotal_key });
+      _tiSaved = { abuseipdb_key, virustotal_key };
+      c3UpdateLabTiSub(res);
+      c3TiStatus(true, '✓ Saved');
+    } catch (e) {
+      c3TiStatus(false, 'Not saved: ' + e.message);
+      return;
+    }
   }
   // Keep the main Settings panel's copy of the shared key in sync
   // (VirusTotal has no field there -- it lives only in Detection Lab).
@@ -7177,6 +7296,98 @@ async function saveLabApiKeys() {
     btn.textContent = '✓ Saved!';
     setTimeout(() => { btn.textContent = orig; }, 1800);
   }
+}
+
+// ── Detection Lab: ngrok authtoken (Real-World Beacon Test) ────
+// The backend keeps the token (settings.json) and never sends it back; the page
+// only learns "set / not set" plus the last four characters. Typing or pasting
+// into the field saves it automatically (debounced, and again on blur); an
+// empty field is NOT a clear -- only the Clear button removes a saved token.
+let _ngrokSaveTimer = null;
+let _ngrokSaveInflight = null;
+
+function c3NgrokAuthRender(st) {
+  const input = document.getElementById('lab-ngrok-authtoken');
+  const clr   = document.getElementById('lab-btn-clear-ngrok');
+  const note  = document.getElementById('lab-ngrok-note');
+  if (!input || !clr || !note) return;
+  const on = !!(st && st.configured);
+  clr.disabled = !on;
+  input.placeholder = on
+    ? '•'.repeat(24) + (st.hint ? ' ends ' + st.hint : '') + ' — paste a new one to replace'
+    : 'Paste your authtoken from dashboard.ngrok.com/get-started/your-authtoken';
+  note.innerHTML = on
+    ? '<span class="lab-ngrok-status" style="color:var(--safe)">Saved.</span> It stays saved until you press Clear.'
+    : '<span class="lab-ngrok-status" style="color:var(--warn)">Not saved.</span> Without it, ngrok falls back to its own config on this PC if it has one.';
+}
+
+async function c3NgrokAuthLoad() {
+  if (!backendUp) return;
+  try { c3NgrokAuthRender(await (await fetch(API + '/c3/ngrok-auth')).json()); } catch {}
+}
+
+async function c3NgrokAuthSave() {
+  clearTimeout(_ngrokSaveTimer);
+  const input = document.getElementById('lab-ngrok-authtoken');
+  const note  = document.getElementById('lab-ngrok-note');
+  if (!input || !backendUp) return;
+  const token = input.value.trim();
+  if (!token) return;                    // empty never clears; see Clear button
+  const run = (async () => {
+    try {
+      const r = await fetch(API + '/c3/ngrok-auth', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authtoken: token })
+      });
+      const body = await r.json();
+      if (!r.ok) {
+        note.innerHTML = '<span class="lab-ngrok-status" style="color:var(--danger)">Not saved.</span> ' +
+                         escapeHtml(body.detail || 'The backend rejected that token.');
+        return;
+      }
+      input.value = '';                  // the token now lives only in the backend
+      c3NgrokAuthRender(body);
+    } catch {
+      note.innerHTML = '<span class="lab-ngrok-status" style="color:var(--danger)">Not saved.</span> Could not reach the backend.';
+    }
+  })();
+  _ngrokSaveInflight = run;
+  await run;
+}
+
+async function c3NgrokAuthClear() {
+  clearTimeout(_ngrokSaveTimer);
+  const input = document.getElementById('lab-ngrok-authtoken');
+  if (input) input.value = '';
+  if (!backendUp) return;
+  try {
+    c3NgrokAuthRender(await (await fetch(API + '/c3/ngrok-auth', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authtoken: '' })
+    })).json());
+    showToast('ngrok authtoken cleared');
+  } catch {}
+}
+
+function c3NgrokAuthInit() {
+  const input = document.getElementById('lab-ngrok-authtoken');
+  if (!input || input.dataset.wired) return;
+  input.dataset.wired = '1';
+  input.addEventListener('input', () => {
+    clearTimeout(_ngrokSaveTimer);
+    _ngrokSaveTimer = setTimeout(c3NgrokAuthSave, 800);
+  });
+  input.addEventListener('blur', c3NgrokAuthSave);
+}
+
+// Run Test: runs the one in-app TC-03 case (c3_ngrok_beacon) in the Live Test
+// Runner, which streams each step and its pass/fail. A token typed a moment ago
+// is saved first so the test never starts without it.
+async function openC3BeaconTest() {
+  await c3NgrokAuthSave();
+  if (_ngrokSaveInflight) { try { await _ngrokSaveInflight; } catch {} }
+  document.querySelector('.nav-item[data-panel="tests"]').click();
+  _testsStart('c3', 'c3_ngrok_beacon');
 }
 
 function togVal(id) { return document.getElementById('tog-' + id).checked; }
@@ -10416,7 +10627,7 @@ function testsStop() {
   document.getElementById('tests-summary').textContent = 'Stopped';
 }
 
-function _testsStart(component) {
+function _testsStart(component, caseId) {
   if (_testsES) { _testsES.close(); _testsES = null; }
   if (_testsTimer) { clearInterval(_testsTimer); _testsTimer = null; }
 
@@ -10440,6 +10651,7 @@ function _testsStart(component) {
   }, 200);
 
   _testsES = new EventSource(API + '/dev/run_tests_stream?component=' + component +
+                             (caseId ? '&case=' + encodeURIComponent(caseId) : '') +
                              (_testsStepMode ? '&step=1' : ''));
 
   _testsES.onmessage = (e) => {
