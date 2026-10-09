@@ -124,3 +124,6 @@ models/archive/c3_ctu13_rf_ip_botnet_label_OBSOLETE.pkl
 
 # Installer build output
 .buildvenv/
+
+# ngrok authtoken for test_c3_real_world_beacon.bat (secret - never commit)
+test/C3/ngrok_authtoken.txt

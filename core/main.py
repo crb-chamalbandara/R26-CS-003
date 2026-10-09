@@ -264,6 +264,11 @@ _SETTINGS_DEFAULTS: dict = {
     "gsb_key": "",           # C2 Layer-5 phishing check (Google Safe Browsing)
     "abuseipdb_key": "",     # C3 reputation engine
     "virustotal_key": "",    # C3 reputation engine (replaced GSB here 2026-08-29)
+    # ngrok authtoken for C3's TC-03 (real-world beacon test). Saved by
+    # POST /c3/ngrok-auth, kept until cleared there, handed to ngrok through
+    # its NGROK_AUTHTOKEN env var only when that test starts a tunnel, and
+    # never returned by GET /settings or GET /c3/ngrok-auth.
+    "ngrok_authtoken": "",
     "pw_home_url": "",
     # C1 dynamic sandbox containment. "auto" picks the strongest backend the
     # machine can actually provide; naming one forces it (and reports a
@@ -290,12 +295,13 @@ def _load_settings() -> dict:
     except (FileNotFoundError, json.JSONDecodeError):
         return dict(_SETTINGS_DEFAULTS)
 
-def _save_settings(s: dict) -> None:
+def _save_settings(s: dict) -> bool:
     try:
         with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(s, f, indent=2)
+        return True
     except Exception:
-        pass
+        return False
 
 settings: dict = _load_settings()
 _c3_set_virustotal_key(settings.get("virustotal_key", ""))
@@ -325,8 +331,11 @@ class SettingsReq(BaseModel):
     layers: dict
     whitelist: List[str] = []
     gsb_key: str = ""            # C2 Layer-5 phishing check
-    abuseipdb_key: str = ""      # C3 reputation engine
-    virustotal_key: str = ""     # C3 reputation engine
+    # C3 reputation engine. None = "not sent": leave the saved key alone. Only
+    # an explicit string (even "") changes it -- panels that do not carry these
+    # fields (the main Settings page) used to reset both keys to empty here.
+    abuseipdb_key: Optional[str] = None
+    virustotal_key: Optional[str] = None
     pw_home_url: str = ""
     c1_isolation_backend: str = "auto"
     c1_sandbox_network: str = "unrestricted"
@@ -629,10 +638,16 @@ async def save_settings(req: SettingsReq):
                      "runtime_active_probe": req.runtime_active_probe})
     if req.weights:
         settings["weights"] = req.weights
+    # C3 threat-intel keys: saved to settings.json (so they survive a restart)
+    # and pushed to the C3 reputation engine, but only when this request
+    # actually carries them.
+    if req.abuseipdb_key is not None:
+        settings["abuseipdb_key"] = req.abuseipdb_key.strip()
+    if req.virustotal_key is not None:
+        settings["virustotal_key"] = req.virustotal_key.strip()
     _save_settings(settings)
-    # C3 threat-intel keys are held in the C3 modules, not the settings dict.
-    _c3_set_virustotal_key(req.virustotal_key)
-    _c3_set_abuseipdb_key(req.abuseipdb_key)
+    _c3_set_virustotal_key(settings.get("virustotal_key", ""))
+    _c3_set_abuseipdb_key(settings.get("abuseipdb_key", ""))
     # C1 re-applies its isolation backend / sandbox networking on every save.
     applied = _apply_sandbox_settings()
     return {"status": "saved", "sandbox": applied}
@@ -640,7 +655,76 @@ async def save_settings(req: SettingsReq):
 
 @app.get("/settings")
 async def get_settings():
-    return settings
+    # The ngrok authtoken is a credential for the user's ngrok account, so it
+    # is reported only as set/not-set, never echoed back to the page.
+    out = {k: v for k, v in settings.items() if k != "ngrok_authtoken"}
+    out["ngrok_authtoken_set"] = bool(settings.get("ngrok_authtoken"))
+    return out
+
+
+class NgrokAuthReq(BaseModel):
+    authtoken: str = ""          # empty string clears the saved token
+
+
+def _ngrok_auth_status() -> dict:
+    tok = str(settings.get("ngrok_authtoken") or "")
+    return {"configured": bool(tok), "hint": tok[-4:] if len(tok) >= 12 else ""}
+
+
+@app.get("/c3/ngrok-auth")
+async def c3_ngrok_auth_status():
+    """Whether an ngrok authtoken is saved (never the token itself)."""
+    return _ngrok_auth_status()
+
+
+@app.post("/c3/ngrok-auth")
+async def c3_ngrok_auth_save(req: NgrokAuthReq):
+    """Save (or, with an empty value, clear) the ngrok authtoken used by TC-03.
+
+    Persisted in settings.json alongside the other keys, so it survives a
+    restart and stays until it is cleared here.
+    """
+    token = (req.authtoken or "").strip()
+    if token and not _re.fullmatch(r"[A-Za-z0-9_\-]{20,200}", token):
+        raise HTTPException(status_code=422,
+                            detail="That does not look like an ngrok authtoken "
+                                   "(letters, digits, _ and - only, no spaces). "
+                                   "Copy it from dashboard.ngrok.com > Your Authtoken.")
+    settings["ngrok_authtoken"] = token
+    if not _save_settings(settings):
+        raise HTTPException(status_code=500, detail="Could not write settings.json, so the token was not saved.")
+    return _ngrok_auth_status()
+
+
+class C3TiKeysReq(BaseModel):
+    # None = leave that key as it is; a string (even "") replaces it.
+    abuseipdb_key: Optional[str] = None
+    virustotal_key: Optional[str] = None
+
+
+@app.post("/c3/ti-keys")
+async def c3_ti_keys_save(req: C3TiKeysReq):
+    """Save the C3 threat-intelligence keys (AbuseIPDB / VirusTotal).
+
+    Updates only the key(s) in the request, writes them to settings.json so they
+    stay until replaced, and applies them to the reputation engine immediately.
+    Unlike POST /settings this never touches any other setting.
+    """
+    for name, val in (("abuseipdb_key", req.abuseipdb_key), ("virustotal_key", req.virustotal_key)):
+        if val is None:
+            continue
+        val = val.strip()
+        if len(val) > 300 or any(ch.isspace() for ch in val):
+            raise HTTPException(status_code=422,
+                                detail=f"That {name.split('_')[0]} key has spaces or is far too long; "
+                                       f"paste just the key.")
+        settings[name] = val
+    if not _save_settings(settings):
+        raise HTTPException(status_code=500, detail="Could not write settings.json, so the key was not saved.")
+    _c3_set_abuseipdb_key(settings.get("abuseipdb_key", ""))
+    _c3_set_virustotal_key(settings.get("virustotal_key", ""))
+    return {"abuseipdb_key": bool(settings.get("abuseipdb_key")),
+            "virustotal_key": bool(settings.get("virustotal_key"))}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1936,9 +2020,9 @@ async def _tc_c3_ngrok_beacon():
         # than fails: a stock machine running "Run All Tests" should not go red
         # because ngrok was never installed.
         return {"detail": "not run: ngrok is not installed. Install it with "
-                          "'winget install Ngrok.Ngrok', then authenticate once with "
-                          "'ngrok config add-authtoken <your token>', and this case will "
-                          "deploy a real tunnelled beacon and check the threat-intel lookup."}
+                          "'winget install Ngrok.Ngrok', paste your authtoken in Detection Lab > "
+                          "Real-World Beacon Test, and this case will deploy a real tunnelled "
+                          "beacon and check the threat-intel lookup."}
     if not pw_session.is_running and not _session_starting:
         await session_start()
     for _ in range(120):
@@ -1948,7 +2032,7 @@ async def _tc_c3_ngrok_beacon():
     assert pw_session.is_running and c3_interceptor.running and c3_analyzer.running, \
         "C3 is not attached to a live browser session; restart the session from Settings"
 
-    server_proc = ngrok_proc = None
+    server_proc = ngrok_proc = ngrok_log = None
     host = url = None
     quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
              "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
@@ -1974,16 +2058,47 @@ async def _tc_c3_ngrok_beacon():
 
         await _step("Opening a public ngrok tunnel to it, so the beacon's destination is a real "
                     "address on the internet rather than this machine")
+        # Authentication: the token saved from Detection Lab (settings.json,
+        # via POST /c3/ngrok-auth) is handed to ngrok through its
+        # NGROK_AUTHTOKEN environment variable -- not on the command line,
+        # where any process listing would show it -- and takes precedence over
+        # whatever ngrok.yml holds. With none saved, ngrok falls back to its own
+        # config file (%LOCALAPPDATA%\ngrok\ngrok.yml, written by 'ngrok config
+        # add-authtoken') exactly as before. Its log is kept (not discarded) so
+        # a failure reports ngrok's own reason, not a guess.
+        ngrok_env = dict(os.environ)
+        saved_token = str(settings.get("ngrok_authtoken") or "").strip()
+        if saved_token:
+            ngrok_env["NGROK_AUTHTOKEN"] = saved_token
+        ngrok_log_path = os.path.join(tempfile.gettempdir(), "websentinel_c3_ngrok.log")
+        ngrok_log = open(ngrok_log_path, "w", encoding="utf-8", errors="replace")
         ngrok_proc = subprocess.Popen([ngrok_exe, "http", str(_C3_NGROK_PORT), "--log=stdout"],
-                                      cwd=_REPO_ROOT, **quiet)
+                                      cwd=_REPO_ROOT, env=ngrok_env,
+                                      stdout=ngrok_log, stderr=subprocess.STDOUT,
+                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         for _ in range(30):
             await asyncio.sleep(1)
             url = _c3_ngrok_public_url(_C3_NGROK_PORT)
-            if url:
+            if url or ngrok_proc.poll() is not None:
                 break
-        assert url, ("ngrok did not open a tunnel within 30 s. The usual causes are that it has "
-                     "not been authenticated ('ngrok config add-authtoken <your token>') or that "
-                     "another ngrok session is already running (the free plan allows one).")
+        if not url:
+            ngrok_log.flush()
+            try:
+                with open(ngrok_log_path, encoding="utf-8", errors="replace") as fh:
+                    log = fh.read()
+            except OSError:
+                log = ""
+            err = _re.search(r"(ERR_NGROK_\d+)", log)
+            why = _re.search(r'err="?([^"\r\n]{10,300})', log)
+            reason = (f"ngrok reported {err.group(1)}: {why.group(1) if why else 'see ' + ngrok_log_path}"
+                      if err else
+                      ("ngrok exited immediately; see " + ngrok_log_path if ngrok_proc.poll() is not None
+                       else "ngrok produced no tunnel and no error; see " + ngrok_log_path))
+            raise AssertionError(
+                f"ngrok did not open a tunnel. {reason}. Typical causes: no authtoken saved (paste it "
+                f"in Detection Lab > Real-World Beacon Test), an agent older than the account's "
+                f"minimum ('ngrok update'), or another ngrok session already running (the free plan "
+                f"allows one).")
         host = (_re.sub(r"^https?://", "", url)).strip("/")
         # A freshly registered tunnel can report itself up a second or two
         # before it actually carries traffic.
@@ -2089,6 +2204,11 @@ async def _tc_c3_ngrok_beacon():
                         proc.kill()
                 except Exception:
                     pass
+        if ngrok_log:
+            try:
+                ngrok_log.close()
+            except Exception:
+                pass
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2861,11 +2981,13 @@ _ALL_TEST_CASES = [
 
 
 @app.get("/dev/run_tests_stream")
-async def run_tests_stream_endpoint(component: str = "all", step: bool = False):
+async def run_tests_stream_endpoint(component: str = "all", step: bool = False, case: str = ""):
     """SSE stream: runs test cases one by one and emits results. With step=1,
-    cases narrate via _step() and pause until POST /dev/test_step."""
+    cases narrate via _step() and pause until POST /dev/test_step. `case`, when
+    given, narrows the run to that one case id (e.g. c3_ngrok_beacon)."""
     cases = [tc for tc in _ALL_TEST_CASES
-             if component == "all" or tc["component"] == component]
+             if (component == "all" or tc["component"] == component)
+             and (not case or tc["id"] == case)]
 
     async def generate():
         global _STEP_CTX
