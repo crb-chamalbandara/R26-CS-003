@@ -3361,6 +3361,20 @@ async def forensic_timeline(type: str = "all", flagged: bool = False, limit: int
     return {"status": "ok", "events": events[:limit]}
 
 
+@app.get("/forensic/linkchart")
+async def forensic_linkchart():
+    """Entity/relationship graph for the last C4 scan (built on the fly for scans
+    that pre-date the chart)."""
+    result = get_last_result()
+    if not result:
+        return {"status": "no_data", "link_chart": None}
+    graph = result.get("link_chart")
+    if graph is None:
+        from .c4.linkchart import build_link_chart
+        graph = build_link_chart(result)
+    return {"status": "ok", "link_chart": graph}
+
+
 @app.get("/forensic/mitre")
 async def forensic_mitre():
     result = get_last_result()

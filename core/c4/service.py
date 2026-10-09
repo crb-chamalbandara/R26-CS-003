@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from .correlation import run_correlation
+from .linkchart import build_link_chart
 from .extractor import get_chrome_path, run_extraction
 from .mitre import run_mitre_mapping
 from .reporter import generate_html_report, generate_siem_export, save_all_outputs
@@ -63,6 +64,11 @@ def run_forensic_analysis(
         "correlation": correlation,
         "mitre_result": mitre_result,
     }
+
+    try:
+        result["link_chart"] = build_link_chart(result)
+    except Exception as exc:   # the chart is an extra view; it must never fail a scan
+        print(f"[C4] link chart not built: {exc}")
 
     if save_outputs:
         result["output_paths"] = save_all_outputs(result, OUTPUT_DIR)

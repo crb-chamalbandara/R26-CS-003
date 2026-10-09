@@ -7,6 +7,7 @@ Stage 5 — Generate outputs
 import json, os
 from datetime import datetime
 from html import escape
+from .linkchart import build_link_chart, render_svg
 
 TYPE_COLORS = {
     "history":    ("#E6F1FB","#0C447C"),
@@ -89,6 +90,12 @@ tr:last-child td{border-bottom:none}
 .ttime{color:var(--mut);font-size:11px}
 .treason{font-size:11.5px;color:var(--mut);margin-top:4px}
 .empty{padding:16px 20px;color:var(--mut)}
+.lc-wrap{padding:12px 16px 16px}
+.lc-svg{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--card2);color:var(--mut)}
+.lc-l{fill:var(--soft);font-size:11px;font-family:inherit;paint-order:stroke;stroke:var(--card2);stroke-width:3px}
+.lc-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:11px;color:var(--mut)}
+.lc-legend i{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:-1px}
+.lc-note{margin-top:8px;font-size:11px;color:var(--mut)}
 .footer{text-align:center;font-size:11px;color:var(--mut);margin-top:30px;padding-bottom:22px}
 @media (max-width:760px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
 @media print{:root{--bg:#fff}body{background:#fff}.header{box-shadow:none}.section{break-inside:avoid}}
@@ -171,6 +178,29 @@ def generate_html_report(result):
           {f"<div class='treason'>{_esc(reasons[:140])}</div>" if reasons else ""}
         </div></div>"""
 
+    link_chart_html = ""
+    try:
+        graph = result.get("link_chart") or build_link_chart(result)
+        svg = render_svg(graph)
+        if svg:
+            st = graph.get("stats", {})
+            shown = min(60, st.get("nodes", 0))
+            note = (f"Showing the {shown} highest-risk of {st.get('nodes', 0)} entities. "
+                    if st.get("nodes", 0) > shown else "")
+            link_chart_html = (
+                '<div class="section"><div class="section-header">Link Chart</div><div class="lc-wrap">'
+                f'{svg}<div class="lc-legend">'
+                '<span><i style="background:#10b981;border-radius:50%"></i>Domain</span>'
+                '<span><i style="background:#7e98b8;border-radius:3px"></i>File</span>'
+                '<span><i style="background:#7e98b8;transform:rotate(45deg) scale(.8)"></i>Account</span>'
+                '<span><i style="background:#f04747"></i>Attack chain / exfiltration link</span>'
+                '<span><i style="background:#f5a623"></i>Flagged link</span>'
+                '<span>Colour = risk (green low, amber medium, red high)</span></div>'
+                f'<div class="lc-note">{note}Open the dashboard Link Chart to explore every entity interactively.</div>'
+                '</div></div>')
+    except Exception:
+        link_chart_html = ""
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -212,6 +242,8 @@ def generate_html_report(result):
   </div>
 
   {f'<div class="section"><div class="section-header">Attack Chains</div><div class="pad">{chain_html}</div></div>' if chain_html else ''}
+
+  {link_chart_html}
 
   <div class="section">
     <div class="section-header">Artifact Manifest</div>
