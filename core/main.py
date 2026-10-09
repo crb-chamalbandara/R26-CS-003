@@ -9,6 +9,8 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 import json, tempfile, subprocess, time as _time, re as _re
+import base64 as _b64, contextvars, io as _io
+from urllib.parse import urlparse
 from datetime import datetime
 from typing import List, Optional, Set
 
@@ -41,7 +43,7 @@ from .c2.layer3_visual     import check_visual, HAS_HASHES as _L3_HAS_HASHES
 from .c2.layer4_form       import check_form
 from .c2.layer5_reputation import check_reputation, aclose as _reputation_aclose
 from .c2.layer6_runtime    import check_runtime
-from .c2.verified_domains  import is_verified
+from .c2.verified_domains  import is_verified, registered_domain as _c2_registered_domain, _is_shared_host as _c2_is_shared_host
 from .c2.alert_store       import c2_alert_store
 from .c2.reporter          import (generate_html_report as _c2_generate_html_report,
                                    generate_csv         as _c2_generate_csv,
@@ -283,6 +285,7 @@ _SETTINGS_DEFAULTS: dict = {
     "verdict_phishing": 60,          # risk_score >= this -> PHISHING
     "runtime_active_probe": False,   # L6: actively probe password field for keyloggers
     "phishtank_enabled": True,       # L5: query the PhishTank public feed (off = GSB only)
+    "live_preview": True,            # C2 Live Analysis: send a small page thumbnail with each result
 }
 
 def _load_settings() -> dict:
@@ -346,6 +349,7 @@ class SettingsReq(BaseModel):
     verdict_suspicious: int = 30
     verdict_phishing: int = 60
     runtime_active_probe: bool = False
+    live_preview: bool = True
 
 class ExtensionAnalyzeReq(BaseModel):
     manifest: str
@@ -406,6 +410,62 @@ async def health():
 #  C2 — BitB Phishing Detection
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ── C2 Live Analysis: progress events + plain-English reasons ────────────────
+# _pw_nav_handler() sets this for the tab it is analysing; analyze() reads it so
+# each detection layer can report the moment it finishes. Direct /analyze calls
+# (tests, the REST API) leave it unset and behave exactly as before.
+_c2_live_ctx: contextvars.ContextVar = contextvars.ContextVar("c2_live_ctx", default=None)
+_C2_WARN_LINE = 0.28   # layer score at which the UI shows a layer as "warn"
+
+
+async def _c2_emit_layer(lid: str, lname: str, res) -> None:
+    """Broadcast one finished layer to the live view. Never raises."""
+    ctx = _c2_live_ctx.get()
+    if not ctx:
+        return
+    try:
+        if isinstance(res, BaseException):
+            row = {"id": lid, "name": lname, "score": 0.0, "detail": f"Error: {res}"}
+        else:
+            row = {"id": lid, "name": lname,
+                   "score": round(float(res.get("score", 0.0)), 4),
+                   "detail": res.get("detail", "")}
+        await _broadcast({"type": "c2_layer", "tab_id": ctx["tab_id"],
+                          "url": ctx["url"], "layer": row})
+    except Exception:
+        pass
+
+
+def _c2_build_reasons(layers: list, verdict: str, fusion: Optional[dict] = None,
+                      verified: bool = False) -> List[str]:
+    """Top reasons for a verdict, in plain English, for the live card."""
+    if verified and not layers:
+        return ["Verified domain: the heuristic layers were skipped and no reputation feed flagged it"]
+    ranked = sorted((l for l in layers if float(l.get("score") or 0) >= _C2_WARN_LINE),
+                    key=lambda l: float(l.get("score") or 0), reverse=True)
+    out: List[str] = []
+    for l in ranked[:3]:
+        pct = round(float(l.get("score") or 0) * 100)
+        name = l.get("name") or l.get("id") or "Layer"
+        detail = str(l.get("detail") or "").strip()
+        out.append(f"{name} ({pct}%): {detail[:140]}" if detail else f"{name} flagged this page at {pct}%")
+    floor = (fusion or {}).get("floor_applied")
+    if floor:
+        pre, fin = (fusion or {}).get("pre_floor_risk"), (fusion or {}).get("final_risk")
+        if pre is not None and fin is not None:
+            out.append(f"A hard rule raised the verdict to {floor.upper()} "
+                       f"(weighted score {float(pre):.0f} became {float(fin):.0f})")
+        else:
+            out.append(f"A hard rule raised the verdict to {str(floor).upper()}")
+    if out and verdict == "SAFE":
+        # A strong single signal on a page that still scored SAFE would otherwise
+        # read as a contradiction in the live card.
+        out.insert(0, "Some signals fired, but the combined risk stayed below the suspicious threshold")
+    if not out:
+        out.append("No detection layer exceeded the warning line")
+    return out
+
+
 @app.post("/analyze")
 async def analyze(req: AnalyzeReq):
     url = req.url
@@ -442,11 +502,13 @@ async def analyze(req: AnalyzeReq):
             result = {"url": url, "verdict": "PHISHING", "risk_score": risk_score,
                       "layers": [{k: v for k, v in l5_row.items() if k != "evidence"}],
                       "verified": True,
+                      "reasons": _c2_build_reasons([l5_row], "PHISHING", None, verified=True),
                       "timestamp": timestamp}
             stored_layers = [l5_row]
         else:
             result = {"url": url, "verdict": "VERIFIED", "risk_score": 0.0,
                       "layers": [], "verified": True,
+                      "reasons": _c2_build_reasons([], "VERIFIED", None, verified=True),
                       "timestamp": timestamp}
             stored_layers = []
 
@@ -480,7 +542,17 @@ async def analyze(req: AnalyzeReq):
 
     # Run all layers concurrently: CPU layers (L1/L2/L3) run in worker threads while the
     # L5 network lookup overlaps — order is preserved from layer_jobs for the result rows.
-    outcomes = await asyncio.gather(*(coro for _, _, coro in layer_jobs), return_exceptions=True)
+    async def _run_layer(lid, lname, coro):
+        try:
+            res = await coro
+        except BaseException as exc:          # report, then re-raise for gather()
+            await _c2_emit_layer(lid, lname, exc)
+            raise
+        await _c2_emit_layer(lid, lname, res)
+        return res
+
+    outcomes = await asyncio.gather(*(_run_layer(lid, lname, coro) for lid, lname, coro in layer_jobs),
+                                    return_exceptions=True)
     for (lid, lname, _), res in zip(layer_jobs, outcomes):
         if isinstance(res, Exception):
             layer_results.append({"id": lid, "name": lname, "score": 0.0,
@@ -517,7 +589,9 @@ async def analyze(req: AnalyzeReq):
                      for lr in layer_results]
     timestamp = datetime.now().isoformat()
     result = {"url": url, "verdict": verdict, "risk_score": risk_score,
-              "layers": public_layers, "timestamp": timestamp}
+              "layers": public_layers,
+              "reasons": _c2_build_reasons(public_layers, verdict, fusion_breakdown),
+              "timestamp": timestamp}
 
     # Persist the full record (evidence + fusion reasoning) so it survives a
     # restart and can be opened, reported on and exported later. The in-memory
@@ -635,7 +709,8 @@ async def save_settings(req: SettingsReq):
                      "interstitial_enabled": req.interstitial_enabled,
                      "verdict_suspicious": req.verdict_suspicious,
                      "verdict_phishing": req.verdict_phishing,
-                     "runtime_active_probe": req.runtime_active_probe})
+                     "runtime_active_probe": req.runtime_active_probe,
+                     "live_preview": req.live_preview})
     if req.weights:
         settings["weights"] = req.weights
     # C3 threat-intel keys: saved to settings.json (so they survive a restart)
@@ -725,6 +800,39 @@ async def c3_ti_keys_save(req: C3TiKeysReq):
     _c3_set_virustotal_key(settings.get("virustotal_key", ""))
     return {"abuseipdb_key": bool(settings.get("abuseipdb_key")),
             "virustotal_key": bool(settings.get("virustotal_key"))}
+
+
+class WhitelistReq(BaseModel):
+    domain: str            # a hostname or a full URL
+    remove: bool = False   # True = undo a previous add
+
+
+@app.post("/c2/whitelist")
+async def c2_whitelist(req: WhitelistReq):
+    """Trust (or stop trusting) one host from the C2 Live Analysis card.
+
+    Stores the exact hostname, not the registered domain: analyze() matches the
+    whitelist by substring, so trusting 'login.example.com' must not silently
+    trust everything under a shared host like yolasite.com.
+    """
+    raw = (req.domain or "").strip()
+    host = (urlparse(raw if "://" in raw else "https://" + raw).hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if not host or "." not in host:
+        raise HTTPException(status_code=400, detail="That is not a valid host name")
+    reg = _c2_registered_domain(host)
+    if host == reg and _c2_is_shared_host(host, reg):
+        raise HTTPException(status_code=400,
+            detail=f"{host} is a shared hosting provider; trusting it would trust every site on it")
+    wl = [d for d in settings.get("whitelist", []) if d]
+    if req.remove:
+        wl = [d for d in wl if d.lower() != host]
+    elif host not in [d.lower() for d in wl]:
+        wl.append(host)
+    settings["whitelist"] = wl
+    _save_settings(settings)
+    return {"status": "removed" if req.remove else "added", "domain": host, "whitelist": wl}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3375,6 +3483,20 @@ async def forensic_timeline(type: str = "all", flagged: bool = False, limit: int
     return {"status": "ok", "events": events[:limit]}
 
 
+@app.get("/forensic/linkchart")
+async def forensic_linkchart():
+    """Entity/relationship graph for the last C4 scan (built on the fly for scans
+    that pre-date the chart)."""
+    result = get_last_result()
+    if not result:
+        return {"status": "no_data", "link_chart": None}
+    graph = result.get("link_chart")
+    if graph is None:
+        from .c4.linkchart import build_link_chart
+        graph = build_link_chart(result)
+    return {"status": "ok", "link_chart": graph}
+
+
 @app.get("/forensic/mitre")
 async def forensic_mitre():
     result = get_last_result()
@@ -3429,8 +3551,62 @@ def _needs_full_capture(url: str) -> bool:
     return not is_verified(url)
 
 
+def _c2_will_analyze(url: str) -> bool:
+    """True when analyze() will actually run layers or a reputation check on this URL."""
+    for prefix in ("about:", "chrome:", "devtools:", "electron:"):
+        if url.startswith(prefix):
+            return False
+    u = url.lower()
+    return not any(d and d.lower() in u for d in settings.get("whitelist", []))
+
+
+def _c2_layers_for(url: str) -> List[str]:
+    """Layer ids that will run for this URL (a verified domain only gets L5)."""
+    ly = settings["layers"]
+    ids = [f"L{i}" for i in range(1, 7) if ly.get(f"l{i}", True)]
+    return [i for i in ids if i == "L5"] if is_verified(url) else ids
+
+
+def _c2_make_thumbnail(shot_b64: str, width: int = 320) -> str:
+    """Downscale a page screenshot to a small JPEG data URI ('' on any failure)."""
+    try:
+        from PIL import Image
+        img = Image.open(_io.BytesIO(_b64.b64decode(shot_b64))).convert("RGB")
+        img.thumbnail((width, int(width * 0.75)))
+        buf = _io.BytesIO()
+        img.save(buf, format="JPEG", quality=55, optimize=True)
+        return "data:image/jpeg;base64," + _b64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return ""
+
+
+async def _c2_send_preview(page, tab_id: int, url: str, shot_b64: str = "") -> None:
+    """Send a small thumbnail of the analysed page to the live view. Memory only —
+    never written to the alert store."""
+    try:
+        if page.is_closed():
+            return
+        if not shot_b64:
+            shot_b64 = await pw_session.get_screenshot_b64(page)
+        if not shot_b64:
+            return
+        thumb = await asyncio.to_thread(_c2_make_thumbnail, shot_b64)
+        if thumb:
+            await _broadcast({"type": "c2_preview", "tab_id": tab_id, "url": url, "preview": thumb})
+    except Exception:
+        pass
+
+
 async def _pw_nav_handler(url: str, page=None) -> None:
     """C2 phishing analysis on every navigation. C1 runs on click, not navigation."""
+    _t0 = _time.perf_counter()
+    tab_id = pw_session.tab_id(page) if page is not None else 0
+    # Tell the live view straight away that this tab is being analysed, and let
+    # every layer report in as it finishes (see _c2_emit_layer in analyze()).
+    if _c2_will_analyze(url):
+        await _broadcast({"type": "c2_analysis_start", "tab_id": tab_id, "url": url,
+                          "layers": _c2_layers_for(url)})
+    _c2_live_ctx.set({"tab_id": tab_id, "url": url})
     c3_tagger.record_navigation(url)
     dom        = await pw_session.get_dom()
     screenshot = await pw_session.get_screenshot_b64()
@@ -3453,6 +3629,7 @@ async def _pw_nav_handler(url: str, page=None) -> None:
     title      = await pw_session.get_title(page)
     req        = AnalyzeReq(url=url, dom=dom, screenshot=screenshot, runtime=runtime)
     result     = await analyze(req)
+    result["duration_ms"] = round((_time.perf_counter() - _t0) * 1000)
     # If the tab was closed while this analysis was in flight, don't emit a stale card.
     if page is not None:
         try:
@@ -3464,6 +3641,9 @@ async def _pw_nav_handler(url: str, page=None) -> None:
         result["title"]  = title
     await _broadcast({"type": "analysis",   "data": result})
     await _broadcast({"type": "url_change", "url": url, "title": title})
+    # The thumbnail follows as its own message so it never delays the verdict.
+    if page is not None and settings.get("live_preview", True) and result.get("verdict") not in ("SKIP", "WHITELISTED"):
+        asyncio.create_task(_c2_send_preview(page, tab_id, url, screenshot))
 
     # Threshold-driven in-browser interstitial (warning / blocking + continue) — on the
     # tab that navigated, so it never leaks onto another tab.

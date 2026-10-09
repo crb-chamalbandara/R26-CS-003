@@ -91,6 +91,59 @@ def _evidence_table(evidence: dict) -> str:
     return "".join(out) or '<p class="none">No evidence recorded for this layer.</p>'
 
 
+_REPORT_CSS = """
+  *{box-sizing:border-box}
+  :root{--bg:#eef2f8;--card:#ffffff;--card2:#f6f9fc;--line:#dbe4ef;--ink:#0d1a2b;--soft:#33495f;
+        --mut:#5d7288;--acc:#2563eb;--chip-bg:#fef2f2;--chip-bd:#fecaca;--chip-fg:#b91c1c;--lid:#0d1a2b}
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#070d18;--card:#0e1828;--card2:#0a1220;--line:#1f3250;--ink:#e8f1ff;--soft:#a8c0dc;
+          --mut:#7e98b8;--acc:#4d8ef8;--chip-bg:rgba(240,71,71,.12);--chip-bd:rgba(240,71,71,.35);
+          --chip-fg:#fca5a5;--lid:#2a4470}}
+  body{font-family:'Plus Jakarta Sans','Segoe UI Variable','Segoe UI',-apple-system,Roboto,Helvetica,Arial,sans-serif;
+       margin:0;padding:32px 20px;background:var(--bg);color:var(--ink);line-height:1.55}
+  .wrap{max-width:960px;margin:0 auto;background:var(--card);border:1px solid var(--line);
+        border-radius:16px;padding:30px 34px;box-shadow:0 10px 34px rgba(15,23,42,.10)}
+  h1{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
+  .sub-hdr{font-size:12px;color:var(--mut);margin-bottom:22px}
+  .top{display:flex;align-items:center;gap:24px;border:1px solid var(--line);border-radius:14px;
+       padding:18px 22px;margin-bottom:26px;
+       background:linear-gradient(135deg,color-mix(in srgb,var(--vc) 12%,var(--card2)),var(--card2))}
+  .score{font-size:46px;font-weight:800;color:var(--vc);line-height:1;letter-spacing:-.02em}
+  .unit{font-size:10px;color:var(--mut);letter-spacing:.08em;margin-top:2px}
+  .when{font-size:11px;color:var(--mut);margin-top:6px}
+  .verdict{display:inline-block;padding:5px 14px;border-radius:999px;color:#fff;
+           font-weight:700;font-size:12px;letter-spacing:.05em;background:var(--vc)}
+  .url{font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;font-size:13px;word-break:break-all}
+  h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);
+     margin:28px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+  .path{display:flex;flex-wrap:wrap;align-items:center;gap:0;margin-bottom:6px}
+  .pnode{display:flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--line);
+         border-radius:10px;background:var(--card2);position:relative;margin-right:22px}
+  .pnode:not(:last-child)::after{content:"";position:absolute;right:-22px;top:50%;width:22px;height:2px;background:var(--line)}
+  .pdot{width:9px;height:9px;border-radius:50%}
+  .pid{font-weight:800;font-size:11.5px}
+  .pval{font-weight:800;font-size:12px;font-variant-numeric:tabular-nums}
+  .layer{border:1px solid var(--line);border-radius:12px;padding:15px 18px;margin-bottom:12px;background:var(--card2)}
+  .lhead{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .lid{font-weight:800;font-size:12px;background:var(--lid);color:#fff;padding:2px 9px;border-radius:6px}
+  .lname{font-weight:600;font-size:13px;flex:1}
+  .lscore{font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
+  .bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden}
+  .fill{height:100%;border-radius:4px}
+  .detail{font-size:12.5px;color:var(--soft);margin:10px 0 4px}
+  .sub{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;margin:13px 0 6px}
+  table.kv{width:100%;border-collapse:collapse;font-size:12px}
+  table.kv td{border:1px solid var(--line);padding:5px 10px;vertical-align:top;color:var(--soft)}
+  table.kv td:first-child{width:38%;color:var(--mut);font-family:'JetBrains Mono',ui-monospace,Consolas,monospace}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chip{background:var(--chip-bg);border:1px solid var(--chip-bd);color:var(--chip-fg);
+        padding:2px 10px;border-radius:999px;font-size:11px}
+  .none{font-size:12px;color:var(--mut);font-style:italic;margin:6px 0 0}
+  footer{margin-top:28px;padding-top:13px;border-top:1px solid var(--line);font-size:11px;color:var(--mut)}
+  @media print{:root{--bg:#fff}body{background:#fff;padding:0}.wrap{border:none;box-shadow:none}}
+"""
+
+
 def generate_html_report(alert: dict) -> str:
     """Standalone HTML report for one alert. Self-contained and print-friendly —
     no external CSS, fonts or images, so it can be saved, emailed or attached to
@@ -110,11 +163,16 @@ def generate_html_report(alert: dict) -> str:
     ordered += [l for l in layers if str(l.get("id")) not in _LAYER_ORDER]
 
     layer_blocks = []
+    path_nodes = []
     for l in ordered:
         lid   = str(l.get("id") or "")
         score = float(l.get("score") or 0.0)
         pct   = round(score * 100)
         bar   = "#dc2626" if pct > 60 else "#d97706" if pct > 28 else "#059669"
+        path_nodes.append(
+            f'<div class="pnode"><span class="pdot" style="background:{bar}"></span>'
+            f'<span class="pid">{escape(lid)}</span>'
+            f'<span class="pval" style="color:{bar}">{pct}%</span></div>')
         layer_blocks.append(f"""
         <section class="layer">
           <div class="lhead">
@@ -140,57 +198,25 @@ def generate_html_report(alert: dict) -> str:
 <html lang="en"><head><meta charset="utf-8">
 <title>WebSentinel C2 Report — {escape(url[:80])}</title>
 <style>
-  *{{box-sizing:border-box}}
-  body{{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-       margin:0;padding:32px;background:#f8fafc;color:#0f172a;line-height:1.5}}
-  .wrap{{max-width:960px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;
-        border-radius:12px;padding:28px 32px}}
-  h1{{font-size:19px;margin:0 0 4px}}
-  .sub-hdr{{font-size:12px;color:#64748b;margin-bottom:20px}}
-  .verdict{{display:inline-block;padding:5px 14px;border-radius:999px;color:#fff;
-           font-weight:700;font-size:12px;letter-spacing:.04em;background:{colour}}}
-  .score{{font-size:40px;font-weight:800;color:{colour};line-height:1}}
-  .top{{display:flex;align-items:center;gap:22px;border:1px solid #e2e8f0;
-       border-radius:10px;padding:16px 20px;margin-bottom:24px;background:#f8fafc}}
-  .url{{font-family:ui-monospace,Consolas,monospace;font-size:13px;word-break:break-all}}
-  h2{{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#475569;
-     margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}}
-  .layer{{border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:12px}}
-  .lhead{{display:flex;align-items:center;gap:10px;margin-bottom:8px}}
-  .lid{{font-weight:800;font-size:12px;background:#0f172a;color:#fff;
-       padding:2px 8px;border-radius:5px}}
-  .lname{{font-weight:600;font-size:13px;flex:1}}
-  .lscore{{font-weight:800;font-size:14px}}
-  .bar{{height:6px;background:#e2e8f0;border-radius:4px;overflow:hidden}}
-  .fill{{height:100%}}
-  .detail{{font-size:12.5px;color:#334155;margin:9px 0 4px}}
-  .sub{{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
-       color:#64748b;font-weight:700;margin:12px 0 5px}}
-  table.kv{{width:100%;border-collapse:collapse;font-size:12px}}
-  table.kv td{{border:1px solid #e2e8f0;padding:4px 9px;vertical-align:top}}
-  table.kv td:first-child{{width:38%;color:#475569;font-family:ui-monospace,Consolas,monospace}}
-  .chips{{display:flex;flex-wrap:wrap;gap:5px}}
-  .chip{{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;
-        padding:2px 9px;border-radius:999px;font-size:11px}}
-  .none{{font-size:12px;color:#94a3b8;font-style:italic;margin:6px 0 0}}
-  footer{{margin-top:26px;padding-top:12px;border-top:1px solid #e2e8f0;
-         font-size:11px;color:#94a3b8}}
-  @media print{{body{{background:#fff;padding:0}}.wrap{{border:none}}}}
+{_REPORT_CSS}
 </style></head>
 <body><div class="wrap">
   <h1>C2 &mdash; Phishing / BitB Analysis Report</h1>
   <div class="sub-hdr">WebSentinel &middot; generated {escape(generated)}
     {f'&middot; alert #{escape(str(alert_id))}' if alert_id is not None else ''}</div>
 
-  <div class="top">
+  <div class="top" style="--vc:{colour}">
     <div><div class="score">{risk:.0f}</div>
-         <div style="font-size:10px;color:#64748b;letter-spacing:.06em">RISK / 100</div></div>
+         <div class="unit">RISK / 100</div></div>
     <div style="flex:1;min-width:0">
       <span class="verdict">{escape(verdict)}</span>
       <div class="url" style="margin-top:8px">{escape(url)}</div>
-      <div style="font-size:11px;color:#64748b;margin-top:5px">Analysed {escape(timestamp)}</div>
+      <div class="when">Analysed {escape(timestamp)}</div>
     </div>
   </div>
+
+  <h2>Detection path</h2>
+  <div class="path">{''.join(path_nodes) if path_nodes else '<p class="none">No layers ran for this alert.</p>'}</div>
 
   <h2>Detection layers</h2>
   {''.join(layer_blocks) if layer_blocks else '<p class="none">No layers ran for this alert.</p>'}
