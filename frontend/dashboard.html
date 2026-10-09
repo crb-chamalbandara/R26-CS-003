@@ -21,7 +21,7 @@
   --c2:#4d8ef8;--c2b:rgba(77,142,248,.11);
   --c1:#9165f7;--c1b:rgba(145,101,247,.11);
   --c3:#f5a623;--c3b:rgba(245,166,35,.11);
-  --c4:#10b981;--c4b:rgba(16,185,129,.11);
+  --c4:#10b981;--c4b:rgba(16,185,129,.11);--c4-rgb:16,185,129;--c2-rgb:77,142,248;
   --danger:#f04747;--warn:#f5a623;--safe:#10b981;
   --danger-bg:rgba(240,71,71,.1);--warn-bg:rgba(245,166,35,.1);--safe-bg:rgba(16,185,129,.1);
   --radius:8px;--radius-lg:12px;--radius-xl:16px;
@@ -50,7 +50,7 @@
   --c2:#2563eb;--c2b:rgba(37,99,235,.09);
   --c1:#7c3aed;--c1b:rgba(124,58,237,.09);
   --c3:#b45309;--c3b:rgba(180,83,9,.09);
-  --c4:#047857;--c4b:rgba(4,120,87,.09);
+  --c4:#047857;--c4b:rgba(4,120,87,.09);--c4-rgb:4,120,87;--c2-rgb:37,99,235;
   --danger:#c81e1e;--warn:#b45309;--safe:#047857;
   --danger-bg:rgba(200,30,30,.09);--warn-bg:rgba(180,83,9,.09);--safe-bg:rgba(4,120,87,.09);
   --shadow-sm:0 1px 3px rgba(15,23,42,.07);
@@ -290,14 +290,7 @@ input,textarea,select{font-family:inherit}
 .acard.suspicious{border-left-color:var(--warn)}
 .acard.phishing{border-left-color:var(--danger)}
 .acard:hover{border-color:var(--b2);box-shadow:var(--shadow-md)}
-.ahdr{display:flex;align-items:center;gap:8px;padding:10px 14px}
-.vbadge{font-size:9px;font-weight:700;padding:3px 8px;border-radius:5px;
-  text-transform:uppercase;letter-spacing:.07em;flex-shrink:0}
-.vbadge.safe{background:var(--safe-bg);color:var(--safe);border:1px solid rgba(16,185,129,.25)}
-.vbadge.suspicious{background:var(--warn-bg);color:var(--warn);border:1px solid rgba(245,166,35,.25)}
-.vbadge.phishing{background:var(--danger-bg);color:var(--danger);border:1px solid rgba(240,71,71,.25)}
 .acard.verified{border-left-color:var(--safe)}
-.acard:hover{border-color:var(--b2)}
 .ahdr{display:flex;align-items:center;gap:7px;padding:9px 12px}
 .vbadge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;
   text-transform:uppercase;letter-spacing:.06em;flex-shrink:0}
@@ -1798,10 +1791,16 @@ input,textarea,select{font-family:inherit}
 .c4-evtable td.mono{font-family:'Cascadia Code','Fira Code',Consolas,monospace;font-size:10px;
   color:var(--t1);word-break:break-all;max-width:340px}
 .c4-evtable td.dom{font-family:'Cascadia Code','Fira Code',Consolas,monospace;color:var(--c4);font-weight:700;white-space:nowrap}
+@media (max-width:1100px){
   .c4-toolbar{grid-template-columns:1fr 1fr}
   .c4-grid{grid-template-columns:repeat(4,1fr)}
   .c4-layout{grid-template-columns:1fr}
+  .c4-method-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  .c4-grid{grid-template-columns:repeat(2,1fr)}
   .c4-method-grid{grid-template-columns:1fr}
+}
 
 /* ── Tests panel ── */
 /* ── Live Test Runner ─────────────────────────────────────── */
@@ -2772,6 +2771,157 @@ input,textarea,select{font-family:inherit}
      which reads the same media query from JS - CSS cannot reach into a canvas. */
 }
 
+
+/* ==============================================================================
+   C2 + C4 - MODERN UI (matches the C3 glass look)
+   ------------------------------------------------------------------------------
+   Additive and scoped to #panel-c2 / #panel-c4. It is the last block in this stylesheet
+   so it wins on source order; deleting it restores the previous C2/C4 look.
+   Same surface recipe as C3 (translucent gradient, hairline border, inset
+   highlight) but with each panel keeping its own identity accent:
+   C2 = blue (--c2), C4 = green (--c4).
+   ============================================================================== */
+#panel-c2,#panel-c4{
+  --g-a:rgba(14,24,40,.74);--g-b:rgba(10,18,32,.80);
+  --g-brd:rgba(126,166,224,.13);
+  --g-shadow:0 6px 22px rgba(0,0,0,.34);
+  --g-inset:inset 0 1px 0 rgba(var(--tint),.045);
+  --mono:'JetBrains Mono','Cascadia Code','Fira Code',ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+:root[data-theme="light"] #panel-c2,
+:root[data-theme="light"] #panel-c4{
+  --g-a:rgba(255,255,255,.88);--g-b:rgba(244,248,252,.94);
+  --g-brd:rgba(15,23,42,.1);--g-shadow:0 6px 18px rgba(15,23,42,.09);
+}
+#panel-c2{--acc:var(--c2);--acc-rgb:var(--c2-rgb)}
+#panel-c4{--acc:var(--c4);--acc-rgb:var(--c4-rgb)}
+
+/* -- shared surfaces ------------------------------------------------------- */
+#panel-c2 #stats,#panel-c2 #tabs{
+  background:linear-gradient(180deg,var(--g-a),var(--g-b));border-bottom:1px solid var(--g-brd)}
+#panel-c2 .sbox,#panel-c4 .c4-stat,#panel-c4 .c4-card,#panel-c4 .c4-toolbar,
+#panel-c2 .acard,#panel-c2 #live-current,#panel-c2 .c2h-row,#panel-c2 .c2h-bar,
+#panel-c2 .tl-overview,#panel-c2 .tl-lane{
+  background:linear-gradient(158deg,var(--g-a) 0%,var(--g-b) 100%);
+  border:1px solid var(--g-brd);border-radius:12px;box-shadow:var(--g-inset),var(--g-shadow)}
+#panel-c2 .acard{border-left-width:3px}
+#panel-c2 .acard.safe,#panel-c2 .acard.verified{border-left-color:var(--safe)}
+#panel-c2 .acard.suspicious{border-left-color:var(--warn)}
+#panel-c2 .acard.phishing{border-left-color:var(--danger)}
+#panel-c2 .sbox,#panel-c4 .c4-stat{transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+#panel-c2 .sbox:hover,#panel-c4 .c4-stat:hover,#panel-c2 .acard:hover{
+  transform:translateY(-2px);border-color:rgba(var(--acc-rgb),.45);
+  box-shadow:var(--g-inset),0 10px 26px rgba(0,0,0,.34),0 0 0 1px rgba(var(--acc-rgb),.10)}
+#panel-c2 .snum,#panel-c4 .c4-stat .num{font-size:24px;font-weight:800;letter-spacing:-.015em;
+  font-variant-numeric:tabular-nums lining-nums}
+#panel-c2 .slbl,#panel-c4 .c4-stat .lbl{font-size:9.5px;letter-spacing:.08em;color:var(--t1);font-weight:600}
+#panel-c2 .aurl,#panel-c2 .turl,#panel-c2 .c2h-url,#panel-c4 .c4-row-title{font-family:var(--mono)}
+#panel-c2 .atime,#panel-c2 .lval,#panel-c2 .rbar-val{font-variant-numeric:tabular-nums}
+
+/* -- tabs ------------------------------------------------------------------ */
+#panel-c2 .tab,#panel-c4 .c4-atab{font-size:11.5px;font-weight:600;letter-spacing:.01em;border-radius:8px 8px 0 0}
+#panel-c2 .tab.active,#panel-c4 .c4-atab.active{
+  color:var(--acc);border-bottom-color:var(--acc);
+  background:linear-gradient(180deg,transparent,rgba(var(--acc-rgb),.09))}
+#panel-c2 .tab:focus-visible,#panel-c4 .c4-atab:focus-visible,
+#panel-c4 .c4-stat:focus-visible,#panel-c2 .acard:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* -- C4 specifics ---------------------------------------------------------- */
+#panel-c4 .c4-card-h{border-bottom:1px solid var(--g-brd);
+  background:linear-gradient(90deg,rgba(var(--acc-rgb),.07),transparent 60%)}
+#panel-c4 .c4-body{padding:14px 16px}
+/* Cards in this fixed-height column must scroll the body, never shrink to fit. */
+#panel-c4 .c4-body>*{flex-shrink:0}
+#panel-c4 .c4-grid{gap:9px}
+#panel-c4 .c4-stat{padding:11px 12px 10px;position:relative;overflow:hidden}
+#panel-c4 .c4-stat::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:linear-gradient(90deg,rgba(var(--acc-rgb),.55),transparent)}
+#panel-c4 .c4-atable th{background:rgba(var(--tint),.035)}
+#panel-c4 .c4-atable tr:hover td{background:rgba(var(--acc-rgb),.05)}
+
+/* -- C2 detection timeline ------------------------------------------------- */
+#panel-c2 .tl-wrap{display:flex;flex-direction:column;gap:12px;width:100%}
+#panel-c2 .tl-overview{padding:12px 14px}
+#panel-c2 .tl-ov-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+#panel-c2 .tl-ov-title{font-size:12px;font-weight:700;color:var(--t0)}
+#panel-c2 .tl-ov-legend{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--t2)}
+#panel-c2 .tl-ov-legend i{width:8px;height:8px;border-radius:50%;display:inline-block;margin-left:8px}
+#panel-c2 .tl-strip{display:flex;align-items:flex-end;gap:3px;height:54px}
+#panel-c2 .tl-tick{flex:1;min-width:3px;max-width:14px;border-radius:3px 3px 1px 1px;opacity:.9;
+  transition:opacity .15s,transform .15s}
+#panel-c2 .tl-tick:hover{opacity:1;transform:scaleY(1.06)}
+#panel-c2 .tl-lane{padding:12px 14px 6px}
+#panel-c2 .tl-lane-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+#panel-c2 .tl-lane-tab{font-size:12px;font-weight:700;color:var(--t0)}
+#panel-c2 .tl-lane-meta{font-size:10.5px;color:var(--t2)}
+#panel-c2 .tl-rail{position:relative;display:flex;flex-direction:column;gap:10px;padding-left:22px}
+#panel-c2 .tl-rail::before{content:"";position:absolute;left:6px;top:4px;bottom:10px;width:2px;
+  background:linear-gradient(180deg,rgba(var(--acc-rgb),.5),rgba(var(--acc-rgb),.06));border-radius:2px}
+#panel-c2 .tl-node{position:relative}
+#panel-c2 .tl-dot{position:absolute;left:-21px;top:12px;width:10px;height:10px;border-radius:50%}
+#panel-c2 .tl-card{background:rgba(var(--tint),.035);border:1px solid var(--g-brd);border-radius:10px;
+  padding:9px 12px;cursor:pointer;transition:border-color .15s,background .15s}
+#panel-c2 .tl-card:hover{border-color:rgba(var(--acc-rgb),.4);background:rgba(var(--acc-rgb),.05)}
+#panel-c2 .tl-first .tl-card{border-color:rgba(240,71,71,.45)}
+#panel-c2 .tl-row{display:flex;align-items:center;gap:10px}
+#panel-c2 .tl-url{flex:1;min-width:0;font-family:var(--mono);font-size:11px;color:var(--t1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c2 .tl-score{font-size:12px;font-weight:800;font-variant-numeric:tabular-nums}
+#panel-c2 .tl-time{font-size:10px;color:var(--t3);font-variant-numeric:tabular-nums}
+#panel-c2 .tl-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+#panel-c2 .tl-chip{font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:20px;
+  color:var(--chip,var(--t2));border:1px solid color-mix(in srgb,var(--chip,var(--t2)) 40%,transparent);
+  background:color-mix(in srgb,var(--chip,var(--t2)) 10%,transparent)}
+#panel-c2 .tl-chip-ok{--chip:var(--safe)}
+#panel-c2 .tl-chip-first{--chip:var(--danger)}
+#panel-c2 .tl-more{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--g-brd);
+  flex-direction:column;gap:6px}
+#panel-c2 .tl-node.open .tl-more{display:flex}
+#panel-c2 .tl-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+
+/* -- C4 attack timeline ---------------------------------------------------- */
+#panel-c4 .c4t-section{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--t2);margin:2px 0 10px}
+#panel-c4 .c4t-section:not(:first-child){margin-top:18px}
+#panel-c4 .c4t-chain{border:1px solid var(--g-brd);border-radius:10px;padding:10px 12px;margin-bottom:10px;
+  background:rgba(var(--tint),.03)}
+#panel-c4 .c4t-chain-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+#panel-c4 .c4t-chain-dom{font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--c4)}
+#panel-c4 .c4t-chain-desc{font-size:10.5px;color:var(--t2)}
+#panel-c4 .c4t-flow{display:flex;align-items:stretch;gap:6px;overflow-x:auto;padding-bottom:4px}
+#panel-c4 .c4t-arrow{align-self:center;color:var(--t3);font-size:14px}
+#panel-c4 .c4t-step{min-width:150px;max-width:230px;display:flex;flex-direction:column;gap:3px;padding:8px 10px;
+  border-radius:9px;border:1px solid color-mix(in srgb,var(--st) 40%,transparent);
+  background:color-mix(in srgb,var(--st) 9%,transparent)}
+#panel-c4 .c4t-step-type{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--st)}
+#panel-c4 .c4t-step-detail{font-size:10.5px;color:var(--t1);font-family:var(--mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c4 .c4t-step-time{font-size:9.5px;color:var(--t3)}
+#panel-c4 .c4t-rail{position:relative;display:flex;flex-direction:column;gap:8px;padding-left:22px}
+#panel-c4 .c4t-rail::before{content:"";position:absolute;left:6px;top:4px;bottom:8px;width:2px;border-radius:2px;
+  background:linear-gradient(180deg,rgba(var(--acc-rgb),.5),rgba(var(--acc-rgb),.06))}
+#panel-c4 .c4t-day{font-size:10px;font-weight:700;color:var(--t2);margin:6px 0 0}
+#panel-c4 .c4t-node{position:relative}
+#panel-c4 .c4t-dot{position:absolute;left:-21px;top:11px;width:10px;height:10px;border-radius:50%;background:var(--st);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--st) 22%,transparent)}
+#panel-c4 .c4t-card{background:rgba(var(--tint),.035);border:1px solid var(--g-brd);border-radius:10px;padding:8px 12px}
+#panel-c4 .c4t-row{display:flex;align-items:center;gap:10px}
+#panel-c4 .c4t-title{flex:1;min-width:0;font-family:var(--mono);font-size:11px;color:var(--t1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c4 .c4t-score{font-size:10.5px;font-weight:800;color:var(--warn);font-variant-numeric:tabular-nums}
+#panel-c4 .c4t-time{font-size:10px;color:var(--t3);font-variant-numeric:tabular-nums}
+#panel-c4 .c4t-reason{font-size:10.5px;color:var(--t2);margin-top:5px}
+
+/* -- responsive + motion --------------------------------------------------- */
+@media (max-width:900px){
+  #panel-c2 #stats{flex-wrap:wrap}
+  #panel-c2 #stats .sbox{flex:1 1 40%}
+  #panel-c2 .tl-ov-legend{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){
+  #panel-c2 *,#panel-c4 *{transition:none !important;animation:none !important}
+}
 </style>
 </head>
 <body>
@@ -3510,6 +3660,16 @@ input,textarea,select{font-family:inherit}
       </div>
     </div>
 
+    <div class="c4-card" id="c4-timeline-card">
+      <div class="c4-card-h">
+        <span>Attack Timeline</span>
+        <span class="c4-muted" style="font-weight:500">Flagged activity in order, with detected attack chains</span>
+      </div>
+      <div class="c4-card-b" id="c4-attack-timeline">
+        <div class="empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="emsg">Run a scan to build the timeline</div></div>
+      </div>
+    </div>
+
     <div class="c4-card">
       <div class="c4-card-h">
         <span>Correlation Methods</span>
@@ -3914,6 +4074,11 @@ function connectPwWs() {
       ingestResult(msg.data);
     } else if (msg.type === 'tab_closed') {
       closedTabs.add(msg.tab_id); delete liveTabs[msg.tab_id]; renderLiveTabs();
+    } else if (msg.type === 'forensic_analysis') {
+      // A scan finished (here or elsewhere): pull the full result without
+      // waiting for the 120 s poll. loadC4Report() passes the click event when
+      // used as a button handler, so the quiet flag must be an explicit true.
+      if (c4Loaded) loadC4Report(true);
     } else if (msg.type === 'c3_status' && msg.data) {
       ingestC3Status(msg.data);
     } else if (msg.type === 'c3_alert' && msg.data) {
@@ -6967,18 +7132,91 @@ function c2ExportLog(kind) {
 function renderTimeline() {
   const pane = document.getElementById('pane-timeline');
   document.getElementById('empty-timeline').style.display = timeline.length ? 'none' : 'flex';
-  pane.querySelectorAll('.titem').forEach(e => e.remove());
+  pane.querySelectorAll('.titem,.tl-wrap').forEach(e => e.remove());
+  if (!timeline.length) return;
+
+  const col = v => v === 'PHISHING' ? 'var(--danger)' : v === 'SUSPICIOUS' ? 'var(--warn)'
+                 : v === 'VERIFIED' ? 'var(--c2)' : 'var(--safe)';
+  const wrap = document.createElement('div');
+  wrap.className = 'tl-wrap';
+
+  // Overview strip: the last 60 verdicts, oldest to newest, bar height = risk.
+  const recent = timeline.slice(0, 60).reverse();
+  const strip = recent.map(a =>
+    `<span class="tl-tick" style="height:${Math.max(14, Math.round(a.risk_score || 0))}%;background:${col(a.verdict)}"
+       title="${esc(a.verdict)} ${Math.round(a.risk_score || 0)}% - ${esc(a.url)}"></span>`).join('');
+  const nP = timeline.filter(a => a.verdict === 'PHISHING').length;
+  const nS = timeline.filter(a => a.verdict === 'SUSPICIOUS').length;
+  wrap.insertAdjacentHTML('beforeend', `
+    <div class="tl-overview">
+      <div class="tl-ov-top">
+        <span class="tl-ov-title">Detection timeline</span>
+        <span class="tl-ov-legend">
+          <i style="background:var(--safe)"></i>Safe
+          <i style="background:var(--warn)"></i>Suspicious (${nS})
+          <i style="background:var(--danger)"></i>Phishing (${nP})
+        </span>
+      </div>
+      <div class="tl-strip">${strip}</div>
+    </div>`);
+
+  // One lane per browser tab. Inside a lane the pages visited run newest first;
+  // the oldest non-safe page is marked as where the threat first appeared.
+  const lanes = new Map();
   timeline.forEach(a => {
-    const col = a.verdict === 'PHISHING' ? 'var(--danger)' : a.verdict === 'SUSPICIOUS' ? 'var(--warn)' : 'var(--safe)';
-    const el = document.createElement('div'); el.className = 'titem';
-    el.innerHTML = `
-      <div class="tdot" style="background:${col}"></div>
-      <span class="turl" title="${esc(a.url)}">${esc(a.url)}</span>
-      <span class="tscore" style="color:${col}">${Math.round(a.risk_score)}%</span>
-      <span class="ttime">${esc(fmtTime(a.timestamp))}</span>`;
-    el.addEventListener('click', () => navigatePw(a.url));
-    pane.appendChild(el);
+    const k = a.tab_id != null ? a.tab_id : 0;
+    if (!lanes.has(k)) lanes.set(k, []);
+    lanes.get(k).push(a);
   });
+  [...lanes.entries()].slice(0, 8).forEach(([tab, items]) => {
+    const firstBad = [...items].reverse().find(a => a.verdict === 'PHISHING' || a.verdict === 'SUSPICIOUS');
+    const worst = items.some(a => a.verdict === 'PHISHING') ? 'PHISHING'
+                : items.some(a => a.verdict === 'SUSPICIOUS') ? 'SUSPICIOUS' : 'SAFE';
+    const lane = document.createElement('div');
+    lane.className = 'tl-lane';
+    lane.innerHTML = `<div class="tl-lane-hdr">
+        <span class="tl-lane-tab">Tab ${esc(tab)}</span>
+        <span class="tl-lane-meta">${items.length} page${items.length === 1 ? '' : 's'} analysed</span>
+        <span class="vbadge ${worst.toLowerCase()}" style="margin-left:auto">${worst}</span>
+      </div>
+      <div class="tl-rail"></div>`;
+    const rail = lane.querySelector('.tl-rail');
+    items.slice(0, 40).forEach(a => {
+      const c = col(a.verdict);
+      const fired = (a.layers || []).filter(l => l.score > 0.28);
+      const node = document.createElement('div');
+      node.className = 'tl-node' + (a === firstBad ? ' tl-first' : '');
+      node.innerHTML = `
+        <span class="tl-dot" style="background:${c};box-shadow:0 0 0 4px color-mix(in srgb, ${c} 22%, transparent)"></span>
+        <div class="tl-card">
+          <div class="tl-row">
+            <span class="tl-url" title="${esc(a.url)}">${esc(a.url)}</span>
+            <span class="tl-score" style="color:${c}">${Math.round(a.risk_score || 0)}%</span>
+            <span class="tl-time">${esc(fmtTime(a.timestamp))}</span>
+          </div>
+          <div class="tl-chips">
+            ${a === firstBad ? '<span class="tl-chip tl-chip-first">First detection</span>' : ''}
+            ${fired.length
+              ? fired.map(l => `<span class="tl-chip" style="--chip:${l.score > 0.6 ? 'var(--danger)' : 'var(--warn)'}">${esc(l.id)} ${Math.round(l.score * 100)}%</span>`).join('')
+              : '<span class="tl-chip tl-chip-ok">No layer fired</span>'}
+          </div>
+          <div class="tl-more">
+            ${(a.layers || []).map(layerHTML).join('')}
+            <div class="tl-actions">
+              ${a.id != null ? `<button class="c2h-xbtn tl-detail" data-alert-id="${esc(a.id)}">Details</button>` : ''}
+              <button class="c2h-xbtn tl-revisit">Revisit</button>
+            </div>
+          </div>
+        </div>`;
+      node.querySelector('.tl-card').addEventListener('click', () => node.classList.toggle('open'));
+      const d = node.querySelector('.tl-detail');
+      if (d) d.addEventListener('click', ev => { ev.stopPropagation(); openC2AlertModal(d.dataset.alertId); });
+      node.querySelector('.tl-revisit').addEventListener('click', ev => { ev.stopPropagation(); navigatePw(a.url); });
+      rail.appendChild(node);
+    });
+    wrap.appendChild(lane);
+  });
+  pane.appendChild(wrap);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -9421,12 +9659,12 @@ async function loadC4Debug() {
   }
 }
 
-async function loadC4Report() {
+async function loadC4Report(quiet) {
   try {
     const d = await (await fetch(API + '/forensic/report')).json();
     if (d.status === 'ok' && d.result) {
       renderC4Result(d.result, d.summary || {});
-      showToast('C4 report refreshed');
+      if (quiet !== true) showToast('C4 report refreshed');
     } else {
       await loadC4Debug();
     }
@@ -9652,6 +9890,7 @@ function renderC4Charts(result, summary) {
   const css = getComputedStyle(document.documentElement);
   const gridColor = css.getPropertyValue('--chart-grid').trim() || 'rgba(255,255,255,.08)';
   const textColor = css.getPropertyValue('--chart-text').trim() || '#94a3b8';
+  const c4rgb = css.getPropertyValue('--c4-rgb').trim() || '16,185,129';
 
   // Chart A — Artifact distribution doughnut
   const ctxA = document.getElementById('c4-chart-artifacts');
@@ -9664,7 +9903,7 @@ function renderC4Charts(result, summary) {
         labels: ['History','Downloads','Cookies','Credentials','Extensions'],
         datasets: [{
           data: counts,
-          backgroundColor: ['rgba(16,185,129,.75)','rgba(245,158,11,.75)','rgba(59,130,246,.75)','rgba(239,68,68,.75)','rgba(139,92,246,.75)'],
+          backgroundColor: [`rgba(${c4rgb},.75)`,'rgba(245,158,11,.75)','rgba(59,130,246,.75)','rgba(239,68,68,.75)','rgba(139,92,246,.75)'],
           borderColor: 'transparent',
           hoverOffset: 6,
         }]
@@ -9711,7 +9950,7 @@ function renderC4Charts(result, summary) {
       type: 'bar',
       data: {
         labels: hours.map(h => h + ':00'),
-        datasets: [{ data: hvals, backgroundColor: 'rgba(16,185,129,.6)', borderColor: 'transparent', borderRadius: 3 }]
+        datasets: [{ data: hvals, backgroundColor: `rgba(${c4rgb},.6)`, borderColor: 'transparent', borderRadius: 3 }]
       },
       options: {
         responsive: true, maintainAspectRatio: true,
@@ -9723,6 +9962,67 @@ function renderC4Charts(result, summary) {
       }
     });
   }
+}
+
+// ── Attack Timeline ───────────────────────────────────────────
+// Built from the last scan result: detected attack chains first (ordered
+// artifact steps on one domain), then every flagged event in time order.
+function renderC4Timeline(result) {
+  const box = document.getElementById('c4-attack-timeline');
+  if (!box) return;
+  const typeCol = { history: 'var(--c2)', download: 'var(--warn)', cookie: 'var(--c1)',
+                    credential: 'var(--danger)', extension: 'var(--c4)', session: 'var(--t1)' };
+  const colFor = t => typeCol[t] || 'var(--t2)';
+  const chains = ((result.correlation || {}).attack_chains || []).slice(0, 6);
+  const flagged = (result.events || []).filter(e => e.risk_flag)
+    .sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
+  if (!chains.length && !flagged.length) {
+    box.innerHTML = '<div class="empty"><div class="eicon">&#10003;</div><div class="emsg">No flagged activity in this profile</div></div>';
+    return;
+  }
+
+  const chainHtml = chains.map(ch => {
+    const steps = (ch.events || []).map((e, i) => `
+      ${i ? '<span class="c4t-arrow">&#8594;</span>' : ''}
+      <div class="c4t-step" style="--st:${colFor(e.artifact_type)}">
+        <span class="c4t-step-type">${escapeHtml(e.artifact_type || 'event')}</span>
+        <span class="c4t-step-detail" title="${escapeHtml(c4EventDetail(e))}">${escapeHtml(c4EventDetail(e))}</span>
+        <span class="c4t-step-time">${escapeHtml(fmtDateTime(e.timestamp))}</span>
+      </div>`).join('');
+    const sc = Number(ch.score || 0);
+    return `<div class="c4t-chain">
+      <div class="c4t-chain-h">
+        <span class="c4t-chain-dom">${escapeHtml(ch.domain || '')}</span>
+        <span class="c4t-chain-desc">${escapeHtml(ch.description || (ch.artifact_types || []).join(' -> '))}</span>
+        <span class="c4-pill" style="margin-left:auto;color:${sc >= 60 ? 'var(--danger)' : 'var(--warn)'}">Chain score ${sc}</span>
+      </div>
+      <div class="c4t-flow">${steps}</div>
+    </div>`;
+  }).join('');
+
+  let lastDay = '';
+  const evHtml = flagged.slice(-60).map(e => {
+    const day = String(e.timestamp || '').slice(0, 10);
+    const head = day !== lastDay ? `<div class="c4t-day">${escapeHtml(day || 'Unknown date')}</div>` : '';
+    lastDay = day;
+    const reasons = (e.anomaly_reasons || e.risk_reasons || []).slice(0, 2).join('; ');
+    return `${head}<div class="c4t-node" style="--st:${colFor(e.artifact_type)}">
+      <span class="c4t-dot"></span>
+      <div class="c4t-card">
+        <div class="c4t-row">
+          <span class="c4-pill type">${escapeHtml(e.artifact_type || 'event')}</span>
+          <span class="c4t-title" title="${escapeHtml(c4EventDetail(e))}">${escapeHtml(c4EventDetail(e))}</span>
+          <span class="c4t-score">Score ${Number(e.anomaly_score || 0)}</span>
+          <span class="c4t-time">${escapeHtml((String(e.timestamp || '').slice(11, 19)) || '')}</span>
+        </div>
+        ${reasons ? `<div class="c4t-reason">${escapeHtml(reasons)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  box.innerHTML = `${chainHtml ? `<div class="c4t-section">Detected attack chains</div>${chainHtml}` : ''}
+    <div class="c4t-section">Flagged events${flagged.length > 60 ? ` (latest 60 of ${flagged.length})` : ''}</div>
+    <div class="c4t-rail">${evHtml}</div>`;
 }
 
 // ── Activity Heatmap ──────────────────────────────────────────
@@ -9744,7 +10044,7 @@ function renderC4Heatmap(dayHourBaseline) {
     for (let h = 0; h < 24; h++) {
       const v = dayHourBaseline[`${d}_${h}`] || 0;
       const a = (v / maxVal * 0.85 + (v > 0 ? 0.1 : 0)).toFixed(2);
-      html += `<div class="c4-hm-cell" title="${DAYS[d]} ${h}:00 — ${v} visits" style="background:rgba(16,185,129,${a})"></div>`;
+      html += `<div class="c4-hm-cell" title="${DAYS[d]} ${h}:00 — ${v} visits" style="background:rgba(var(--c4-rgb),${a})"></div>`;
     }
   }
   html += '</div>';
@@ -9808,6 +10108,7 @@ function renderC4Result(result, summary = {}) {
   renderC4Findings(mitre.all_findings || []);
   renderC4Methods(result.correlation || {});
   renderC4Events((result.events || []).filter(e => e.risk_flag));
+  renderC4Timeline(result);
   renderC4Manifest(result.artifact_manifest || {});
   renderC4Warnings(result.warnings || []);
   renderC4Charts(result, summary);

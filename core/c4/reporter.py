@@ -6,6 +6,7 @@ Stage 5 — Generate outputs
 """
 import json, os
 from datetime import datetime
+from html import escape
 
 TYPE_COLORS = {
     "history":    ("#E6F1FB","#0C447C"),
@@ -21,6 +22,88 @@ SEV_COLORS = {"High":("#FCEBEB","#791F1F","#A32D2D"),
               "Low":("#EAF3DE","#27500A","#0F6E56")}
 
 # ─── HTML Report ────────────────────────────────────────────────────────────
+# Dot / chip colours for the timeline, as plain values so they work in both the
+# light and the dark theme of the report.
+_TL_COLORS = {
+    "history": "#4d8ef8", "download": "#f5a623", "cookie": "#9165f7",
+    "credential": "#f04747", "extension": "#10b981", "localstorage": "#14b8a6",
+    "session": "#ec4899",
+}
+_SEV_CHIP = {"High": "#f04747", "Medium": "#f5a623", "Low": "#10b981"}
+
+_REPORT_CSS = """
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#eef2f8;--card:#fff;--card2:#f6f9fc;--line:#dbe4ef;--ink:#0d1a2b;--soft:#33495f;--mut:#5d7288;
+      --acc:#047857;--hdr1:#0d1a2b;--hdr2:#13304a}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#070d18;--card:#0e1828;--card2:#0a1220;--line:#1f3250;--ink:#e8f1ff;--soft:#a8c0dc;
+        --mut:#7e98b8;--acc:#10b981;--hdr1:#0a1626;--hdr2:#0f2a3a}}
+body{font-family:'Plus Jakarta Sans','Segoe UI Variable','Segoe UI',-apple-system,sans-serif;
+     background:var(--bg);color:var(--ink);font-size:13px;line-height:1.55}
+.page{max-width:1100px;margin:0 auto;padding:32px 22px}
+.header{background:linear-gradient(135deg,var(--hdr1),var(--hdr2));color:#f4f8ff;border-radius:16px;
+        padding:28px 32px;margin-bottom:22px;box-shadow:0 10px 34px rgba(15,23,42,.18)}
+.header h1{font-size:21px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
+.header .meta{font-size:12px;color:#a9bdd6;line-height:1.9}
+.badge{display:inline-block;font-size:11px;padding:2px 11px;border-radius:20px;margin-right:6px;
+       background:rgba(255,255,255,.1);color:#d8e6f7;border:1px solid rgba(255,255,255,.14)}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+.stat-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+           border-top:3px solid var(--sc,var(--acc))}
+.stat-label{font-size:11px;color:var(--mut);margin-bottom:4px;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.stat-val{font-size:28px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.section{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:20px;overflow:hidden}
+.section-header{padding:14px 20px;border-bottom:1px solid var(--line);font-size:14px;font-weight:700;
+                background:linear-gradient(90deg,color-mix(in srgb,var(--acc) 9%,transparent),transparent 60%)}
+.pad{padding:16px 20px}
+table{width:100%;border-collapse:collapse}
+th{padding:9px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--mut);text-transform:uppercase;
+   letter-spacing:.06em;border-bottom:1px solid var(--line);background:var(--card2)}
+td{padding:9px 16px;border-bottom:1px solid var(--line);vertical-align:middle;color:var(--soft)}
+tr:last-child td{border-bottom:none}
+.mono{font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;font-size:11px}
+.chip{display:inline-block;font-size:10.5px;padding:2px 9px;border-radius:20px;font-weight:700;
+      color:var(--ch);border:1px solid color-mix(in srgb,var(--ch) 40%,transparent);
+      background:color-mix(in srgb,var(--ch) 11%,transparent)}
+.tl-title{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);margin:0 0 10px}
+.chain{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px;background:var(--card2)}
+.chain-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.chain-dom{font-weight:700;color:var(--acc)}
+.flow{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap}
+.arrow{align-self:center;color:var(--mut)}
+.step{min-width:150px;max-width:240px;padding:8px 11px;border-radius:10px;
+      border:1px solid color-mix(in srgb,var(--st) 45%,transparent);
+      background:color-mix(in srgb,var(--st) 10%,transparent)}
+.step b{display:block;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--st)}
+.step span{display:block;font-size:11px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail{position:relative;padding-left:24px}
+.rail::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;border-radius:2px;
+              background:linear-gradient(180deg,var(--acc),transparent)}
+.tnode{position:relative;margin-bottom:9px}
+.tdot{position:absolute;left:-23px;top:12px;width:11px;height:11px;border-radius:50%;background:var(--st);
+      box-shadow:0 0 0 4px color-mix(in srgb,var(--st) 22%,transparent)}
+.tcard{border:1px solid var(--line);border-radius:10px;padding:8px 13px;background:var(--card2)}
+.trow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tdet{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.tscore{font-weight:800;color:#d97706;font-variant-numeric:tabular-nums}
+.ttime{color:var(--mut);font-size:11px}
+.treason{font-size:11.5px;color:var(--mut);margin-top:4px}
+.empty{padding:16px 20px;color:var(--mut)}
+.footer{text-align:center;font-size:11px;color:var(--mut);margin-top:30px;padding-bottom:22px}
+@media (max-width:760px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
+@media print{:root{--bg:#fff}body{background:#fff}.header{box-shadow:none}.section{break-inside:avoid}}
+"""
+
+
+def _esc(value):
+    return escape(str(value if value is not None else ""))
+
+
+def _event_detail(e):
+    d = e.get("detail") or {}
+    return (d.get("url") or d.get("filename") or d.get("host") or d.get("origin") or "—")
+
+
 def generate_html_report(result):
     now           = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     profile       = result.get("profile_path","Unknown")
@@ -30,73 +113,71 @@ def generate_html_report(result):
     manifest      = result.get("artifact_manifest",{})
     by_sev        = mitre.get("by_severity",{})
     all_findings  = mitre.get("all_findings",[])
+    chains        = (result.get("correlation") or {}).get("attack_chains") or []
     flagged       = [e for e in events if e.get("risk_flag")]
 
     # Manifest rows
     mrows = ""
     for name, info in manifest.items():
         sha = (info.get("sha256") or "—")[:32]+"..."
-        mrows += f"<tr><td>{name}</td><td>{round(info.get('size_bytes',0)/1024,1)} KB</td><td style='font-family:monospace;font-size:11px;'>{sha}</td><td>{(info.get('mtime',''))[:19]}</td><td>{'Yes' if info.get('wal_exists') else 'No'}</td></tr>"
+        mrows += (f"<tr><td>{_esc(name)}</td><td>{round(info.get('size_bytes',0)/1024,1)} KB</td>"
+                  f"<td class='mono'>{_esc(sha)}</td><td>{_esc((info.get('mtime',''))[:19])}</td>"
+                  f"<td>{'Yes' if info.get('wal_exists') else 'No'}</td></tr>")
 
     # Findings rows
     frows = ""
     for f in all_findings[:30]:
         sev = f.get("severity","Low")
-        bg,fg,bc = SEV_COLORS.get(sev,("#F1EFE8","#5f5e5a","#888780"))
         m = f.get("mitre",{})
         algo = f.get("algorithm","").replace("_"," ").title()
         desc = f.get("description","")
         frows += f"""<tr>
-          <td><span style='background:{bg};color:{fg};font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;'>{sev}</span></td>
-          <td style='font-weight:500;'>{m.get("technique_id","—")}</td>
-          <td>{m.get("technique_name","—")}</td>
-          <td style='color:#5f5e5a;'>{m.get("tactic","—")}</td>
-          <td style='font-size:12px;'>{algo}</td>
-          <td style='font-size:12px;'>{desc[:80]}</td>
+          <td><span class='chip' style='--ch:{_SEV_CHIP.get(sev, "#7e98b8")}'>{_esc(sev)}</span></td>
+          <td style='font-weight:700;'>{_esc(m.get("technique_id","—"))}</td>
+          <td>{_esc(m.get("technique_name","—"))}</td>
+          <td>{_esc(m.get("tactic","—"))}</td>
+          <td style='font-size:12px;'>{_esc(algo)}</td>
+          <td style='font-size:12px;'>{_esc(desc[:80])}</td>
         </tr>"""
 
-    # Flagged timeline rows
+    # Detected attack chains: ordered artifact steps on one domain
+    chain_html = ""
+    for ch in chains[:6]:
+        steps = ""
+        for i, e in enumerate(ch.get("events") or []):
+            col = _TL_COLORS.get(e.get("artifact_type",""), "#7e98b8")
+            steps += ("<span class='arrow'>&#8594;</span>" if i else "") + (
+                f"<div class='step' style='--st:{col}'><b>{_esc(e.get('artifact_type','event'))}</b>"
+                f"<span title='{_esc(_event_detail(e))}'>{_esc(str(_event_detail(e))[:48])}</span>"
+                f"<span>{_esc(str(e.get('timestamp',''))[:19])}</span></div>")
+        chain_html += (f"<div class='chain'><div class='chain-h'><span class='chain-dom mono'>{_esc(ch.get('domain',''))}</span>"
+                       f"<span>{_esc(ch.get('description',''))}</span>"
+                       f"<span class='chip' style='--ch:#f04747;margin-left:auto'>Chain score {_esc(ch.get('score',0))}</span></div>"
+                       f"<div class='flow'>{steps}</div></div>")
+
+    # Flagged event timeline: newest first, as a rail
     trows = ""
-    for e in sorted(flagged, key=lambda x:x["timestamp"], reverse=True)[:50]:
+    for e in sorted(flagged, key=lambda x:x.get("timestamp",""), reverse=True)[:50]:
         atype = e.get("artifact_type","")
-        bg,fg = TYPE_COLORS.get(atype,("#F1EFE8","#5f5e5a"))
-        detail = (e.get("detail",{}).get("url") or e.get("detail",{}).get("filename") or
-                  e.get("detail",{}).get("host") or e.get("detail",{}).get("origin") or "—")
+        col = _TL_COLORS.get(atype, "#7e98b8")
+        detail = str(_event_detail(e))
         reasons = "; ".join((e.get("anomaly_reasons") or [])[:2])
         score   = e.get("anomaly_score",0)
-        trows += f"""<tr>
-          <td style='font-family:monospace;font-size:11px;white-space:nowrap;'>{e.get("timestamp","")[:19]}</td>
-          <td><span style='background:{bg};color:{fg};font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500;'>{atype}</span></td>
-          <td style='font-size:12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' title='{detail}'>{detail[:70]}</td>
-          <td style='font-size:12px;color:#854F0B;'>{score}</td>
-          <td style='font-size:11px;color:#5f5e5a;'>{reasons[:60]}</td>
-        </tr>"""
+        trows += f"""<div class='tnode' style='--st:{col}'><span class='tdot'></span><div class='tcard'>
+          <div class='trow'><span class='chip' style='--ch:{col}'>{_esc(atype)}</span>
+            <span class='tdet mono' title='{_esc(detail)}'>{_esc(detail[:90])}</span>
+            <span class='tscore'>Score {_esc(score)}</span>
+            <span class='ttime mono'>{_esc(e.get("timestamp","")[:19])}</span></div>
+          {f"<div class='treason'>{_esc(reasons[:140])}</div>" if reasons else ""}
+        </div></div>"""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>C4 Forensic Report — {extracted_at}</title>
-<style>
-*{{box-sizing:border-box;margin:0;padding:0;}}
-body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f4f0;color:#1a1a18;font-size:13px;}}
-.page{{max-width:1100px;margin:0 auto;padding:32px 24px;}}
-.header{{background:#1a1a18;color:#f5f4f0;border-radius:12px;padding:28px 32px;margin-bottom:24px;}}
-.header h1{{font-size:20px;font-weight:500;margin-bottom:6px;}}
-.header .meta{{font-size:12px;color:#888780;line-height:1.8;}}
-.badge{{display:inline-block;font-size:11px;padding:2px 10px;border-radius:20px;margin-right:6px;background:#333;color:#ccc;}}
-.stat-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}}
-.stat-card{{background:#fff;border:0.5px solid #e0ded8;border-radius:12px;padding:16px;}}
-.stat-label{{font-size:11px;color:#888780;margin-bottom:4px;}}
-.stat-val{{font-size:26px;font-weight:500;}}
-.section{{background:#fff;border:0.5px solid #e0ded8;border-radius:12px;margin-bottom:20px;overflow:hidden;}}
-.section-header{{padding:14px 20px;border-bottom:0.5px solid #e0ded8;font-size:14px;font-weight:500;}}
-table{{width:100%;border-collapse:collapse;}}
-th{{padding:9px 16px;text-align:left;font-size:11px;font-weight:500;color:#888780;text-transform:uppercase;letter-spacing:.04em;border-bottom:0.5px solid #e0ded8;background:#fafaf8;}}
-td{{padding:9px 16px;border-bottom:0.5px solid #f0eee8;vertical-align:middle;}}
-tr:last-child td{{border-bottom:none;}}
-.footer{{text-align:center;font-size:11px;color:#888780;margin-top:32px;padding-bottom:24px;}}
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C4 Forensic Report — {_esc(extracted_at)}</title>
+<style>{_REPORT_CSS}</style>
 </head>
 <body>
 <div class="page">
@@ -104,51 +185,52 @@ tr:last-child td{{border-bottom:none;}}
     <h1>C4 — Browser Artifact Forensics Report</h1>
     <div class="meta">
       <span class="badge">Chrome</span><span class="badge">Windows</span><span class="badge">C4 v2.0</span><br>
-      <strong>Profile:</strong> {profile}<br>
-      <strong>Extracted:</strong> {extracted_at} &nbsp;|&nbsp; <strong>Report:</strong> {now}
+      <strong>Profile:</strong> {_esc(profile)}<br>
+      <strong>Extracted:</strong> {_esc(extracted_at)} &nbsp;|&nbsp; <strong>Report:</strong> {_esc(now)}
     </div>
   </div>
 
   <div class="stat-grid">
-    <div class="stat-card"><div class="stat-label">Total events</div><div class="stat-val">{len(events)}</div></div>
-    <div class="stat-card"><div class="stat-label">Risk flagged</div><div class="stat-val" style="color:#A32D2D;">{len(flagged)}</div></div>
-    <div class="stat-card"><div class="stat-label">High severity</div><div class="stat-val" style="color:#A32D2D;">{by_sev.get("High",0)}</div></div>
-    <div class="stat-card"><div class="stat-label">MITRE findings</div><div class="stat-val" style="color:#854F0B;">{len(all_findings)}</div></div>
+    <div class="stat-card" style="--sc:#4d8ef8"><div class="stat-label">Total events</div><div class="stat-val">{len(events)}</div></div>
+    <div class="stat-card" style="--sc:#f04747"><div class="stat-label">Risk flagged</div><div class="stat-val" style="color:#f04747;">{len(flagged)}</div></div>
+    <div class="stat-card" style="--sc:#f04747"><div class="stat-label">High severity</div><div class="stat-val" style="color:#f04747;">{by_sev.get("High",0)}</div></div>
+    <div class="stat-card" style="--sc:#f5a623"><div class="stat-label">MITRE findings</div><div class="stat-val" style="color:#d97706;">{len(all_findings)}</div></div>
   </div>
 
   <div class="section">
     <div class="section-header">Executive Summary</div>
-    <div style="padding:16px 20px;line-height:1.8;font-size:13px;">
-      Analysis of Chrome browser profile from <strong>{profile}</strong> identified
+    <div class="pad" style="line-height:1.8;font-size:13px;">
+      Analysis of Chrome browser profile from <strong>{_esc(profile)}</strong> identified
       <strong>{len(events)}</strong> total events. The single-artifact rule engine flagged
-      <strong style="color:#A32D2D;">{len(flagged)}</strong> suspicious events.
+      <strong style="color:#f04747;">{len(flagged)}</strong> suspicious events.
       Cross-artifact correlation using co-occurrence analysis, orphan detection, and temporal
-      anomaly detection produced <strong>{len(all_findings)}</strong> MITRE ATT&CK-mapped findings —
-      <strong style="color:#A32D2D;">{by_sev.get("High",0)}</strong> High,
-      <strong style="color:#854F0B;">{by_sev.get("Medium",0)}</strong> Medium,
-      <strong style="color:#27500A;">{by_sev.get("Low",0)}</strong> Low severity.
+      anomaly detection produced <strong>{len(all_findings)}</strong> MITRE ATT&amp;CK-mapped findings —
+      <strong style="color:#f04747;">{by_sev.get("High",0)}</strong> High,
+      <strong style="color:#d97706;">{by_sev.get("Medium",0)}</strong> Medium,
+      <strong style="color:#10b981;">{by_sev.get("Low",0)}</strong> Low severity.
     </div>
   </div>
+
+  {f'<div class="section"><div class="section-header">Attack Chains</div><div class="pad">{chain_html}</div></div>' if chain_html else ''}
 
   <div class="section">
     <div class="section-header">Artifact Manifest</div>
     <table><thead><tr><th>File</th><th>Size</th><th>SHA-256</th><th>Modified</th><th>WAL</th></tr></thead>
-    <tbody>{mrows or "<tr><td colspan='5' style='padding:16px;color:#888;'>No artifacts found</td></tr>"}</tbody></table>
+    <tbody>{mrows or "<tr><td colspan='5' class='empty'>No artifacts found</td></tr>"}</tbody></table>
   </div>
 
   <div class="section">
     <div class="section-header">MITRE ATT&CK Findings — All Algorithms</div>
     <table><thead><tr><th>Severity</th><th>Technique ID</th><th>Technique</th><th>Tactic</th><th>Algorithm</th><th>Description</th></tr></thead>
-    <tbody>{frows or "<tr><td colspan='6' style='padding:16px;color:#888;'>No findings</td></tr>"}</tbody></table>
+    <tbody>{frows or "<tr><td colspan='6' class='empty'>No findings</td></tr>"}</tbody></table>
   </div>
 
   <div class="section">
     <div class="section-header">Flagged Event Timeline (top 50)</div>
-    <table><thead><tr><th>Timestamp</th><th>Type</th><th>Detail</th><th>Score</th><th>Reasons</th></tr></thead>
-    <tbody>{trows or "<tr><td colspan='5' style='padding:16px;color:#888;'>No flagged events</td></tr>"}</tbody></table>
+    <div class="pad">{f'<div class="rail">{trows}</div>' if trows else "<div class='empty' style='padding:0'>No flagged events</div>"}</div>
   </div>
 
-  <div class="footer">C4 Browser Artifact Forensics Tool — R26-CS-003 — SLIIT Faculty of Computing<br>Generated {now}</div>
+  <div class="footer">C4 Browser Artifact Forensics Tool — R26-CS-003 — SLIIT Faculty of Computing<br>Generated {_esc(now)}</div>
 </div>
 </body>
 </html>"""
