@@ -22,18 +22,30 @@ const PYTHON = (() => {
   if (fs.existsSync(venvUnix)) return venvUnix;
   return process.platform === 'win32' ? 'python' : 'python3';
 })();
+// Installed build: the PyInstaller backend and the frontend are shipped as
+// extraResources under process.resourcesPath. Dev build: run from the repo tree.
+const PACKAGED = app.isPackaged;
 const BACKEND_DIR = path.join(__dirname, '..');   // project root — uvicorn runs from here
-const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
+const FRONTEND_DIR = PACKAGED
+  ? path.join(process.resourcesPath, 'frontend')
+  : path.join(__dirname, '..', 'frontend');
+const BACKEND_EXE = path.join(process.resourcesPath || '', 'backend', 'websentinel-backend.exe');
 const BACKEND_PORT = 8765;
 
 // ── Start FastAPI backend ─────────────────────────────────────────────────────
 function startBackend() {
   console.log('[Main] Starting Python/FastAPI backend...');
+  const [cmd, args, cwd] = PACKAGED
+    ? [BACKEND_EXE, [], path.dirname(BACKEND_EXE)]
+    : [PYTHON,
+       ['-m', 'uvicorn', 'core.main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT), '--log-level', 'info'],
+       BACKEND_DIR];
   backendProcess = spawn(
-    PYTHON,
-    ['-m', 'uvicorn', 'core.main:app', '--host', '127.0.0.1', '--port', String(BACKEND_PORT), '--log-level', 'info'],
+    cmd,
+    args,
     {
-      cwd: BACKEND_DIR,
+      cwd,
+      windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
       // Force Python's stdout/stderr to encode as UTF-8 regardless of the
       // Windows console's active codepage. Without this, Python falls back
@@ -60,9 +72,42 @@ function startBackend() {
   backendProcess.on('error', err => console.error('[Backend] Failed to start:', err.message));
 }
 
+// ── Wait until the backend answers /health (replaces a fixed startup delay) ──
+function waitForBackend(timeoutMs = 90000) {
+  const http = require('http');
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const probe = () => {
+      const req = http.get(
+        { host: '127.0.0.1', port: BACKEND_PORT, path: '/health', timeout: 2000 },
+        (res) => { res.resume(); resolve(res.statusCode < 500); }
+      );
+      const retry = () => {
+        if (Date.now() - started > timeoutMs) return resolve(false);
+        setTimeout(probe, 500);
+      };
+      req.on('error', retry);
+      req.on('timeout', () => { req.destroy(); });
+    };
+    probe();
+  });
+}
+
+function killBackend() {
+  if (!backendProcess || backendProcess.killed) return;
+  if (process.platform === 'win32' && backendProcess.pid) {
+    // SIGTERM does not reach child processes (e.g. Playwright's Chromium) on Windows.
+    try { spawn('taskkill', ['/pid', String(backendProcess.pid), '/T', '/F'], { windowsHide: true }); } catch (_) {}
+  } else {
+    backendProcess.kill('SIGTERM');
+  }
+  console.log('[Main] Backend killed');
+}
+
 // ── Create main window ────────────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
     width: 1480,
     height: 920,
     minWidth: 1100,
@@ -100,15 +145,36 @@ function createWindow() {
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
-app.whenReady().then(() => {
-  startBackend();
-  // Give the backend ~1.5s to start uvicorn before opening the window
-  setTimeout(createWindow, 1500);
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+// Only one instance: a second launch would fight over port 8765.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   });
-});
+
+  app.whenReady().then(async () => {
+    startBackend();
+    const ready = await waitForBackend();
+    if (!ready) {
+      dialog.showErrorBox(
+        'WebSentinel',
+        'The analysis backend did not start (port ' + BACKEND_PORT + ' may be in use by another program). ' +
+        'Close other WebSentinel instances and try again.'
+      );
+      app.quit();
+      return;
+    }
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 app.on('window-all-closed', () => {
   // On macOS the app is allowed to keep running with no windows; only
@@ -117,12 +183,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
-  if (backendProcess && !backendProcess.killed) {
-    backendProcess.kill('SIGTERM');
-    console.log('[Main] Backend killed');
-  }
-});
+app.on('before-quit', killBackend);
 
 // ── IPC: native window controls ───────────────────────────────────────────────
 ipcMain.on('win:minimize', () => mainWindow?.minimize());

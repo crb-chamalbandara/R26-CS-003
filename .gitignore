@@ -114,3 +114,6 @@ C3 - Train Score.png
 notebooks/IF_model_training.ipynb
 notebooks/RF_model_training.ipynb
 models/archive/c3_ctu13_rf_ip_botnet_label_OBSOLETE.pkl
+
+# Installer build output
+.buildvenv/

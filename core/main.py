@@ -249,7 +249,14 @@ def _store_c2_alert(record: dict) -> dict:
         print(f"[C2] Could not persist alert: {exc}")
         return {}
 
-_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+# Packaged (PyInstaller) builds live in a read-only install dir, so mutable
+# settings go to the per-user data dir instead of next to this file.
+if getattr(sys, "frozen", False):
+    _USER_DATA_DIR = os.path.join(os.path.expanduser("~"), ".websentinel")
+    os.makedirs(_USER_DATA_DIR, exist_ok=True)
+    _SETTINGS_FILE = os.path.join(_USER_DATA_DIR, "settings.json")
+else:
+    _SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 
 _SETTINGS_DEFAULTS: dict = {
     "layers": {"l1": True, "l2": True, "l3": True, "l4": True, "l5": True, "l6": True},
