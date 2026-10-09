@@ -18,8 +18,20 @@ echo   C3 Beacon Detector      C4 Forensic Correlator
 echo  =====================================================
 echo.
 
-:: ── Check Python ──────────────────────────────────────────────
-python --version >nul 2>&1
+:: ── Pick the Python interpreter ───────────────────────────────
+:: Must be the SAME interpreter electron\main.js starts the backend with:
+:: PYTHON_PATH if set, else the project's .venv, else "python" from PATH.
+:: These checks used to run on PATH's python while the backend ran on the
+:: .venv one, so a package missing from .venv was never noticed here and the
+:: backend died on import with the window already open and nothing listening.
+set "PY=python"
+if exist "%~dp0.venv\Scripts\python.exe" set "PY=%~dp0.venv\Scripts\python.exe"
+if defined PYTHON_PATH set "PY=%PYTHON_PATH%"
+:: Hand the choice to Electron so both sides are guaranteed to agree.
+if /i not "%PY%"=="python" set "PYTHON_PATH=%PY%"
+echo  [OK] Python   -^>  %PY%
+
+"%PY%" --version >nul 2>&1
 if errorlevel 1 (
     echo  [ERROR] Python not found. Install Python 3.10+ and add it to PATH.
     pause
@@ -35,10 +47,13 @@ if errorlevel 1 (
 )
 
 :: ── Install Python requirements if needed ─────────────────────
-python -m uvicorn --version >nul 2>&1
+:: Import every package in requirements.txt (import names, not pip names:
+:: python-multipart=multipart, Pillow=PIL, beautifulsoup4=bs4,
+:: scikit-learn=sklearn, imbalanced-learn=imblearn). Keep this list in sync.
+"%PY%" -c "import fastapi, uvicorn, multipart, pydantic, playwright, httpx, PIL, imagehash, bs4, lxml, cryptography, pandas, numpy, sklearn, xgboost, tldextract, imblearn" >nul 2>&1
 if errorlevel 1 (
     echo  [INFO] Installing Python requirements...
-    pip install -r requirements.txt
+    "%PY%" -m pip install -r requirements.txt
     if errorlevel 1 (
         echo  [ERROR] pip install failed. Run manually: pip install -r requirements.txt
         pause
@@ -47,10 +62,12 @@ if errorlevel 1 (
 )
 
 :: ── Install Playwright Chromium if needed ─────────────────────
-python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); p.stop()" >nul 2>&1
+:: Checks the browser binary itself exists; starting the driver alone passes
+:: even when `playwright install` was never run.
+"%PY%" -c "import os; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); e=p.chromium.executable_path; p.stop(); raise SystemExit(0 if os.path.exists(e) else 1)" >nul 2>&1
 if errorlevel 1 (
     echo  [INFO] Installing Playwright Chromium browser...
-    python -m playwright install chromium
+    "%PY%" -m playwright install chromium
 )
 
 :: ── Install Electron if node_modules missing ──────────────────
@@ -67,8 +84,8 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8765 " 2^>nul') do (
 )
 
 echo  [OK] Launching WebSentinel...
-echo  [OK] Backend  ->  http://127.0.0.1:8765
-echo  [OK] API docs ->  http://127.0.0.1:8765/docs
+echo  [OK] Backend  -^>  http://127.0.0.1:8765
+echo  [OK] API docs -^>  http://127.0.0.1:8765/docs
 echo  [OK] Close the WebSentinel window to stop
 echo.
 
