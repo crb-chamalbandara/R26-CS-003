@@ -13,13 +13,13 @@ _FLAGS: Dict[str, Dict] = {
     # Static rule-based flags
     "HIGH_EVAL_USAGE": {
         "severity": "HIGH",
-        "desc": "Uses eval() 5+ times — a common obfuscation technique to execute "
+        "desc": "Uses eval() 5+ times. This is a common obfuscation technique for running "
                 "dynamically generated payloads that static scanners cannot read.",
     },
     "BASE64_OBFUSCATION": {
         "severity": "MEDIUM",
-        "desc": "Decodes base64 strings (atob) 3+ times — used to hide malicious "
-                "URLs, scripts, or exfiltration endpoints in encoded form.",
+        "desc": "Decodes base64 strings (atob) 3+ times. This is used to hide malicious "
+                "URLs, scripts or exfiltration endpoints in encoded form.",
     },
     "WEBREQUEST_BLOCKING_WITH_EVAL": {
         "severity": "HIGH",
@@ -28,109 +28,109 @@ _FLAGS: Dict[str, Dict] = {
     },
     "DYNAMIC_CODE_INJECTION": {
         "severity": "HIGH",
-        "desc": "Injects scripts into pages via executeScript 5+ times — can steal "
-                "data, modify page content, or hijack user sessions.",
+        "desc": "Injects scripts into pages via executeScript 5+ times, which can steal "
+                "data, modify page content or hijack user sessions.",
     },
     "OBFUSCATED_STRINGS": {
         "severity": "MEDIUM",
-        "desc": "Contains 3+ unusually long encoded strings — indicates payload "
+        "desc": "Contains 3+ unusually long encoded strings, which indicates payload "
                 "hiding where malicious URLs or scripts are stored in obfuscated form.",
     },
     "HASH_MATCH": {
         "severity": "CRITICAL",
-        "desc": "Extension ID matches a known-malicious blocklist entry. "
+        "desc": "Extension ID matches a known malicious blocklist entry. "
                 "This extension has been confirmed malicious by prior research.",
     },
     "ZERO_DAY_ANOMALY": {
         "severity": "HIGH",
         "desc": "Isolation Forest (trained only on benign extensions) flagged this "
-                "extension as statistically unlike any known-benign pattern — a "
-                "possible zero-day or novel attack technique not represented in "
+                "extension as statistically unlike any known benign pattern. This "
+                "may be a zero day or a novel attack technique not represented in "
                 "the labelled malicious training data.",
     },
     # Dynamic sandbox flags
     "EVAL_AT_RUNTIME": {
         "severity": "HIGH",
-        "desc": "Sandbox observed eval() executing at runtime — the extension "
+        "desc": "Sandbox observed eval() executing at runtime. The extension "
                 "generates and runs code dynamically, a strong indicator of payload delivery.",
     },
     "COOKIE_EXFILTRATION_RISK": {
         "severity": "CRITICAL",
-        "desc": "Sandbox detected cookie access combined with an external data POST — "
-                "high risk of session token or credential theft.",
+        "desc": "Sandbox detected cookie access combined with an external data POST, "
+                "a high risk of session token or credential theft.",
     },
     "COOKIE_READ_WITH_EXTERNAL": {
         "severity": "HIGH",
-        "desc": "Sandbox observed cookie reads alongside external network requests — "
-                "possible credential exfiltration.",
+        "desc": "Sandbox observed cookie reads alongside external network requests, "
+                "which may indicate credential exfiltration.",
     },
     "DATA_POST_TO_EXTERNAL": {
         "severity": "HIGH",
-        "desc": "Sandbox detected POST requests with body data sent to external domains — "
-                "potential data exfiltration.",
+        "desc": "Sandbox detected POST requests with body data sent to external domains, "
+                "which is potential data exfiltration.",
     },
     "WEBSOCKET_TO_EXTERNAL": {
         "severity": "HIGH",
-        "desc": "Sandbox observed WebSocket connections to external hosts — "
-                "can enable persistent C2 (command-and-control) communication.",
+        "desc": "Sandbox observed WebSocket connections to external hosts, "
+                "which can enable persistent C2 (command and control) communication.",
     },
     "KEYBOARD_MONITORING": {
         "severity": "HIGH",
-        "desc": "Sandbox detected keyboard event listeners — "
-                "this extension may be capturing keystrokes (keylogging).",
+        "desc": "Sandbox detected keyboard event listeners. "
+                "This extension may be capturing keystrokes (keylogging).",
     },
     "FORM_SUBMIT_OBSERVED": {
         "severity": "MEDIUM",
-        "desc": "Sandbox observed a form submission sent to an external URL — "
-                "risk of credential capture from login forms.",
+        "desc": "Sandbox observed a form submission sent to an external URL, "
+                "a risk of credential capture from login forms.",
     },
     "HIGH_REQUEST_VOLUME": {
         "severity": "MEDIUM",
-        "desc": "Extension made more than 8 external requests during sandbox observation — "
-                "unusual network activity for a browser extension.",
+        "desc": "Extension made more than 8 external requests during sandbox observation, "
+                "which is unusual network activity for a browser extension.",
     },
     # Meta flags
     "SANDBOX_ERROR": {
         "severity": "LOW",
-        "desc": "Dynamic sandbox encountered an error — verdict is based on static "
+        "desc": "Dynamic sandbox encountered an error, so the verdict is based on static "
                 "analysis only. Treat the result with additional caution.",
     },
     "SANDBOX_SKIPPED_NO_PATH": {
         "severity": "LOW",
-        "desc": "Dynamic sandbox was not run (extension path unavailable) — "
-                "verdict reflects static analysis only.",
+        "desc": "Dynamic sandbox was not run because the extension path was unavailable. "
+                "The verdict reflects static analysis only.",
     },
     "EXTENSION_LOAD_FAILED": {
         "severity": "MEDIUM",
         "desc": "Chromium refused to load the extension in the sandbox, so no "
                 "runtime behaviour could be observed. The dynamic layer gave no "
                 "coverage for this analysis and the verdict rests on static "
-                "evidence alone — it is NOT evidence that the extension is clean. "
+                "evidence alone. It is NOT evidence that the extension is clean. "
                 "Common causes: declarativeNetRequest rulesets that cannot be "
-                "indexed, a manifest Chromium rejects, or a read-only extension "
-                "directory.",
+                "indexed, a manifest Chromium rejects, or an extension "
+                "directory that cannot be written to.",
     },
     "SANDBOX_NOT_REQUESTED": {
         "severity": "LOW",
         "desc": "Dynamic sandbox was deliberately skipped for this run (bulk "
-                "blocklist sweep) — the evidence derived here rests on static "
-                "analysis alone and can be strengthened by re-running with the "
+                "blocklist sweep). The evidence derived here rests on static "
+                "analysis alone and can be strengthened by running it again with the "
                 "sandbox enabled.",
     },
     "MODEL_NOT_LOADED": {
         "severity": "LOW",
-        "desc": "ML model could not be loaded — static scoring unavailable. "
+        "desc": "ML model could not be loaded, so static scoring is unavailable. "
                 "Manual review is recommended.",
     },
     "MANIFEST_PARSE_FAILED": {
         "severity": "LOW",
-        "desc": "manifest.json could not be parsed — the extension may be "
-                "malformed, corrupted, or using an unsupported format.",
+        "desc": "manifest.json could not be parsed. The extension may be "
+                "malformed, corrupted or using an unsupported format.",
     },
     "TRUSTED_PUBLISHER": {
         "severity": "LOW",
-        "desc": "Extension ID matched the trusted publisher allowlist — "
-                "this extension is from a verified, well-known developer "
+        "desc": "Extension ID matched the trusted publisher allowlist. "
+                "This extension is from a verified and widely known developer "
                 "and is considered safe without further ML analysis.",
     },
 }
@@ -157,8 +157,8 @@ _ISOLATION_NOTE = {
     "ephemeral_vm": "Observed inside a disposable virtual machine, created for "
                     "this analysis and destroyed afterwards.",
     "container":    "Observed inside a throwaway container sharing the host kernel.",
-    "browser_profile": "Observed on the host in a throwaway browser profile — "
-                       "browser state was isolated, the operating system was not.",
+    "browser_profile": "Observed on the host in a throwaway browser profile. "
+                       "Browser state was isolated, the operating system was not.",
     "none":         "Observed with no containment.",
 }
 
@@ -230,10 +230,10 @@ def _plain_summary(verdict: str, final_score: float, explained: List[Dict],
         others = len(severe) - 1
         cap = _humanise(lead.get("description", "")).rstrip(".")
         # Descriptions are already written as "Can read and change your data…"
-        cap = cap[0].lower() + cap[1:] if cap else "hold wide-reaching access"
+        cap = cap[0].lower() + cap[1:] if cap else "hold broad access"
         parts.append(
             f"It {cap}"
-            + (f", plus {others} other high-risk permission"
+            + (f", plus {others} other high risk permission"
                f"{'s' if others != 1 else ''}." if others > 0 else ".")
         )
 
@@ -334,7 +334,7 @@ def build_report(result: Dict) -> Dict:
         )
     else:
         sandbox_note = (
-            "Dynamic sandbox was not executed — verdict is based on static analysis only."
+            "Dynamic sandbox was not executed, so the verdict is based on static analysis only."
         )
 
     blocklist_details = static_info.get("blocklist_details")
@@ -344,7 +344,7 @@ def build_report(result: Dict) -> Dict:
             name   = blocklist_details.get("extension_name") or "an unnamed extension"
             reason = blocklist_details.get("reason") or "an unestablished reason"
             when   = blocklist_details.get("date")
-            summary = f"MALICIOUS — matched the blocklist as {name!r} ({reason}"
+            summary = f"MALICIOUS: matched the blocklist as {name!r} ({reason}"
             summary += f", reported {when})." if when else ")."
             if blocklist_details.get("reason_derived"):
                 detail_block = blocklist_details.get("reason_detail") or {}
@@ -360,7 +360,7 @@ def build_report(result: Dict) -> Dict:
                 summary += " No further analysis required."
         else:
             summary = (
-                f"MALICIOUS — extension ID matched the known-malicious blocklist. "
+                f"MALICIOUS: extension ID matched the known malicious blocklist. "
                 f"No further analysis required."
             )
     else:
