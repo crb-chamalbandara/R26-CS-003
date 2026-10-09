@@ -3085,6 +3085,109 @@ input,textarea,select{font-family:inherit}
   #panel-c2 .al-path,#panel-c2 .al-dur{display:none}
 }
 @media (prefers-reduced-motion:reduce){#panel-c2 .al-card.new{animation:none}#panel-c2 .al-chev{transition:none}}
+
+/* ==============================================================================
+   C4 LINK CHART (additive; deleting this block removes only the chart's look)
+   ============================================================================== */
+.lc{--lc-a:rgba(14,24,40,.74);--lc-b:rgba(10,18,32,.8);--lc-brd:rgba(126,166,224,.14);--lc-acc:var(--c4);
+  --mono:'JetBrains Mono','Cascadia Code','Fira Code',ui-monospace,Consolas,monospace;
+  display:flex;flex-direction:column;min-height:0;font-family:'Plus Jakarta Sans','Inter',-apple-system,'Segoe UI',sans-serif}
+:root[data-theme="light"] .lc{--lc-a:rgba(255,255,255,.9);--lc-b:rgba(244,248,252,.95);--lc-brd:rgba(15,23,42,.11)}
+.lc-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 14px;border-bottom:1px solid var(--lc-brd)}
+.lc-grow{flex:1}
+.lc-chips,.lc-btns{display:flex;gap:6px;flex-wrap:wrap}
+.lc-chip,.lc-b{font-family:inherit;font-size:10.5px;font-weight:700;color:var(--t1);cursor:pointer;padding:5px 11px;border-radius:8px;
+  border:1px solid var(--lc-brd);background:rgba(var(--tint),.045);display:inline-flex;align-items:center;gap:6px;transition:border-color .15s,color .15s,background .15s}
+.lc-chip{border-radius:20px;opacity:.55}
+.lc-chip.on{opacity:1;color:var(--lc-acc);border-color:rgba(var(--c4-rgb),.5);background:rgba(var(--c4-rgb),.09)}
+.lc-b:hover,.lc-chip:hover{border-color:rgba(var(--c4-rgb),.6);color:var(--lc-acc)}
+.lc-b:focus-visible,.lc-chip:focus-visible,.lc-row:focus-visible{outline:2px solid var(--lc-acc);outline-offset:2px}
+.lc-chk,.lc-rng{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:var(--t1);font-weight:600;cursor:pointer}
+.lc-rng input{width:90px;accent-color:var(--c4)}
+.lc-rng b{min-width:20px;font-variant-numeric:tabular-nums;color:var(--t2)}
+.lc-search{font-family:inherit;font-size:11px;color:var(--t0);padding:5px 10px;border-radius:8px;border:1px solid var(--lc-brd);background:var(--field-bg);width:150px;outline:none}
+.lc-search:focus{border-color:rgba(var(--c4-rgb),.6)}
+.lc-sh{display:inline-block;width:9px;height:9px;background:var(--t2)}
+.lc-sh.dom{border-radius:50%}.lc-sh.fil{border-radius:2px}.lc-sh.acc{transform:rotate(45deg) scale(.85)}
+.lc-body{display:flex;min-height:0;flex:none;height:520px}
+.lc-stage{position:relative;flex:1;min-width:0;overflow:hidden;
+  background:radial-gradient(circle at 50% 40%,rgba(var(--c4-rgb),.05),transparent 65%),linear-gradient(158deg,var(--lc-a),var(--lc-b))}
+.lc-full .lc-body{flex:1;height:auto}
+.lc-svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none;user-select:none}
+.lc-svg.panning{cursor:grabbing}
+.lc-legend{position:absolute;left:12px;bottom:10px;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:10px;color:var(--t2);
+  padding:6px 10px;border-radius:9px;background:var(--lc-b);border:1px solid var(--lc-brd);pointer-events:none}
+.lc-legend span{display:inline-flex;align-items:center;gap:6px}
+.lc-ln{display:inline-block;width:16px;height:0;border-top:2px solid var(--t3)}
+.lc-ln.h{border-color:var(--danger)}.lc-ln.w{border-color:var(--warn)}.lc-ln.n{border-color:var(--t3);opacity:.7}
+.lc-note{position:absolute;right:12px;top:10px;font-size:10px;color:var(--t2);pointer-events:none;max-width:60%;text-align:right}
+.lc-note:empty{display:none}
+.lc-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--t3)}
+.lc-empty .eicon svg{width:34px;height:34px;opacity:.5}
+.lc-stage.has-data .lc-legend{display:flex}.lc-stage:not(.has-data) .lc-legend{display:none}
+
+.lc-n{cursor:pointer;outline:none;transition:opacity .15s}
+.lc-shape{fill:color-mix(in srgb,var(--c) 70%,transparent);stroke:var(--c);stroke-width:2;transition:stroke-width .15s,filter .15s}
+.lc-n:hover .lc-shape,.lc-n:focus-visible .lc-shape{stroke-width:3.5;filter:drop-shadow(0 0 6px var(--c))}
+.lc-n.sel .lc-shape{stroke-width:4;filter:drop-shadow(0 0 9px var(--c))}
+.lc-n.inchain .lc-shape{stroke-dasharray:none}
+.lc-n.collapsed .lc-shape{stroke-dasharray:4 3;fill:rgba(var(--tint),.08)}
+.lc-lbl{font-size:var(--lbl,11px);fill:var(--t1);paint-order:stroke;stroke:var(--bg2);stroke-width:3.5px;stroke-linejoin:round;pointer-events:none;opacity:0;transition:opacity .15s}
+.lc-n.lbl .lc-lbl,.lc-n:hover .lc-lbl,.lc-n.sel .lc-lbl{opacity:1}
+.lc-n.dim,.lc-e.dim{opacity:.13}
+.lc-e{fill:none;stroke-linecap:round;transition:opacity .15s}
+.lc-e.norm{stroke:var(--t3);opacity:.5}
+.lc-e.warn{stroke:var(--warn);opacity:.8}
+.lc-e.hot{stroke:var(--danger);opacity:.95}
+.lc-e.chain{stroke-dasharray:7 5;animation:lcDash 1.1s linear infinite}
+@keyframes lcDash{to{stroke-dashoffset:-24}}
+.lc-ah.n{fill:var(--t3)}.lc-ah.w{fill:var(--warn)}.lc-ah.h{fill:var(--danger)}
+
+.lc-side{width:300px;flex-shrink:0;border-left:1px solid var(--lc-brd);overflow-y:auto;background:linear-gradient(180deg,var(--lc-a),var(--lc-b))}
+.lc-side-in{padding:12px 14px 16px;display:flex;flex-direction:column;gap:9px}
+.lc-full .lc-side{width:340px}
+.lc-sh-t{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--t2);margin-top:6px}
+.lc-kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:11px;color:var(--t2)}
+.lc-kv b{color:var(--t0);text-align:right;font-variant-numeric:tabular-nums;font-weight:700;word-break:break-word}
+.lc-row{display:flex;align-items:center;gap:9px;width:100%;text-align:left;font-family:inherit;cursor:pointer;padding:6px 9px;border-radius:9px;
+  border:1px solid var(--lc-brd);background:rgba(var(--tint),.035);color:var(--t1);transition:border-color .15s,background .15s}
+.lc-row:hover{border-color:rgba(var(--c4-rgb),.5);background:rgba(var(--c4-rgb),.07)}
+.lc-row.chain{border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.lc-row-m{display:flex;flex-direction:column;min-width:0}
+.lc-row-m b{font-size:11.5px;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lc-row-m small{font-size:10px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lc-badge{flex-shrink:0;min-width:28px;text-align:center;font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:7px;color:var(--c);
+  border:1px solid color-mix(in srgb,var(--c) 45%,transparent);background:color-mix(in srgb,var(--c) 12%,transparent);font-variant-numeric:tabular-nums}
+.lc-badge.big{font-size:15px;padding:6px 10px;border-radius:10px}
+.lc-arrow{width:20px;text-align:center;color:var(--t2);font-weight:800}.lc-arrow.hot{color:var(--danger)}.lc-arrow.warn{color:var(--warn)}
+.lc-ent{display:flex;align-items:center;gap:10px}
+.lc-ent-t{font-size:13px;font-weight:700;color:var(--t0);word-break:break-all}
+.lc-ent-s{font-size:10.5px;color:var(--t2)}
+.lc-meter{height:5px;border-radius:4px;background:rgba(var(--tint),.09);overflow:hidden}.lc-meter i{display:block;height:100%;border-radius:4px}
+.lc-tags{display:flex;gap:5px;flex-wrap:wrap}
+.lc-tag{font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;color:var(--c1);border:1px solid color-mix(in srgb,var(--c1) 40%,transparent);background:color-mix(in srgb,var(--c1) 10%,transparent)}
+.lc-evs{display:flex;flex-direction:column;gap:5px}
+.lc-ev{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:center;padding:6px 8px;border-radius:8px;border:1px solid var(--lc-brd);background:rgba(var(--tint),.03)}
+.lc-ev.fl{border-left:3px solid var(--danger)}
+.lc-ev small{grid-column:1 / -1;font-size:9.5px;color:var(--t3)}
+.lc-evt{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--lc-acc)}
+.lc-evx{font-family:var(--mono);font-size:10.5px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lc-evs2{font-size:10px;font-weight:800;color:var(--warn)}
+.lc-back{align-self:flex-start;font-family:inherit;font-size:10.5px;font-weight:700;color:var(--t2);background:none;border:none;cursor:pointer;padding:0}
+.lc-back:hover{color:var(--lc-acc)}
+.lc-act-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.lc-hint{font-size:10.5px;color:var(--t3);line-height:1.5;margin-top:4px}
+
+#c4-link-overlay{position:fixed;inset:0;z-index:950;display:none;flex-direction:column;background:var(--bg1)}
+#c4-link-overlay.open{display:flex}
+.lc-full-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid var(--lc-brd,var(--b1));background:var(--bg2)}
+.lc-full-head b{font-size:14px;color:var(--t0);margin-right:12px}.lc-full-head span{font-size:11px;color:var(--t2)}
+.lc-full-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.lc-full-body.lc{flex:1}
+
+#panel-c4 #c4-link-card .c4-card-b{padding:0}
+@media (max-width:1100px){.lc-body{flex-direction:column;height:auto}.lc-stage{height:440px;flex:none}.lc-full .lc-stage{flex:1}.lc-side{width:auto;border-left:none;border-top:1px solid var(--lc-brd);max-height:260px}}
+@media (prefers-reduced-motion:reduce){.lc-e.chain{animation:none}.lc-n,.lc-e,.lc-lbl{transition:none}}
 </style>
 </head>
 <body>
@@ -3801,6 +3904,15 @@ input,textarea,select{font-family:inherit}
       <div class="c4-card-b" id="c4-heatmap">
         <div class="c4-muted">Run a scan to see activity patterns</div>
       </div>
+    </div>
+
+    <!-- Link chart: entities and how they connect (see renderC4LinkChart) -->
+    <div class="c4-card" id="c4-link-card">
+      <div class="c4-card-h">
+        <span>Link Chart</span>
+        <span class="c4-muted" id="c4-link-sub">Domains, files and accounts and how they connect</span>
+      </div>
+      <div class="c4-card-b"><div id="c4-link-chart"></div></div>
     </div>
 
     <!-- Artifact Viewer -->
@@ -10575,6 +10687,539 @@ function renderC4Timeline(result) {
     <div class="c4t-rail">${evHtml}</div>`;
 }
 
+// ══════════════════════════════════════════════════════════════
+//  C4 Link Chart
+//  Draws result.link_chart (built on the server by core/c4/linkchart.py) as an
+//  interactive entity graph: domains, files and accounts joined by navigation,
+//  download, exfiltration, saved-login and attack-chain links. Plain SVG and a
+//  small force layout, so it works offline and needs no extra library.
+//  Two instances can share one graph (the card and the full-screen view); node
+//  positions are cached by id so both, and every refresh, keep the same layout.
+// ══════════════════════════════════════════════════════════════
+const lcPos = {};                                   // node id -> {x, y}
+let lcGraph = null;                                 // last graph shown
+let lcCard = null, lcFull = null;                   // the two chart instances
+const LC_REDUCED = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const LC_KIND = {
+  navigation: 'visited next', download: 'downloaded', exfil: 'then visited (possible exfil)',
+  credential: 'saved login', chain: 'attack-chain step',
+};
+const LC_TYPE_LABEL = { domain: 'Domain', file: 'File', account: 'Account' };
+
+function lcRiskVar(r) { return r >= 60 ? 'var(--danger)' : r >= 30 ? 'var(--warn)' : 'var(--safe)'; }
+function lcCss(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function lcRiskHex(r) { return lcCss(r >= 60 ? '--danger' : r >= 30 ? '--warn' : '--safe'); }
+function lcHash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function lcRadius(n) { return n.collapsed ? 15 : 7 + Math.min(11, Math.log2(1 + (n.event_count || 0)) * 2); }
+const SVGNS = 'http://www.w3.org/2000/svg';
+function lcEl(tag, attrs, cls) {
+  const e = document.createElementNS(SVGNS, tag);
+  if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (cls) e.setAttribute('class', cls);
+  return e;
+}
+
+function lcTemplate() {
+  return `
+  <div class="lc-bar">
+    <div class="lc-chips" role="group" aria-label="Entity types">
+      <button type="button" class="lc-chip on" data-t="domain"><i class="lc-sh dom"></i>Domains</button>
+      <button type="button" class="lc-chip on" data-t="file"><i class="lc-sh fil"></i>Files</button>
+      <button type="button" class="lc-chip on" data-t="account"><i class="lc-sh acc"></i>Accounts</button>
+    </div>
+    <label class="lc-chk"><input type="checkbox" data-role="flagged"> Flagged &amp; chains only</label>
+    <label class="lc-rng">Min risk <input type="range" min="0" max="100" value="0" data-role="risk" aria-label="Minimum risk"><b data-role="riskv">0</b></label>
+    <input type="search" class="lc-search" placeholder="Find entity" data-role="search" aria-label="Find entity" autocomplete="off">
+    <span class="lc-grow"></span>
+    <div class="lc-btns">
+      <button type="button" class="lc-b" data-act="zoomout" title="Zoom out" aria-label="Zoom out">&minus;</button>
+      <button type="button" class="lc-b" data-act="zoomin" title="Zoom in" aria-label="Zoom in">+</button>
+      <button type="button" class="lc-b" data-act="fit" title="Fit to view">Fit</button>
+      <button type="button" class="lc-b" data-act="relayout" title="Forget dragged positions and lay out again">Re-layout</button>
+      <button type="button" class="lc-b" data-act="svg" title="Download as SVG">SVG</button>
+      <button type="button" class="lc-b" data-act="png" title="Download as PNG">PNG</button>
+      <button type="button" class="lc-b lc-expand" data-act="expand" title="Open full screen">Expand</button>
+    </div>
+  </div>
+  <div class="lc-body">
+    <div class="lc-stage">
+      <svg class="lc-svg" role="group" aria-label="Link chart of domains, files and accounts">
+        <defs>
+          <marker id="lc-ar-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="lc-ah n"/></marker>
+          <marker id="lc-ar-w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="lc-ah w"/></marker>
+          <marker id="lc-ar-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" class="lc-ah h"/></marker>
+        </defs>
+        <g class="lc-vp"><g class="lc-edges"></g><g class="lc-nodes"></g></g>
+      </svg>
+      <div class="lc-legend" aria-hidden="true">
+        <span><i class="lc-sh dom"></i>Domain</span><span><i class="lc-sh fil"></i>File</span><span><i class="lc-sh acc"></i>Account</span>
+        <span><i class="lc-ln h"></i>Attack chain / exfil</span><span><i class="lc-ln w"></i>Flagged</span><span><i class="lc-ln n"></i>Navigation</span>
+      </div>
+      <div class="lc-note" role="status"></div>
+      <div class="lc-empty"><div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.2 7l7.6.8M7 8.2l4 7.6M16.8 10l-3.6 6"/></svg></div><div class="emsg">Run a scan to build the link chart</div></div>
+    </div>
+    <aside class="lc-side" aria-label="Selected entity"><div class="lc-side-in"></div></aside>
+  </div>`;
+}
+
+function createLinkChart(root, opts) {
+  opts = opts || {};
+  root.classList.add('lc');
+  root.innerHTML = lcTemplate();
+  const $ = s => root.querySelector(s);
+  const svg = $('.lc-svg'), vp = $('.lc-vp'), gE = $('.lc-edges'), gN = $('.lc-nodes');
+  const side = $('.lc-side-in'), note = $('.lc-note'), empty = $('.lc-empty'), stage = $('.lc-stage');
+  if (opts.full) root.classList.add('lc-full');
+  const markerSuffix = opts.full ? '-f' : '';
+  if (opts.full) {                                  // marker ids must be unique per instance
+    root.querySelectorAll('marker').forEach(m => { m.id += markerSuffix; });
+  }
+  const st = {
+    graph: null, nodes: [], byId: new Map(), edges: [], vis: [], visE: [],
+    view: { x: 0, y: 0, k: 1 }, types: { domain: true, file: true, account: true },
+    flagged: false, minRisk: 0, q: '', sel: null, hover: null, chain: null,
+    alpha: 0, raf: 0, fitted: false, dead: false,
+  };
+
+  // ── data -> elements ──────────────────────────────────────────
+  function setGraph(graph) {
+    st.graph = graph; st.fitted = false;
+    gE.textContent = ''; gN.textContent = '';
+    st.nodes = []; st.edges = []; st.byId = new Map(); st.sel = null; st.chain = null;
+    const has = graph && graph.nodes && graph.nodes.length;
+    empty.style.display = has ? 'none' : 'flex';
+    stage.classList.toggle('has-data', !!has);
+    if (!has) { cancelAnimationFrame(st.raf); side.innerHTML = ''; note.textContent = ''; return; }
+
+    graph.nodes.forEach(n => {
+      const o = Object.assign({}, n);
+      const c = lcPos[n.id];
+      if (c) { o.x = c.x; o.y = c.y; }
+      else { const h = lcHash(n.id), a = (h % 3600) / 3600 * 2 * Math.PI, r = 70 + ((h >> 12) % 100) * 2.4; o.x = Math.cos(a) * r; o.y = Math.sin(a) * r; }
+      o.vx = 0; o.vy = 0; o.r = lcRadius(n);
+      o.fixed = false;
+      o.g = lcEl('g', { tabindex: 0, role: 'button', 'aria-label': `${LC_TYPE_LABEL[n.type] || n.type} ${n.label}, risk ${n.risk}` }, 'lc-n ' + n.type + (n.collapsed ? ' collapsed' : ''));
+      const col = n.collapsed ? 'var(--t3)' : lcRiskVar(n.risk);
+      let shape;
+      if (n.type === 'file') shape = lcEl('rect', { x: -o.r, y: -o.r, width: o.r * 2, height: o.r * 2, rx: 4 });
+      else if (n.type === 'account') { const q = o.r * 1.25; shape = lcEl('polygon', { points: `0,${-q} ${q},0 0,${q} ${-q},0` }); }
+      else shape = lcEl('circle', { r: o.r });
+      shape.setAttribute('class', 'lc-shape'); shape.style.setProperty('--c', col);
+      if (n.chains && n.chains.length) o.g.classList.add('inchain');
+      const txt = lcEl('text', { y: o.r + 13, 'text-anchor': 'middle' }, 'lc-lbl');
+      txt.textContent = n.label.length > 28 ? n.label.slice(0, 27) + '…' : n.label;
+      const ttl = lcEl('title'); ttl.textContent = `${LC_TYPE_LABEL[n.type] || n.type}: ${n.label} (risk ${n.risk})`;
+      o.g.append(ttl, shape, txt); o.txt = txt;
+      o.g.addEventListener('pointerdown', ev => nodeDown(ev, o));
+      o.g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(o.id); } });
+      o.g.addEventListener('mouseenter', () => { st.hover = o.id; refresh(); });
+      o.g.addEventListener('mouseleave', () => { st.hover = null; refresh(); });
+      o.g.addEventListener('focus', () => { st.hover = o.id; refresh(); });
+      o.g.addEventListener('blur', () => { st.hover = null; refresh(); });
+      st.nodes.push(o); st.byId.set(o.id, o);
+    });
+    graph.edges.forEach(e => {
+      const s = st.byId.get(e.source), t = st.byId.get(e.target);
+      if (!s || !t) return;
+      const o = Object.assign({}, e, { s, t });
+      const hot = e.chain || e.kind === 'exfil', warn = e.flagged;
+      o.el = lcEl('path', { 'marker-end': `url(#lc-ar-${hot ? 'h' : warn ? 'w' : 'n'}${markerSuffix})` },
+                  'lc-e ' + (hot ? 'hot' : warn ? 'warn' : 'norm') + (e.chain ? ' chain' : ''));
+      o.el.style.strokeWidth = (hot ? 2.4 : Math.min(3.2, 1 + (e.weight || 1) * 0.3)) + 'px';
+      const ttl = lcEl('title');
+      ttl.textContent = `${s.label} → ${t.label}: ${e.label || LC_KIND[e.kind] || e.kind}${e.weight > 1 ? ' ×' + e.weight : ''}${(e.techniques || []).length ? ' · ' + e.techniques.join(', ') : ''}`;
+      o.el.appendChild(ttl);
+      st.edges.push(o);
+    });
+    // curve edges that share a pair so two-way links do not overlap
+    const pair = new Map();
+    st.edges.forEach(e => { const k = [e.s.id, e.t.id].sort().join('|'); (pair.get(k) || pair.set(k, []).get(k)).push(e); });
+    pair.forEach(list => list.forEach((e, i) => { e.bend = list.length === 1 ? 0 : (i - (list.length - 1) / 2) * 26 * (e.s.id < e.t.id ? 1 : -1); }));
+    st.edges.forEach(e => gE.appendChild(e.el));
+    st.nodes.forEach(n => gN.appendChild(n.g));
+    applyFilter(true);
+    renderSide();
+  }
+
+  // ── filtering ────────────────────────────────────────────────
+  function nodeVisible(n) {
+    if (!st.types[n.type]) return false;
+    if (n.risk < st.minRisk) return false;
+    if (st.flagged && !(n.flagged_count > 0 || (n.chains && n.chains.length) || n.risk >= 60)) return false;
+    return true;
+  }
+  function applyFilter(restart) {
+    st.vis = st.nodes.filter(nodeVisible);
+    const ok = new Set(st.vis.map(n => n.id));
+    st.nodes.forEach(n => { n.g.style.display = ok.has(n.id) ? '' : 'none'; });
+    st.visE = st.edges.filter(e => ok.has(e.s.id) && ok.has(e.t.id) && (!st.flagged || e.flagged || e.chain));
+    const vset = new Set(st.visE);
+    st.edges.forEach(e => { e.el.style.display = vset.has(e) ? '' : 'none'; });
+    const gs = st.graph && st.graph.stats || {};
+    note.textContent = gs.truncated
+      ? `Showing ${st.vis.length} of ${st.nodes.length} entities` + (gs.folded_domains ? ` · ${gs.folded_domains} quiet domains are folded into one node` : '')
+      : (st.vis.length < st.nodes.length ? `Showing ${st.vis.length} of ${st.nodes.length} entities` : '');
+    if (restart) start(1);
+    else { draw(); refresh(); }
+  }
+
+  // ── force layout ─────────────────────────────────────────────
+  function start(alpha) {
+    st.alpha = Math.max(st.alpha, alpha);
+    cancelAnimationFrame(st.raf);
+    if (LC_REDUCED() || st.vis.length <= 1) { for (let i = 0; i < 260 && st.alpha > 0.02; i++) tick(); st.alpha = 0; draw(); finishSettle(); return; }
+    const loop = () => {
+      if (st.dead) return;
+      const steps = st.vis.length > 160 ? 3 : 6;
+      for (let i = 0; i < steps && st.alpha > 0.02; i++) tick();
+      draw();
+      if (st.alpha > 0.02) st.raf = requestAnimationFrame(loop); else finishSettle();
+    };
+    st.raf = requestAnimationFrame(loop);
+  }
+  function finishSettle() { st.vis.forEach(n => { lcPos[n.id] = { x: n.x, y: n.y }; }); if (!st.fitted) fit(); refresh(); }
+  function tick() {
+    const V = st.vis, n = V.length, a = st.alpha;
+    for (let i = 0; i < n; i++) {
+      const p = V[i];
+      for (let j = i + 1; j < n; j++) {
+        const q = V[j];
+        let dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
+        if (d2 < 0.01) { dx = (i - j) * 0.1; dy = 0.1; d2 = 0.02; }
+        const d = Math.sqrt(d2);
+        let f = 1000 / d2 * a * 60;
+        const gap = p.r + q.r + 26;
+        if (d < gap) f += (gap - d) * 0.35;
+        const fx = dx / d * f, fy = dy / d * f;
+        p.vx += fx; p.vy += fy; q.vx -= fx; q.vy -= fy;
+      }
+    }
+    for (const e of st.visE) {
+      const s = e.s, t = e.t;
+      const dx = t.x - s.x, dy = t.y - s.y, d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      const rest = e.kind === 'navigation' ? 95 : 75;
+      const f = (d - rest) * 0.045 * a * (e.chain || e.kind === 'exfil' ? 1.6 : 1);
+      const fx = dx / d * f, fy = dy / d * f;
+      s.vx += fx; s.vy += fy; t.vx -= fx; t.vy -= fy;
+    }
+    for (const p of V) {
+      p.vx -= p.x * 0.05 * a; p.vy -= p.y * 0.05 * a;
+      p.vx *= 0.78; p.vy *= 0.78;
+      if (!p.fixed) { p.x += Math.max(-40, Math.min(40, p.vx)); p.y += Math.max(-40, Math.min(40, p.vy)); }
+    }
+    st.alpha *= 0.985;
+  }
+
+  // ── drawing ──────────────────────────────────────────────────
+  function draw() {
+    for (const n of st.vis) n.g.setAttribute('transform', `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`);
+    for (const e of st.visE) {
+      const s = e.s, t = e.t;
+      let dx = t.x - s.x, dy = t.y - s.y; const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      const ux = dx / d, uy = dy / d, nx = -uy, ny = ux;
+      const ra = s.r + 2, rb = t.r + 6, b = e.bend || 0;
+      const x1 = s.x + ux * ra, y1 = s.y + uy * ra, x2 = t.x - ux * rb, y2 = t.y - uy * rb;
+      const mx = (x1 + x2) / 2 + nx * b, my = (y1 + y2) / 2 + ny * b;
+      e.el.setAttribute('d', b ? `M${x1.toFixed(1)},${y1.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`
+                               : `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`);
+    }
+  }
+  function applyView() {
+    vp.setAttribute('transform', `translate(${st.view.x.toFixed(1)},${st.view.y.toFixed(1)}) scale(${st.view.k.toFixed(3)})`);
+    svg.style.setProperty('--lbl', Math.max(5, Math.min(22, 11.5 / st.view.k)).toFixed(1) + 'px');   // keep labels legible while zoomed out
+    labelsFor();
+  }
+  function labelsFor() {
+    const many = st.vis.length > 40, k = st.view.k;
+    const act = activeSets();
+    for (const n of st.vis) {
+      const show = !many || n.risk >= 30 || k > 1.35 || n.id === st.sel || (act && act.nodes.has(n.id) && (n.id === st.hover || n.id === st.sel || st.chain != null || !!st.q));
+      n.g.classList.toggle('lbl', show);
+    }
+  }
+  function size() { const r = svg.getBoundingClientRect(); return { w: r.width, h: r.height }; }
+  function fit() {
+    const { w, h } = size();
+    if (!st.vis.length || w < 40 || h < 40) return;
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const n of st.vis) { x0 = Math.min(x0, n.x - n.r - 30); x1 = Math.max(x1, n.x + n.r + 30); y0 = Math.min(y0, n.y - n.r - 20); y1 = Math.max(y1, n.y + n.r + 34); }
+    const k = Math.max(0.2, Math.min(1.5, Math.min(w / (x1 - x0), h / (y1 - y0))));
+    st.view = { k, x: w / 2 - (x0 + x1) / 2 * k, y: h / 2 - (y0 + y1) / 2 * k };
+    st.fitted = true; applyView();
+  }
+  function zoomAt(f, cx, cy) {
+    const v = st.view, k = Math.max(0.15, Math.min(4, v.k * f)), r = k / v.k;
+    v.x = cx - (cx - v.x) * r; v.y = cy - (cy - v.y) * r; v.k = k; applyView();
+  }
+
+  // ── highlight / selection ────────────────────────────────────
+  function neighbours(id) {
+    const ns = new Set([id]), es = new Set();
+    for (const e of st.visE) if (e.s.id === id || e.t.id === id) { ns.add(e.s.id); ns.add(e.t.id); es.add(e); }
+    return { nodes: ns, edges: es };
+  }
+  function activeSets() {
+    if (st.chain != null) {
+      const c = (st.graph.chains || []).find(x => x.id === st.chain);
+      if (c) { const ids = new Set(c.edges); return { nodes: new Set(c.steps), edges: new Set(st.visE.filter(e => ids.has(e.id))) }; }
+    }
+    const f = st.hover || st.sel;
+    if (f && st.byId.has(f)) return neighbours(f);
+    if (st.q) {
+      const q = st.q.toLowerCase(), ns = new Set(st.vis.filter(n => n.label.toLowerCase().includes(q)).map(n => n.id));
+      return { nodes: ns, edges: new Set(st.visE.filter(e => ns.has(e.s.id) && ns.has(e.t.id))) };
+    }
+    return null;
+  }
+  function refresh() {
+    const a = activeSets();
+    for (const n of st.vis) {
+      n.g.classList.toggle('dim', !!a && !a.nodes.has(n.id));
+      n.g.classList.toggle('sel', n.id === st.sel);
+    }
+    for (const e of st.visE) e.el.classList.toggle('dim', !!a && !a.edges.has(e));
+    labelsFor();
+  }
+  function select(id) {
+    st.sel = id; st.chain = null;
+    const n = st.byId.get(id);
+    if (n && lcPos[id] && st.view.k) {                // gently bring a selection into view if it is off screen
+      const { w, h } = size(), sx = n.x * st.view.k + st.view.x, sy = n.y * st.view.k + st.view.y;
+      if (sx < 20 || sy < 20 || sx > w - 20 || sy > h - 20) { st.view.x += w / 2 - sx; st.view.y += h / 2 - sy; applyView(); }
+    }
+    refresh(); renderSide();
+  }
+
+  // ── side panel ───────────────────────────────────────────────
+  function riskBar(r) { return `<div class="lc-meter"><i style="width:${r}%;background:${lcRiskVar(r)}"></i></div>`; }
+  function renderSide() {
+    if (!st.graph) { side.innerHTML = ''; return; }
+    const n = st.sel ? st.byId.get(st.sel) : null;
+    const chains = st.graph.chains || [];
+    if (!n) {
+      const top = st.nodes.slice().sort((a, b) => b.risk - a.risk || b.event_count - a.event_count).slice(0, 12);
+      const gs = st.graph.stats || {};
+      side.innerHTML = `
+        <div class="lc-sh-t">Overview</div>
+        <div class="lc-kv"><span>Entities</span><b>${gs.nodes ?? st.nodes.length}</b><span>Links</span><b>${gs.edges ?? st.edges.length}</b>
+          <span>Domains</span><b>${(gs.by_type || {}).domain || 0}</b><span>Files</span><b>${(gs.by_type || {}).file || 0}</b>
+          <span>Accounts</span><b>${(gs.by_type || {}).account || 0}</b><span>Attack chains</span><b>${chains.length}</b></div>
+        ${chains.length ? `<div class="lc-sh-t">Attack chains</div>${chains.map(c => `
+          <button type="button" class="lc-row chain" data-chain="${c.id}"><span class="lc-badge" style="--c:var(--danger)">${c.score}</span>
+            <span class="lc-row-m"><b>${escapeHtml(c.domain)}</b><small>${c.steps.length} steps</small></span></button>`).join('')}` : ''}
+        <div class="lc-sh-t">Highest risk entities</div>
+        ${top.map(t => `<button type="button" class="lc-row" data-id="${escapeHtml(t.id)}"><span class="lc-badge" style="--c:${lcRiskVar(t.risk)}">${t.risk}</span>
+          <span class="lc-row-m"><b>${escapeHtml(t.label)}</b><small>${LC_TYPE_LABEL[t.type] || t.type} · ${t.event_count} events</small></span></button>`).join('')}
+        <p class="lc-hint">Click an entity to see why it matters. Drag to move it, scroll to zoom, drag the background to pan.</p>`;
+      return;
+    }
+    const conn = [];
+    st.edges.forEach(e => { if (e.s === n) conn.push({ o: e.t, e, out: true }); else if (e.t === n) conn.push({ o: e.s, e, out: false }); });
+    conn.sort((a, b) => (b.e.flagged - a.e.flagged) || (b.o.risk - a.o.risk));
+    const myChains = (n.chains || []).map(i => chains.find(c => c.id === i)).filter(Boolean);
+    side.innerHTML = `
+      <button type="button" class="lc-back" data-act="back">&larr; Overview</button>
+      <div class="lc-ent"><span class="lc-badge big" style="--c:${n.collapsed ? 'var(--t3)' : lcRiskVar(n.risk)}">${n.collapsed ? '…' : n.risk}</span>
+        <div><div class="lc-ent-t">${escapeHtml(n.label)}</div><div class="lc-ent-s">${LC_TYPE_LABEL[n.type] || n.type}${n.collapsed ? ' (folded)' : ''}</div></div></div>
+      ${riskBar(n.risk)}
+      <div class="lc-kv"><span>Events</span><b>${n.event_count}</b><span>Flagged</span><b>${n.flagged_count}</b>
+        <span>Artifacts</span><b>${(n.artifact_types || []).join(', ') || '—'}</b></div>
+      ${(n.techniques || []).length ? `<div class="lc-sh-t">MITRE ATT&amp;CK</div><div class="lc-tags">${n.techniques.map(t => `<span class="lc-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      ${myChains.length ? `<div class="lc-sh-t">In attack chains</div>${myChains.map(c => `
+        <button type="button" class="lc-row chain" data-chain="${c.id}"><span class="lc-badge" style="--c:var(--danger)">${c.score}</span>
+          <span class="lc-row-m"><b>${escapeHtml(c.domain)}</b><small>${escapeHtml((c.description || '').slice(0, 90))}</small></span></button>`).join('')}` : ''}
+      ${conn.length ? `<div class="lc-sh-t">Connected to (${conn.length})</div>${conn.slice(0, 14).map(c => `
+        <button type="button" class="lc-row" data-id="${escapeHtml(c.o.id)}"><span class="lc-arrow ${c.e.chain || c.e.kind === 'exfil' ? 'hot' : c.e.flagged ? 'warn' : ''}">${c.out ? '→' : '←'}</span>
+          <span class="lc-row-m"><b>${escapeHtml(c.o.label)}</b><small>${escapeHtml(c.e.label || LC_KIND[c.e.kind] || c.e.kind)}${c.e.weight > 1 ? ' ×' + c.e.weight : ''}</small></span></button>`).join('')}` : ''}
+      ${(n.events || []).length ? `<div class="lc-sh-t">Evidence (${n.events.length}${n.event_count > n.events.length ? ' of ' + n.event_count : ''})</div>
+        <div class="lc-evs">${n.events.map(ev => `<div class="lc-ev${ev.flagged ? ' fl' : ''}"><span class="lc-evt">${escapeHtml(ev.type)}</span>
+          <span class="lc-evx" title="${escapeHtml(ev.text)}">${escapeHtml(ev.text)}</span><span class="lc-evs2">${ev.score}</span>
+          <small>${escapeHtml(fmtDateTime(ev.timestamp))}</small></div>`).join('')}</div>` : ''}
+      <div class="lc-act-row"><button type="button" class="lc-b" data-act="copy">Copy name</button>
+        <button type="button" class="lc-b" data-act="focus">Center</button>
+        <button type="button" class="lc-b" data-act="drawer">All flagged events</button></div>`;
+  }
+  side.addEventListener('click', ev => {
+    const row = ev.target.closest('[data-id],[data-chain],[data-act]'); if (!row) return;
+    if (row.dataset.id) { select(row.dataset.id); focusOn(row.dataset.id); return; }
+    if (row.dataset.chain != null) { st.chain = +row.dataset.chain; st.sel = null; refresh(); renderSide(); return; }
+    const a = row.dataset.act;
+    if (a === 'back') { st.sel = null; st.chain = null; refresh(); renderSide(); }
+    if (a === 'copy' && st.sel) navigator.clipboard && navigator.clipboard.writeText(st.byId.get(st.sel).label).then(() => showToast('Copied'));
+    if (a === 'focus' && st.sel) focusOn(st.sel);
+    if (a === 'drawer') { if (typeof openC4Drawer === 'function') openC4Drawer('flagged'); }
+  });
+  function focusOn(id) {
+    const n = st.byId.get(id); if (!n || n.g.style.display === 'none') return;
+    const { w, h } = size(); st.view.x = w / 2 - n.x * st.view.k; st.view.y = h / 2 - n.y * st.view.k; applyView();
+  }
+
+  // ── pointer: pan, zoom, drag ─────────────────────────────────
+  let drag = null, pan = null, moved = 0;
+  function pt(ev) { const r = svg.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+  function nodeDown(ev, n) {
+    if (ev.button !== 0) return;
+    ev.stopPropagation(); ev.preventDefault();
+    drag = { n, sx: ev.clientX, sy: ev.clientY, ox: n.x, oy: n.y }; moved = 0;
+    n.g.setPointerCapture(ev.pointerId);
+    const mv = e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy; moved = Math.max(moved, Math.abs(dx) + Math.abs(dy));
+      if (moved > 3) { n.fixed = true; n.x = drag.ox + dx / st.view.k; n.y = drag.oy + dy / st.view.k; n.vx = n.vy = 0; if (st.alpha < 0.15) start(0.15); else draw(); }
+    };
+    const up = e => {
+      n.g.removeEventListener('pointermove', mv); n.g.removeEventListener('pointerup', up);
+      if (moved <= 3) { n.fixed = false; select(n.id); } else { lcPos[n.id] = { x: n.x, y: n.y }; }
+      drag = null;
+    };
+    n.g.addEventListener('pointermove', mv); n.g.addEventListener('pointerup', up);
+  }
+  svg.addEventListener('dblclick', ev => {
+    const g = ev.target.closest('.lc-n'); if (!g) return;
+    const n = st.nodes.find(x => x.g === g); if (n) { n.fixed = false; start(0.3); }
+  });
+  svg.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0 || ev.target.closest('.lc-n')) return;
+    pan = { sx: ev.clientX, sy: ev.clientY, ox: st.view.x, oy: st.view.y }; moved = 0; svg.setPointerCapture(ev.pointerId); svg.classList.add('panning');
+  });
+  svg.addEventListener('pointermove', ev => {
+    if (!pan) return;
+    const dx = ev.clientX - pan.sx, dy = ev.clientY - pan.sy; moved = Math.max(moved, Math.abs(dx) + Math.abs(dy));
+    st.view.x = pan.ox + dx; st.view.y = pan.oy + dy; applyView();
+  });
+  const endPan = () => { if (pan && moved <= 3 && (st.sel || st.chain != null)) { st.sel = null; st.chain = null; refresh(); renderSide(); } pan = null; svg.classList.remove('panning'); };
+  svg.addEventListener('pointerup', endPan); svg.addEventListener('pointercancel', endPan);
+  svg.addEventListener('wheel', ev => { ev.preventDefault(); const p = pt(ev); zoomAt(Math.pow(1.0016, -ev.deltaY), p.x, p.y); }, { passive: false });
+  root.addEventListener('keydown', ev => { if (ev.key === 'Escape' && (st.sel || st.chain != null)) { st.sel = null; st.chain = null; refresh(); renderSide(); ev.stopPropagation(); } });
+
+  // ── toolbar ──────────────────────────────────────────────────
+  root.querySelector('.lc-chips').addEventListener('click', ev => {
+    const b = ev.target.closest('.lc-chip'); if (!b) return;
+    st.types[b.dataset.t] = !st.types[b.dataset.t]; b.classList.toggle('on', st.types[b.dataset.t]); applyFilter(true);
+  });
+  root.querySelector('[data-role="flagged"]').addEventListener('change', ev => { st.flagged = ev.target.checked; applyFilter(true); });
+  root.querySelector('[data-role="risk"]').addEventListener('input', ev => { st.minRisk = +ev.target.value; root.querySelector('[data-role="riskv"]').textContent = st.minRisk; applyFilter(true); });
+  const search = root.querySelector('[data-role="search"]');
+  search.addEventListener('input', () => { st.q = search.value.trim(); refresh(); });
+  search.addEventListener('keydown', ev => {
+    if (ev.key !== 'Enter' || !st.q) return;
+    const m = st.vis.find(n => n.label.toLowerCase().includes(st.q.toLowerCase())); if (m) { select(m.id); focusOn(m.id); }
+  });
+  root.querySelector('.lc-btns').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-act]'); if (!b) return;
+    const { w, h } = size();
+    switch (b.dataset.act) {
+      case 'fit': fit(); break;
+      case 'zoomin': zoomAt(1.25, w / 2, h / 2); break;
+      case 'zoomout': zoomAt(0.8, w / 2, h / 2); break;
+      case 'relayout': st.nodes.forEach(n => { delete lcPos[n.id]; const hh = lcHash(n.id), a = (hh % 3600) / 3600 * 2 * Math.PI, r = 70 + ((hh >> 12) % 100) * 2.4; n.x = Math.cos(a) * r; n.y = Math.sin(a) * r; n.fixed = false; n.vx = n.vy = 0; }); st.fitted = false; start(1); break;
+      case 'svg': lcDownloadSvg(exportSvg()); break;
+      case 'png': lcDownloadPng(exportSvg()); break;
+      case 'expand': if (opts.full) lcCloseFull(); else lcOpenFull(); break;
+    }
+  });
+
+  // ── export (explicit colours, so the file looks right outside the app) ──
+  function exportSvg() {
+    const V = st.vis; if (!V.length) return null;
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    V.forEach(n => { x0 = Math.min(x0, n.x - n.r - 90); x1 = Math.max(x1, n.x + n.r + 90); y0 = Math.min(y0, n.y - n.r - 30); y1 = Math.max(y1, n.y + n.r + 40); });
+    const W = Math.round(x1 - x0), H = Math.round(y1 - y0);
+    const bg = lcCss('--bg2') || '#0d1828', ink = lcCss('--t1') || '#a8c0dc', mut = lcCss('--t2') || '#5e7a9a';
+    const danger = lcCss('--danger'), warn = lcCss('--warn');
+    const e = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    let out = `<svg xmlns="${SVGNS}" viewBox="${x0.toFixed(0)} ${y0.toFixed(0)} ${W} ${H}" width="${W}" height="${H}" font-family="Segoe UI, Arial, sans-serif">`;
+    out += `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="${bg}"/>`;
+    out += `<defs>${[['n', mut], ['w', warn], ['h', danger]].map(([k, c]) => `<marker id="a${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`).join('')}</defs>`;
+    st.visE.forEach(ed => {
+      const hot = ed.chain || ed.kind === 'exfil', col = hot ? danger : ed.flagged ? warn : mut, k = hot ? 'h' : ed.flagged ? 'w' : 'n';
+      let dx = ed.t.x - ed.s.x, dy = ed.t.y - ed.s.y; const d = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / d, uy = dy / d, b = ed.bend || 0;
+      const ax = ed.s.x + ux * (ed.s.r + 2), ay = ed.s.y + uy * (ed.s.r + 2), bx = ed.t.x - ux * (ed.t.r + 6), by = ed.t.y - uy * (ed.t.r + 6);
+      const p = b ? `M${ax.toFixed(1)},${ay.toFixed(1)} Q${((ax + bx) / 2 - uy * b).toFixed(1)},${((ay + by) / 2 + ux * b).toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)}` : `M${ax.toFixed(1)},${ay.toFixed(1)} L${bx.toFixed(1)},${by.toFixed(1)}`;
+      out += `<path d="${p}" fill="none" stroke="${col}" stroke-opacity="${hot ? .95 : ed.flagged ? .75 : .4}" stroke-width="${hot ? 2.4 : Math.min(3, 1 + (ed.weight || 1) * .3)}" marker-end="url(#a${k})"/>`;
+    });
+    V.forEach(n => {
+      const c = n.collapsed ? mut : lcRiskHex(n.risk); let sh;
+      if (n.type === 'file') sh = `<rect x="${(n.x - n.r).toFixed(1)}" y="${(n.y - n.r).toFixed(1)}" width="${n.r * 2}" height="${n.r * 2}" rx="4"`;
+      else if (n.type === 'account') { const q = n.r * 1.25; sh = `<polygon points="${n.x.toFixed(1)},${(n.y - q).toFixed(1)} ${(n.x + q).toFixed(1)},${n.y.toFixed(1)} ${n.x.toFixed(1)},${(n.y + q).toFixed(1)} ${(n.x - q).toFixed(1)},${n.y.toFixed(1)}"`; }
+      else sh = `<circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${n.r}"`;
+      out += `${sh} fill="${c}" fill-opacity=".85" stroke="${c}" stroke-width="2"/>`;
+      out += `<text x="${n.x.toFixed(1)}" y="${(n.y + n.r + 13).toFixed(1)}" text-anchor="middle" font-size="11" fill="${ink}">${e(n.label.length > 36 ? n.label.slice(0, 35) + '…' : n.label)}</text>`;
+    });
+    return out + '</svg>';
+  }
+
+  // ── lifecycle ────────────────────────────────────────────────
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => { if (!st.fitted && st.vis.length && st.alpha <= 0.02) fit(); });
+    ro.observe(stage); st.ro = ro;
+  }
+  applyView();
+  return {
+    setGraph, fit, el: root,
+    destroy() { st.dead = true; cancelAnimationFrame(st.raf); if (st.ro) st.ro.disconnect(); },
+    state: st,
+  };
+}
+
+function lcSave(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function lcStamp() { return new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19); }
+function lcDownloadSvg(svg) { if (!svg) return showToast('Nothing to export yet'); lcSave(new Blob([svg], { type: 'image/svg+xml' }), `c4_link_chart_${lcStamp()}.svg`); }
+function lcDownloadPng(svg) {
+  if (!svg) return showToast('Nothing to export yet');
+  const m = svg.match(/width="(\d+)" height="(\d+)"/), w = +m[1], h = +m[2], scale = Math.min(2, 4096 / Math.max(w, h));
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+    const x = c.getContext('2d'); x.drawImage(img, 0, 0, c.width, c.height);
+    c.toBlob(b => b ? lcSave(b, `c4_link_chart_${lcStamp()}.png`) : showToast('Could not create the PNG'), 'image/png');
+  };
+  img.onerror = () => showToast('Could not create the PNG');
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+function lcOpenFull() {
+  let ov = document.getElementById('c4-link-overlay');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'c4-link-overlay';
+    ov.innerHTML = '<div class="lc-full-head"><div><b>Link Chart</b><span>Entities and relationships found in the browser profile</span></div><button type="button" class="lc-b" id="c4-link-close">Close</button></div><div class="lc-full-body"></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#c4-link-close').addEventListener('click', lcCloseFull);
+  }
+  ov.classList.add('open');
+  if (lcFull) lcFull.destroy();
+  lcFull = createLinkChart(ov.querySelector('.lc-full-body'), { full: true });
+  lcFull.setGraph(lcGraph);
+  setTimeout(() => ov.querySelector('.lc-svg').focus && lcFull.fit(), 60);
+}
+function lcCloseFull() {
+  const ov = document.getElementById('c4-link-overlay'); if (ov) ov.classList.remove('open');
+  if (lcFull) { lcFull.destroy(); lcFull = null; }
+}
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && lcFull) lcCloseFull(); });
+
+// called by renderC4Result() with the scan result
+async function renderC4LinkChart(result) {
+  let g = result && result.link_chart;
+  if (!g && result) {                                   // result from before the chart existed
+    try { const d = await (await fetch(API + '/forensic/linkchart')).json(); g = d.link_chart; } catch {}
+  }
+  lcGraph = g || null;
+  const host = document.getElementById('c4-link-chart');
+  if (!host) return;
+  if (!lcCard) lcCard = createLinkChart(host, {});
+  lcCard.setGraph(lcGraph);
+  const sub = document.getElementById('c4-link-sub');
+  if (sub) sub.textContent = lcGraph && lcGraph.nodes.length
+    ? `${lcGraph.stats.nodes} entities · ${lcGraph.stats.edges} links · ${(lcGraph.chains || []).length} attack chain${(lcGraph.chains || []).length === 1 ? '' : 's'}`
+    : 'Domains, files and accounts and how they connect';
+  if (lcFull) lcFull.setGraph(lcGraph);
+}
+renderC4LinkChart(null);   // show the empty state until the first scan
+
 // ── Activity Heatmap ──────────────────────────────────────────
 function renderC4Heatmap(dayHourBaseline) {
   const el = document.getElementById('c4-heatmap');
@@ -10659,6 +11304,7 @@ function renderC4Result(result, summary = {}) {
   renderC4Methods(result.correlation || {});
   renderC4Events((result.events || []).filter(e => e.risk_flag));
   renderC4Timeline(result);
+  renderC4LinkChart(result);
   renderC4Manifest(result.artifact_manifest || {});
   renderC4Warnings(result.warnings || []);
   renderC4Charts(result, summary);
