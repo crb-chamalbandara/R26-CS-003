@@ -12,7 +12,7 @@ Role    : Run ONCE (or whenever the dataset changes) to (re)produce
           trains the supervised XGBoost model.
 
 Run from project root:
-    python core/c1/scripts/train_isolation_forest.py --input core/c1/data/dataset_clean_v4.csv
+    python researches/C1/scripts/train_isolation_forest.py --input researches/C1/data/dataset_clean_v4.csv
 """
 from __future__ import annotations
 
@@ -38,11 +38,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train C1 Isolation Forest (zero-day detector).")
     parser.add_argument(
         "--input",
-        default=os.path.join("core", "c1", "data", "dataset_clean_v4.csv"),
+        default=os.path.join("researches", "C1", "data", "dataset_clean_v4.csv"),
     )
     parser.add_argument(
         "--model-out",
-        default=os.path.join("core", "c1", "models", "isolation_forest_model.pkl"),
+        default=os.path.join("models", "isolation_forest_model.pkl"),
     )
     parser.add_argument("--label-col", default="label")
     # 0.02 (not the notebook draft's 0.05) — calibrated down against the

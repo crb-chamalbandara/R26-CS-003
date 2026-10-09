@@ -14,7 +14,7 @@ Role    : Consumes the audit CSV produced by the download-feasibility check
           through to the actual training data.
 
 Run from project root:
-    python core/c1/scripts/add_blocklist_live_extensions.py
+    python researches/C1/scripts/add_blocklist_live_extensions.py
 """
 from __future__ import annotations
 
@@ -28,10 +28,10 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 C1_DIR   = ROOT / "core" / "c1"
-DATA_DIR = C1_DIR / "data"
+DATA_DIR = ROOT / "researches" / "C1" / "data"
 
 CHECK_CSV     = DATA_DIR / "blocklist_5cat_download_check.csv"
-FEATURES_JSON = DATA_DIR / "dataset_clean_v3_features.json"
+FEATURES_JSON = ROOT / "core" / "c1" / "data" / "dataset_clean_v3_features.json"
 DATASET_CSV   = DATA_DIR / "dataset_clean_v4.csv"
 AUDIT_OUT     = DATA_DIR / "blocklist_live_import_log.csv"
 

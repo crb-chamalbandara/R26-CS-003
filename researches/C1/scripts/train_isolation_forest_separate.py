@@ -14,7 +14,7 @@ Evaluation: dataset_clean_v4.csv's malicious rows are used ONLY to measure
           the eval data to come from the same source as training.
 
 Run from project root:
-    python core/c1/scripts/train_isolation_forest_separate.py
+    python researches/C1/scripts/train_isolation_forest_separate.py
 """
 from __future__ import annotations
 
@@ -37,16 +37,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train C1 Isolation Forest on its own separate dataset.")
     parser.add_argument(
         "--benign-input",
-        default=os.path.join("core", "c1", "data", "isolation_forest_benign_dataset.csv"),
+        default=os.path.join("researches", "C1", "data", "isolation_forest_benign_dataset.csv"),
     )
     parser.add_argument(
         "--eval-malicious-input",
-        default=os.path.join("core", "c1", "data", "dataset_clean_v4.csv"),
+        default=os.path.join("researches", "C1", "data", "dataset_clean_v4.csv"),
         help="Labeled dataset to pull malicious rows from for evaluation only (never trained on).",
     )
     parser.add_argument(
         "--model-out",
-        default=os.path.join("core", "c1", "models", "isolation_forest_model.pkl"),
+        default=os.path.join("models", "isolation_forest_model.pkl"),
     )
     parser.add_argument("--contamination", type=float, default=0.02)
     parser.add_argument("--n-estimators", type=int, default=200)

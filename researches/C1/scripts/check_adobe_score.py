@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirna
 import joblib, numpy as np
 
 feat_cols = json.load(open("core/c1/data/dataset_clean_v3_features.json"))
-model = joblib.load("core/c1/models/extension_detector_model.pkl")
+model = joblib.load("models/extension_detector_model.pkl")
 
 def verdict(p):
     if p >= 0.7: return "MALICIOUS"

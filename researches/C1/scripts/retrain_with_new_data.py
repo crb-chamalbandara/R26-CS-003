@@ -2,7 +2,7 @@
 C1 Model Retraining — incorporates new malicious CRX dataset.
 
 Run from project root:
-    python core/c1/scripts/retrain_with_new_data.py
+    python researches/C1/scripts/retrain_with_new_data.py
 
 What this does (safe, non-destructive):
   1. Parses all CRX files in MaliciousBrowserExtensions/ (both subfolders)
@@ -41,8 +41,8 @@ from xgboost import XGBClassifier
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT        = Path(__file__).resolve().parents[3]
 C1_DIR      = ROOT / "core" / "c1"
-DATA_DIR    = C1_DIR / "data"
-MODELS_DIR  = C1_DIR / "models"
+DATA_DIR    = ROOT / "researches" / "C1" / "data"
+MODELS_DIR  = ROOT / "models"
 
 NEW_DATA_ROOT = DATA_DIR / "MaliciousBrowserExtensions"
 NEW_FOLDERS   = [
@@ -51,7 +51,7 @@ NEW_FOLDERS   = [
 ]
 
 EXISTING_CSV    = DATA_DIR / "dataset_clean_v3.csv"
-FEATURES_JSON   = DATA_DIR / "dataset_clean_v3_features.json"
+FEATURES_JSON   = ROOT / "core" / "c1" / "data" / "dataset_clean_v3_features.json"
 COMBINED_CSV    = DATA_DIR / "dataset_clean_v4.csv"
 MODEL_OUT       = MODELS_DIR / "extension_detector_model.pkl"
 META_OUT        = MODELS_DIR / "training_meta.json"

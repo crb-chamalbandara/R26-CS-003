@@ -13,8 +13,7 @@ from core.c1.features import extract_manifest_features, build_feature_vector
 
 
 def main() -> None:
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    feature_path = os.path.join(base_dir, "data", "dataset_clean_v3_features.json")
+    feature_path = os.path.join(BASE_DIR, "core", "c1", "data", "dataset_clean_v3_features.json")
 
     with open(feature_path, "r", encoding="utf-8") as handle:
         feature_columns = json.load(handle)

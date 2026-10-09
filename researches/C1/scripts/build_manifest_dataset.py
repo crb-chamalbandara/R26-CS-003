@@ -106,17 +106,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build manifest feature dataset from CRX files.")
     parser.add_argument(
         "--benign-dir",
-        default=os.path.join("core", "c1", "data", "GoogleChromeExtension", "benign", "benign"),
+        default=os.path.join("researches", "C1", "data", "GoogleChromeExtension", "benign", "benign"),
         help="Directory containing benign CRX files",
     )
     parser.add_argument(
         "--malware-dir",
-        default=os.path.join("core", "c1", "data", "GoogleChromeExtension", "malware", "malware"),
+        default=os.path.join("researches", "C1", "data", "GoogleChromeExtension", "malware", "malware"),
         help="Directory containing malware CRX files",
     )
     parser.add_argument(
         "--output",
-        default=os.path.join("core", "c1", "data", "manifest_dataset.csv"),
+        default=os.path.join("researches", "C1", "data", "manifest_dataset.csv"),
         help="Output CSV path",
     )
     args = parser.parse_args()

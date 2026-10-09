@@ -77,8 +77,9 @@ def _load_resources() -> None:
         return    # already loaded — skip
 
     base_dir       = os.path.dirname(os.path.abspath(__file__))
-    model_path     = os.path.join(base_dir, "models", "extension_detector_model.pkl")
-    if_model_path  = os.path.join(base_dir, "models", "isolation_forest_model.pkl")
+    models_dir     = os.path.join(os.path.dirname(os.path.dirname(base_dir)), "models")   # <repo>/models
+    model_path     = os.path.join(models_dir, "extension_detector_model.pkl")
+    if_model_path  = os.path.join(models_dir, "isolation_forest_model.pkl")
     feature_path   = os.path.join(base_dir, "data",   "dataset_clean_v3_features.json")
     # Finalized blocklist (6,656 IDs + evidence: name, reason, source, date,
     # store, version, SHA256) — combines malext_sentry + chrome_mal_ids.

@@ -13,7 +13,7 @@ Role    : Run ONCE to fold this new source in. Only .crx files are used —
           format specifically.
 
 Run from project root:
-    python core/c1/scripts/add_malcryptoext_data.py
+    python researches/C1/scripts/add_malcryptoext_data.py
 """
 from __future__ import annotations
 
@@ -24,10 +24,10 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 C1_DIR   = ROOT / "core" / "c1"
-DATA_DIR = C1_DIR / "data"
+DATA_DIR = ROOT / "researches" / "C1" / "data"
 
 SOURCE_DIR    = DATA_DIR / "MalCryptoExt_malicious_extensions"
-FEATURES_JSON = DATA_DIR / "dataset_clean_v3_features.json"
+FEATURES_JSON = ROOT / "core" / "c1" / "data" / "dataset_clean_v3_features.json"
 DATASET_CSV   = DATA_DIR / "dataset_clean_v4.csv"
 
 
