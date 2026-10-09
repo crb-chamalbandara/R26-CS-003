@@ -7,15 +7,21 @@
 ; If a shortcut cannot be created, the user is offered a restart of the
 ; installer with administrator rights.
 
+!include "MUI2.nsh"   ; this file is read before electron-builder pulls MUI2 in; the page code needs MUI_HEADER_TEXT
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
 
-Var ScDesktopBox
-Var ScStartBox
-Var ScAdminBox
-Var ScDesktopOn
-Var ScStartOn
-Var ScAdminOn
+; These variables are only used by the options page and install section, which are compiled out
+; of the uninstaller pass; declaring them there trips NSIS warning 6001
+; (unused variable), which electron-builder treats as a build error.
+!ifndef BUILD_UNINSTALLER
+  Var ScDesktopBox
+  Var ScStartBox
+  Var ScAdminBox
+  Var ScDesktopOn
+  Var ScStartOn
+  Var ScAdminOn
+!endif
 
 ; ── Defaults (also used for silent /S installs, where the page is skipped) ──
 !macro customInit
