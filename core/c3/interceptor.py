@@ -86,6 +86,11 @@ class C3Interceptor:
     def running(self) -> bool:
         return self._running
 
+    @property
+    def context(self):
+        """The browser context C3 is attached to (None when stopped)."""
+        return self._context
+
     async def start(self, pw_session) -> None:
         """Begin intercepting.  Called once when the backend starts the browser session."""
         if self._running:

@@ -1995,8 +1995,10 @@ async def _tc_c3_live_beacon():
     if not pw_session.is_running and not _session_starting:
         await session_start()                 # the app's own path: browser + C3
     for _ in range(120):
-        if pw_session.is_running and c3_interceptor.running and c3_analyzer.running:
-            break
+        if pw_session.is_running:
+            await _c3_ensure_attached()
+            if c3_interceptor.running and c3_analyzer.running:
+                break
         await asyncio.sleep(0.5)
     assert pw_session.is_running and c3_interceptor.running and c3_analyzer.running, \
         "C3 is not attached to a live browser session; restart the session from Settings"
@@ -2134,8 +2136,10 @@ async def _tc_c3_ngrok_beacon():
     if not pw_session.is_running and not _session_starting:
         await session_start()
     for _ in range(120):
-        if pw_session.is_running and c3_interceptor.running and c3_analyzer.running:
-            break
+        if pw_session.is_running:
+            await _c3_ensure_attached()
+            if c3_interceptor.running and c3_analyzer.running:
+                break
         await asyncio.sleep(0.5)
     assert pw_session.is_running and c3_interceptor.running and c3_analyzer.running, \
         "C3 is not attached to a live browser session; restart the session from Settings"
@@ -2360,6 +2364,37 @@ def _c4_live_tmp():
     return tmp
 
 
+async def _c3_detach() -> None:
+    """Stop C3 cleanly. Safe to call when C3 is not running."""
+    await c3_analyzer.stop_loop()
+    await c3_interceptor.stop()
+
+
+async def _c3_attach() -> None:
+    """Attach C3 (tagger, CDP interceptor, analysis loop) to the CURRENT browser context."""
+    await c3_tagger.setup(pw_session.context)
+    await c3_interceptor.start(pw_session)
+    await c3_analyzer.start_loop(pw_session, _broadcast)
+
+
+async def _c3_ensure_attached() -> None:
+    """Make sure C3 is watching the browser that is running right now.
+
+    c3_interceptor.running only says "start() was called"; it stays True after the
+    browser it was attached to is closed. If the session was restarted without
+    going through /session/start (the C4 live-login test does exactly that), C3
+    would still report running while attached to a dead context and capture
+    nothing, so a C3 test would wait for traffic that can never arrive.
+    """
+    stale = c3_interceptor.context is not pw_session.context
+    if pw_session.is_running and c3_interceptor.running and c3_analyzer.running and not stale:
+        return
+    if not pw_session.is_running:
+        return
+    await _c3_detach()
+    await _c3_attach()
+
+
 async def _ensure_browser_running():
     """Auto-launch the shared Playwright browser if it isn't already up.
 
@@ -2379,6 +2414,7 @@ async def _ensure_browser_running():
         _session_starting = True
         try:
             await pw_session.start()
+            await _c3_ensure_attached()
         finally:
             _session_starting = False
 
@@ -2640,6 +2676,7 @@ async def _tc_c4_live_login_plant():
 
     was_running = pw_session.is_running
     if was_running:
+        await _c3_detach()                 # C3 is bound to this browser context
         await pw_session.stop()
     try:
         def _plant():
