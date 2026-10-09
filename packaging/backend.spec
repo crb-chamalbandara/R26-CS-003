@@ -12,8 +12,7 @@ datas, binaries, hiddenimports = [], [], []
 
 # Repo data the backend reads at runtime (only bundled if present at build time).
 for rel in [
-    'models', 'data',
-    os.path.join('core', 'c1', 'models'),
+    'models', 'data',   # root models/ now also holds the C1 pkl files
     os.path.join('core', 'c1', 'data'),
     os.path.join('core', 'c1', 'test_malicious_ext'),
     os.path.join('test', 'C2', 'pages'),
