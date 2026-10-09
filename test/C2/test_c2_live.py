@@ -43,6 +43,11 @@ class TestReasons(unittest.TestCase):
             {"floor_applied": "phishing", "pre_floor_risk": 33.9, "final_risk": 60})
         self.assertTrue(any("hard rule" in r and "34" in r and "60" in r for r in out))
 
+    def test_safe_verdict_with_a_fired_signal_explains_why_it_is_still_safe(self):
+        out = m._c2_build_reasons([_layer("L2", .99, "ML model score", "URL Analysis")], "SAFE")
+        self.assertIn("below the suspicious threshold", out[0])
+        self.assertTrue(out[1].startswith("URL Analysis (99%)"))
+
     def test_verified_domain_without_layers(self):
         out = m._c2_build_reasons([], "VERIFIED", None, verified=True)
         self.assertIn("Verified domain", out[0])

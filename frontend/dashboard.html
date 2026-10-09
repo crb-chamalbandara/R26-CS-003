@@ -2922,6 +2922,93 @@ input,textarea,select{font-family:inherit}
 @media (prefers-reduced-motion:reduce){
   #panel-c2 *,#panel-c4 *{transition:none !important;animation:none !important}
 }
+
+/* ==============================================================================
+   C2 LIVE ANALYSIS (additive; deleting this block restores the previous cards)
+   ============================================================================== */
+#panel-c2 #live-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;flex-shrink:0}
+#panel-c2 .ls-item{display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-radius:11px;
+  background:linear-gradient(158deg,var(--g-a),var(--g-b));border:1px solid var(--g-brd);box-shadow:var(--g-inset)}
+#panel-c2 .ls-num{font-size:19px;font-weight:800;letter-spacing:-.015em;color:var(--t0);font-variant-numeric:tabular-nums}
+#panel-c2 .ls-lbl{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--t2);font-weight:600}
+#panel-c2 #live-empty{padding:34px 20px;text-align:center}
+#panel-c2 #live-empty .e-msg{font-size:14px;font-weight:700;color:var(--t1)}
+#panel-c2 #live-empty .e-sub{max-width:430px;font-size:11.5px;line-height:1.6;color:var(--t2)}
+#panel-c2 #live-tabs{gap:12px}
+
+#panel-c2 .lv-card{--vc:var(--t2);background:linear-gradient(158deg,var(--g-a) 0%,var(--g-b) 100%);
+  border:1px solid var(--g-brd);border-left:3px solid var(--vc);border-radius:14px;padding:14px 16px 12px;
+  box-shadow:var(--g-inset),var(--g-shadow);flex-shrink:0;transition:border-color .25s,box-shadow .25s}
+#panel-c2 .lv-card.safe,#panel-c2 .lv-card.verified{--vc:var(--safe)}
+#panel-c2 .lv-card.suspicious{--vc:var(--warn)}
+#panel-c2 .lv-card.phishing{--vc:var(--danger);box-shadow:var(--g-inset),var(--g-shadow),0 0 0 1px rgba(240,71,71,.18)}
+#panel-c2 .lv-card.analyzing{--vc:var(--c2)}
+#panel-c2 .lv-card.verified{--vc:var(--c2)}
+#panel-c2 .lv-head{display:flex;align-items:center;gap:9px}
+#panel-c2 .lv-title{flex:1;min-width:0;font-size:13px;font-weight:700;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c2 .lv-chip{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:3px 10px;border-radius:20px;
+  color:var(--vc);border:1px solid color-mix(in srgb,var(--vc) 40%,transparent);background:color-mix(in srgb,var(--vc) 11%,transparent)}
+#panel-c2 .lv-url{font-family:var(--mono);font-size:10.5px;color:var(--t2);margin:6px 0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c2 .lv-main{display:flex;gap:16px;align-items:flex-start}
+#panel-c2 .lv-gauge{position:relative;width:92px;height:92px;flex-shrink:0}
+#panel-c2 .lv-gauge svg{width:100%;height:100%}
+#panel-c2 .lv-ring-bg{fill:none;stroke:rgba(var(--tint),.08);stroke-width:7}
+#panel-c2 .lv-ring{fill:none;stroke-width:7;stroke-linecap:round;stroke-dasharray:0 214;
+  transition:stroke-dasharray .7s cubic-bezier(.4,0,.2,1),stroke .3s}
+#panel-c2 .lv-card.analyzing .lv-ring{stroke-dasharray:46 214 !important;animation:lvSpin 1.1s linear infinite;transform-origin:40px 40px;transition:none}
+@keyframes lvSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+#panel-c2 .lv-gnum{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#panel-c2 .lv-gnum b{font-size:25px;font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+#panel-c2 .lv-gnum span{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--t2);margin-top:3px}
+#panel-c2 .lv-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:11px}
+#panel-c2 .lv-why{border:1px solid color-mix(in srgb,var(--vc) 28%,transparent);background:color-mix(in srgb,var(--vc) 7%,transparent);
+  border-radius:10px;padding:8px 12px}
+#panel-c2 .lv-why-t{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--vc);margin-bottom:4px}
+#panel-c2 .lv-why-l{margin:0;padding-left:16px;font-size:11.5px;color:var(--t1);line-height:1.55}
+#panel-c2 .lv-layers{display:flex;flex-direction:column;gap:7px}
+#panel-c2 .lv-lrow{display:grid;grid-template-columns:24px 128px 1fr 38px;align-items:center;gap:9px;transition:opacity .2s}
+#panel-c2 .lv-lrow.off{opacity:.38}
+#panel-c2 .lv-lid{font-size:9px;font-weight:800;color:var(--t2);background:rgba(var(--tint),.06);border-radius:5px;padding:1px 0;text-align:center}
+#panel-c2 .lv-lname{font-size:11px;color:var(--t1);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c2 .lv-bar{height:6px;border-radius:4px;background:rgba(var(--tint),.08);overflow:hidden}
+#panel-c2 .lv-bar i{display:block;height:100%;width:0;border-radius:4px;transition:width .6s cubic-bezier(.4,0,.2,1),background .3s}
+#panel-c2 .lv-lrow.pending .lv-bar{background:linear-gradient(90deg,rgba(var(--tint),.06) 0%,rgba(var(--c2-rgb),.35) 50%,rgba(var(--tint),.06) 100%);
+  background-size:200% 100%;animation:lvShimmer 1.2s linear infinite}
+@keyframes lvShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+#panel-c2 .lv-lval{font-size:10.5px;font-weight:800;text-align:right;color:var(--t2);font-variant-numeric:tabular-nums}
+#panel-c2 .lv-ldet{grid-column:2 / -1;font-size:10px;color:var(--t2);margin-top:-3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c2 .lv-ldet:empty{display:none}
+#panel-c2 .lv-prev{width:168px;flex-shrink:0;border-radius:10px;overflow:hidden;border:1px solid var(--g-brd);background:rgba(var(--tint),.04);
+  box-shadow:var(--g-shadow)}
+#panel-c2 .lv-prev img{display:block;width:100%;height:auto}
+#panel-c2 .lv-trail{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--g-brd)}
+#panel-c2 .lv-trail-t{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--t2);margin-right:2px}
+#panel-c2 .lv-tr{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:var(--t1);cursor:pointer;
+  padding:3px 9px;border-radius:20px;border:1px solid var(--g-brd);background:rgba(var(--tint),.04);font-family:inherit;
+  max-width:200px;transition:border-color .15s,background .15s}
+#panel-c2 .lv-tr i{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+#panel-c2 .lv-tr .h{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c2 .lv-tr b{font-weight:800;font-variant-numeric:tabular-nums;color:var(--t2)}
+#panel-c2 .lv-tr:hover{border-color:rgba(var(--c2-rgb),.5);background:rgba(var(--c2-rgb),.08)}
+#panel-c2 .lv-tr.now{border-color:color-mix(in srgb,var(--vc) 45%,transparent)}
+#panel-c2 .lv-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+#panel-c2 .lv-act{font-family:inherit;font-size:10.5px;font-weight:700;color:var(--t1);padding:5px 12px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--g-brd);background:rgba(var(--tint),.045);transition:border-color .15s,background .15s,color .15s}
+#panel-c2 .lv-act:hover:not(:disabled){border-color:rgba(var(--c2-rgb),.55);color:var(--c2);background:rgba(var(--c2-rgb),.08)}
+#panel-c2 .lv-act:disabled{opacity:.4;cursor:default}
+#panel-c2 .lv-act:focus-visible,#panel-c2 .lv-tr:focus-visible{outline:2px solid var(--c2);outline-offset:2px}
+#panel-c2 .lv-trust{margin-left:auto}
+#panel-c2 .lv-trust.on{color:var(--safe);border-color:color-mix(in srgb,var(--safe) 45%,transparent)}
+@media (max-width:980px){
+  #panel-c2 .lv-main{flex-wrap:wrap}
+  #panel-c2 .lv-prev{width:100%;max-width:260px}
+  #panel-c2 #live-summary{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){#panel-c2 .lv-lrow{grid-template-columns:24px 1fr 38px}#panel-c2 .lv-lrow .lv-bar{grid-column:1 / -1;order:5}}
+@media (prefers-reduced-motion:reduce){
+  #panel-c2 .lv-card.analyzing .lv-ring{animation:none}
+  #panel-c2 .lv-lrow.pending .lv-bar{animation:none}
+}
 </style>
 </head>
 <body>
@@ -3029,10 +3116,17 @@ input,textarea,select{font-family:inherit}
 
     <!-- LIVE ANALYSIS -->
     <div class="pane active" id="pane-live">
+      <div id="live-summary" aria-live="polite">
+        <div class="ls-item"><span class="ls-num" id="ls-tabs">0</span><span class="ls-lbl">Tabs watched</span></div>
+        <div class="ls-item"><span class="ls-num" id="ls-pages">0</span><span class="ls-lbl">Pages analysed</span></div>
+        <div class="ls-item"><span class="ls-num" id="ls-flagged">0</span><span class="ls-lbl">Flagged</span></div>
+        <div class="ls-item"><span class="ls-num" id="ls-avg">&mdash;</span><span class="ls-lbl">Avg analysis time</span></div>
+      </div>
       <div id="live-tabs"></div>
       <div id="live-empty">
         <div class="e-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-        <div class="e-msg">Navigate to a URL to start analysis</div>
+        <div class="e-msg">Waiting for a page to analyse</div>
+        <div class="e-sub">Type a URL in the bar at the top, or browse in the monitored window. Each tab appears here with a live risk gauge while its six detection layers run.</div>
       </div>
     </div>
 
@@ -3123,6 +3217,11 @@ input,textarea,select{font-family:inherit}
           <div class="sinfo"><div class="sname">L6 active probe</div>
             <div class="sdesc">Focus the password field and fire synthetic keystrokes to trip lazy keyloggers (never submits)</div></div>
           <label class="tog"><input type="checkbox" id="runtime-active-probe"><span class="tslider"></span></label>
+        </div>
+        <div class="srow">
+          <div class="sinfo"><div class="sname">Live page preview</div>
+            <div class="sdesc">Show a small thumbnail of each analysed page in Live Analysis. Kept in memory only, never saved</div></div>
+          <label class="tog"><input type="checkbox" id="live-preview" checked><span class="tslider"></span></label>
         </div>
         <div class="srow">
           <div class="sinfo"><div class="sname">SUSPICIOUS at</div>
@@ -4072,8 +4171,14 @@ function connectPwWs() {
     }
     if (msg.type === 'analysis' && msg.data) {
       ingestResult(msg.data);
+    } else if (msg.type === 'c2_analysis_start') {
+      liveOnStart(msg);
+    } else if (msg.type === 'c2_layer') {
+      liveOnLayer(msg);
+    } else if (msg.type === 'c2_preview') {
+      liveOnPreview(msg);
     } else if (msg.type === 'tab_closed') {
-      closedTabs.add(msg.tab_id); delete liveTabs[msg.tab_id]; renderLiveTabs();
+      closedTabs.add(msg.tab_id); delete liveTabs[msg.tab_id]; delete liveUi[msg.tab_id]; renderLiveTabs();
     } else if (msg.type === 'forensic_analysis') {
       // A scan finished (here or elsewhere): pull the full result without
       // waiting for the 120 s poll. loadC4Report() passes the click event when
@@ -4172,7 +4277,7 @@ function ingestResult(r) {
   timeline.unshift(r);
 
   const tk = r.tab_id != null ? r.tab_id : 0;
-  if (!closedTabs.has(tk)) liveTabs[tk] = r;   // suppress live card for already-closed tabs
+  if (!closedTabs.has(tk)) { liveTabs[tk] = r; liveOnResult(tk, r); }   // suppress live card for already-closed tabs
   renderLiveTabs();
   renderAlerts();
   renderTimeline();
@@ -6872,35 +6977,264 @@ const liveTabs = {};
 // (tab ids are never reused, so this is safe). Prevents ghost cards.
 const closedTabs = new Set();
 
-function renderLiveTabs() {
-  const ids = Object.keys(liveTabs).sort((a, b) => (+a) - (+b));
-  document.getElementById('live-empty').style.display = ids.length ? 'none' : 'flex';
-  document.getElementById('live-tabs').innerHTML = ids.map(id => liveCardHTML(+id, liveTabs[id])).join('');
+// ══════════════════════════════════════════════════════════════
+//  C2 Live Analysis
+//  liveTabs  : tab id -> last finished result (kept for compatibility)
+//  liveUi    : tab id -> what the card shows right now (analysing / done,
+//              which layers have reported, preview, trail of recent pages)
+//  Cards are created once per tab and then patched in place, so the gauge and
+//  the bars animate between updates and nothing the user has open is rebuilt.
+// ══════════════════════════════════════════════════════════════
+const LIVE_LAYERS = [
+  ['L1', 'BitB Detection'], ['L2', 'URL Analysis'], ['L3', 'Visual Similarity'],
+  ['L4', 'Form Destination'], ['L5', 'Reputation Check'], ['L6', 'Runtime Behavior'],
+];
+const LIVE_RING = 2 * Math.PI * 34;
+const liveUi = {};
+const liveStats = { pages: 0, ms: 0, timed: 0 };
+const liveTrusted = new Set();   // hosts trusted from a card this session
+
+function liveHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u || ''; } }
+function liveVerdictClass(v) { return String(v || '').toLowerCase(); }
+function liveColour(v) {
+  const u = String(v || '').toUpperCase();
+  return u === 'PHISHING' ? 'var(--danger)' : u === 'SUSPICIOUS' ? 'var(--warn)'
+       : u === 'VERIFIED' ? 'var(--c2)' : u === 'SAFE' ? 'var(--safe)' : 'var(--t2)';
+}
+function liveLayerColour(p) { return p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)'; }
+
+function liveState(tab) {
+  if (!liveUi[tab]) liveUi[tab] = { tab, url: '', title: '', status: 'idle', planned: [], layers: {},
+                                    result: null, preview: '', trail: [], el: null };
+  return liveUi[tab];
 }
 
-function liveCardHTML(tabId, r) {
-  const vc  = String(r.verdict || '').toLowerCase();
-  const pct = Math.round(r.risk_score);
-  const label = r.title ? r.title : r.url;
-  const layers = (r.layers || []).map(l => {
-    const p  = Math.round(l.score * 100);
-    const lc = p > 60 ? 'var(--danger)' : p > 28 ? 'var(--warn)' : 'var(--safe)';
-    return `<div class="live-lrow">
-        <span class="live-lname">${esc(l.name || l.id)}</span>
-        <div class="live-bar-w"><div class="live-bar" style="width:${p}%;background:${lc}"></div></div>
-        <span class="live-val" style="color:${lc}">${p}%</span>
-      </div>
-      <div class="live-det">${esc(l.detail || '')}</div>`;
-  }).join('');
-  return `<div class="live-card ${vc}">
-    <div class="live-card-hdr">
-      <span class="live-tab-badge">TAB ${tabId}</span>
-      <span class="live-card-title" title="${esc(r.url)}">${esc(label)}</span>
-      <span class="live-card-verdict ${vc}">${esc(r.verdict)} ${pct}%</span>
+function liveOnStart(msg) {
+  const tab = msg.tab_id != null ? msg.tab_id : 0;
+  if (closedTabs.has(tab)) return;
+  const st = liveState(tab);
+  st.url = msg.url || '';
+  st.title = '';
+  st.status = 'analyzing';
+  st.planned = msg.layers || [];
+  st.layers = {};
+  st.startedAt = Date.now();
+  renderLiveTabs();
+}
+
+function liveOnLayer(msg) {
+  const st = liveUi[msg.tab_id != null ? msg.tab_id : 0];
+  // Ignore a layer that belongs to a page the tab has already moved on from.
+  if (!st || st.status !== 'analyzing' || st.url !== msg.url || !msg.layer) return;
+  st.layers[msg.layer.id] = msg.layer;
+  if (!st.planned.includes(msg.layer.id)) st.planned.push(msg.layer.id);
+  liveUpdateCard(st);
+}
+
+function liveOnPreview(msg) {
+  const st = liveUi[msg.tab_id != null ? msg.tab_id : 0];
+  if (!st || st.url !== msg.url) return;
+  st.preview = msg.preview || '';
+  liveUpdateCard(st);
+}
+
+function liveOnResult(tab, r) {
+  const skipped = r.verdict === 'SKIP' || r.verdict === 'WHITELISTED';
+  if (skipped && !liveUi[tab]) return;           // nothing to show for an untouched blank tab
+  const st = liveState(tab);
+  st.url = r.url;
+  st.title = r.title || '';
+  st.result = r;
+  st.status = skipped ? 'skipped' : 'done';
+  st.layers = {};
+  (r.layers || []).forEach(l => { st.layers[l.id] = l; });
+  if (!skipped && !(r.layers || []).length) st.planned = [];
+  else if (!st.planned.length || !st.planned.every(id => st.layers[id])) st.planned = (r.layers || []).map(l => l.id);
+  if (!skipped) {
+    liveStats.pages++;
+    if (r.duration_ms != null) { liveStats.ms += r.duration_ms; liveStats.timed++; }
+    st.trail.unshift({ url: r.url, verdict: r.verdict, score: Math.round(r.risk_score || 0), id: r.id });
+    if (st.trail.length > 8) st.trail.pop();
+    st.preview = '';                               // the new thumbnail arrives as its own message
+  }
+}
+
+function liveCardBuild(st) {
+  const el = document.createElement('div');
+  el.className = 'lv-card';
+  el.dataset.tab = st.tab;
+  el.innerHTML = `
+    <div class="lv-head">
+      <span class="live-tab-badge">TAB ${esc(st.tab)}</span>
+      <span class="lv-title"></span>
+      <span class="lv-chip"></span>
     </div>
-    <div class="live-url" title="${esc(r.url)}">${esc(r.url)}</div>
-    <div class="live-layers">${layers}</div>
-  </div>`;
+    <div class="lv-url"></div>
+    <div class="lv-main">
+      <div class="lv-gauge">
+        <svg viewBox="0 0 80 80" aria-hidden="true">
+          <circle class="lv-ring-bg" cx="40" cy="40" r="34"/>
+          <circle class="lv-ring" cx="40" cy="40" r="34" transform="rotate(-90 40 40)"/>
+        </svg>
+        <div class="lv-gnum"><b>&mdash;</b><span>risk</span></div>
+      </div>
+      <div class="lv-mid">
+        <div class="lv-why"><div class="lv-why-t">Why this verdict</div><ul class="lv-why-l"></ul></div>
+        <div class="lv-layers">${LIVE_LAYERS.map(([id, name]) => `
+          <div class="lv-lrow off" data-lid="${id}">
+            <span class="lv-lid">${id}</span><span class="lv-lname">${name}</span>
+            <div class="lv-bar"><i></i></div><span class="lv-lval">&mdash;</span>
+            <div class="lv-ldet"></div>
+          </div>`).join('')}</div>
+      </div>
+      <div class="lv-prev" hidden><img alt="Page preview" loading="lazy"></div>
+    </div>
+    <div class="lv-trail"></div>
+    <div class="lv-actions">
+      <button type="button" class="lv-act" data-act="details">Details</button>
+      <button type="button" class="lv-act" data-act="report">Report</button>
+      <button type="button" class="lv-act" data-act="revisit">Re-analyze</button>
+      <button type="button" class="lv-act" data-act="copy">Copy URL</button>
+      <button type="button" class="lv-act lv-trust" data-act="trust">Trust this site</button>
+    </div>`;
+  el.querySelector('.lv-actions').addEventListener('click', ev => {
+    const b = ev.target.closest('.lv-act'); if (b && !b.disabled) liveAction(st.tab, b);
+  });
+  el.querySelector('.lv-trail').addEventListener('click', ev => {
+    const b = ev.target.closest('.lv-tr'); if (!b) return;
+    const i = +b.dataset.i, t = st.trail[i];
+    if (t && t.id != null) openC2AlertModal(t.id); else if (t) navigatePw(t.url);
+  });
+  return el;
+}
+
+function liveUpdateCard(st) {
+  const el = st.el; if (!el) return;
+  const r = st.result, analyzing = st.status === 'analyzing';
+  const v = analyzing ? 'ANALYZING' : st.status === 'skipped' ? 'SKIPPED' : String(r && r.verdict || '').toUpperCase();
+  const vc = analyzing ? 'analyzing' : liveVerdictClass(v);
+  el.className = 'lv-card ' + vc;
+  el.querySelector('.lv-title').textContent = (!analyzing && st.title) ? st.title : liveHost(st.url);
+  const chip = el.querySelector('.lv-chip');
+  chip.textContent = analyzing ? 'Analyzing…' : v;
+  const url = el.querySelector('.lv-url'); url.textContent = st.url; url.title = st.url;
+
+  // gauge
+  const pct = (!analyzing && r) ? Math.max(0, Math.min(100, Math.round(r.risk_score || 0))) : 0;
+  const ring = el.querySelector('.lv-ring');
+  ring.style.strokeDasharray = `${(pct / 100) * LIVE_RING} ${LIVE_RING}`;
+  ring.style.stroke = analyzing ? 'var(--c2)' : liveColour(v);
+  const done = Object.keys(st.layers).length, total = st.planned.length;
+  el.querySelector('.lv-gnum b').textContent = analyzing ? `${done}/${total || '?'}` : (r && st.status !== 'skipped' ? pct : '—');
+  el.querySelector('.lv-gnum span').textContent = analyzing ? 'layers' : 'risk';
+  el.querySelector('.lv-gnum b').style.color = analyzing ? 'var(--t1)' : liveColour(v);
+
+  // why
+  const why = el.querySelector('.lv-why-l');
+  const reasons = analyzing ? [] : ((r && r.reasons) || []);
+  el.querySelector('.lv-why').style.display = (analyzing || !reasons.length) ? 'none' : '';
+  why.innerHTML = reasons.map(x => `<li>${esc(x)}</li>`).join('');
+
+  // layer rows
+  const disabled = (!analyzing && st.status === 'done' && !st.planned.length);
+  LIVE_LAYERS.forEach(([id]) => {
+    const row = el.querySelector(`.lv-lrow[data-lid="${id}"]`);
+    const l = st.layers[id], planned = st.planned.includes(id);
+    row.classList.toggle('pending', analyzing && planned && !l);
+    row.classList.toggle('off', !l && !(analyzing && planned));
+    row.classList.toggle('done', !!l);
+    const bar = row.querySelector('.lv-bar i'), val = row.querySelector('.lv-lval'), det = row.querySelector('.lv-ldet');
+    if (l) {
+      const p = Math.round((l.score || 0) * 100), c = liveLayerColour(p);
+      bar.style.width = p + '%'; bar.style.background = c;
+      val.textContent = p + '%'; val.style.color = c;
+      det.textContent = l.detail || '';
+    } else {
+      bar.style.width = '0'; val.textContent = (analyzing && planned) ? '…' : (disabled || st.status === 'skipped') ? '' : 'off';
+      val.style.color = ''; det.textContent = '';
+    }
+  });
+  el.querySelector('.lv-layers').style.display = st.status === 'skipped' ? 'none' : '';
+
+  // preview
+  const prev = el.querySelector('.lv-prev'), img = prev.querySelector('img');
+  if (st.preview) { if (img.src !== st.preview) img.src = st.preview; prev.hidden = false; } else { prev.hidden = true; }
+
+  // trail (oldest to newest left to right)
+  const trailEl = el.querySelector('.lv-trail');
+  trailEl.style.display = st.trail.length > 1 ? '' : 'none';
+  trailEl.innerHTML = '<span class="lv-trail-t">Recent pages</span>' + st.trail.map((t, i) =>
+    `<button type="button" class="lv-tr${i === 0 ? ' now' : ''}" data-i="${i}" title="${esc(t.url)}">
+       <i style="background:${liveColour(t.verdict)}"></i><span class="h">${esc(liveHost(t.url))}</span><b>${t.score}</b></button>`).join('');
+
+  // actions
+  const hasId = r && r.id != null && st.status === 'done';
+  const q = a => el.querySelector(`.lv-act[data-act="${a}"]`);
+  q('details').disabled = !hasId; q('report').disabled = !hasId;
+  q('revisit').disabled = analyzing;
+  const trustable = st.status === 'done' && !['VERIFIED'].includes(v) && !!st.url;
+  const tb = q('trust'); tb.style.display = trustable ? '' : 'none';
+  const host = liveHost(st.url);
+  tb.textContent = liveTrusted.has(host) ? 'Undo trust' : 'Trust this site';
+  tb.classList.toggle('on', liveTrusted.has(host));
+  tb.dataset.confirm = '';
+}
+
+async function liveAction(tab, btn) {
+  const st = liveUi[tab]; if (!st) return;
+  const act = btn.dataset.act, r = st.result;
+  if (act === 'details' && r && r.id != null) return openC2AlertModal(r.id);
+  if (act === 'report' && r && r.id != null) return window.open(API + '/alerts/' + r.id + '/report.html', '_blank');
+  if (act === 'revisit') return navigatePw(st.url);
+  if (act === 'copy') {
+    try { await navigator.clipboard.writeText(st.url); }
+    catch { const t = document.createElement('textarea'); t.value = st.url; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    return showToast('URL copied');
+  }
+  if (act === 'trust') {
+    const host = liveHost(st.url), undo = liveTrusted.has(host);
+    if (!undo && btn.dataset.confirm !== '1') {            // first click asks, second confirms
+      btn.dataset.confirm = '1'; btn.textContent = 'Click again to trust ' + host;
+      setTimeout(() => { if (btn.dataset.confirm === '1') liveUpdateCard(st); }, 3500);
+      return;
+    }
+    try {
+      const res = await fetch(API + '/c2/whitelist', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                       body: JSON.stringify({ domain: st.url, remove: undo }) });
+      const d = await res.json();
+      if (!res.ok) { showToast(d.detail || 'Could not update the trusted list'); return liveUpdateCard(st); }
+      if (undo) liveTrusted.delete(host); else liveTrusted.add(host);
+      showToast(undo ? `${host} is no longer trusted` : `${host} is now trusted and will not be analysed`);
+      loadSettings();                                       // keep the Settings whitelist box in step
+    } catch { showToast('Could not reach the backend'); }
+    Object.values(liveUi).forEach(liveUpdateCard);
+  }
+}
+
+function renderLiveSummary() {
+  const set = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+  set('ls-tabs', Object.keys(liveUi).length);
+  set('ls-pages', liveStats.pages);
+  set('ls-flagged', cp + cs);
+  set('ls-avg', liveStats.timed ? (liveStats.ms / liveStats.timed / 1000).toFixed(1) + ' s' : '—');
+}
+
+function renderLiveTabs() {
+  const host = document.getElementById('live-tabs');
+  const ids = Object.keys(liveUi).map(Number).sort((a, b) => a - b);
+  document.getElementById('live-empty').style.display = ids.length ? 'none' : 'flex';
+  // drop cards for tabs that are gone
+  host.querySelectorAll('.lv-card').forEach(c => { if (!liveUi[c.dataset.tab]) c.remove(); });
+  ids.forEach(id => {
+    const st = liveUi[id];
+    if (!st.el || !st.el.isConnected) { st.el = liveCardBuild(st); }
+    if (st.el.parentNode !== host) host.appendChild(st.el);
+    liveUpdateCard(st);
+  });
+  // keep DOM order == tab order, and only touch the DOM when it actually differs
+  const now = [...host.querySelectorAll('.lv-card')].map(c => +c.dataset.tab);
+  if (now.join() !== ids.join()) ids.forEach(id => host.appendChild(liveUi[id].el));
+  renderLiveSummary();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -7317,6 +7651,7 @@ async function loadSettings() {
     if (typeof s.verdict_suspicious === 'number') document.getElementById('verdict-suspicious').value = s.verdict_suspicious;
     if (typeof s.verdict_phishing   === 'number') document.getElementById('verdict-phishing').value   = s.verdict_phishing;
     if (typeof s.runtime_active_probe === 'boolean') document.getElementById('runtime-active-probe').checked = s.runtime_active_probe;
+    if (typeof s.live_preview === 'boolean') document.getElementById('live-preview').checked = s.live_preview;
     if (s.weights) {
       const w = s.weights;
       const fmt = Object.keys(w).map(k => `${k}=${(+w[k]).toFixed(2)}`).join('  ');
@@ -7343,6 +7678,7 @@ function buildSettingsPayload() {
     verdict_suspicious: clampInt(document.getElementById('verdict-suspicious').value, 30),
     verdict_phishing:   clampInt(document.getElementById('verdict-phishing').value, 60),
     runtime_active_probe: document.getElementById('runtime-active-probe').checked,
+    live_preview: document.getElementById('live-preview').checked,
   };
 }
 function clampInt(v, dflt) {

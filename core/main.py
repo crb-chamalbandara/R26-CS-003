@@ -448,6 +448,10 @@ def _c2_build_reasons(layers: list, verdict: str, fusion: Optional[dict] = None,
                        f"(weighted score {float(pre):.0f} became {float(fin):.0f})")
         else:
             out.append(f"A hard rule raised the verdict to {str(floor).upper()}")
+    if out and verdict == "SAFE":
+        # A strong single signal on a page that still scored SAFE would otherwise
+        # read as a contradiction in the live card.
+        out.insert(0, "Some signals fired, but the combined risk stayed below the suspicious threshold")
     if not out:
         out.append("No detection layer exceeded the warning line")
     return out
