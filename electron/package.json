@@ -17,12 +17,27 @@
   "build": {
     "appId": "lk.sliit.websentinel",
     "productName": "WebSentinel",
-    "directories": { "output": "dist" },
-    "files": ["main.js", "preload.js", "assets/**/*"],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "assets/**/*"
+    ],
     "extraResources": [
-      { "from": "../frontend", "to": "frontend" },
-      { "from": "../dist/backend", "to": "backend" },
-      { "from": "../dist/ms-playwright", "to": "ms-playwright" }
+      {
+        "from": "../frontend",
+        "to": "frontend"
+      },
+      {
+        "from": "../dist/backend",
+        "to": "backend"
+      },
+      {
+        "from": "../dist/ms-playwright",
+        "to": "ms-playwright"
+      }
     ],
     "win": {
       "target": "nsis",
@@ -32,10 +47,11 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "WebSentinel",
-      "artifactName": "WebSentinel-Setup-${version}.exe"
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "artifactName": "WebSentinel-Setup-${version}.exe",
+      "include": "installer/installer.nsh",
+      "allowElevation": true
     }
   }
 }
