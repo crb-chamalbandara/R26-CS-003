@@ -3009,6 +3009,82 @@ input,textarea,select{font-family:inherit}
   #panel-c2 .lv-card.analyzing .lv-ring{animation:none}
   #panel-c2 .lv-lrow.pending .lv-bar{animation:none}
 }
+
+/* ==============================================================================
+   C2 ALERTS TAB (additive; deleting this block restores the previous list)
+   ============================================================================== */
+#panel-c2 #pane-alerts{gap:10px}
+#panel-c2 #al-toolbar{position:sticky;top:-12px;z-index:5;margin:-12px -12px 0;padding:12px 12px 10px;
+  background:linear-gradient(180deg,var(--g-a),var(--g-b)),var(--bg1);border-bottom:1px solid var(--g-brd);
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+#panel-c2 .al-chips{display:flex;gap:6px;flex-wrap:wrap}
+#panel-c2 .al-chip{font-family:inherit;font-size:11px;font-weight:700;color:var(--t1);cursor:pointer;
+  padding:5px 12px;border-radius:20px;border:1px solid var(--g-brd);background:rgba(var(--tint),.04);
+  display:inline-flex;align-items:center;gap:7px;transition:border-color .15s,background .15s,color .15s}
+#panel-c2 .al-chip b{font-size:10px;font-weight:800;color:var(--t2);font-variant-numeric:tabular-nums}
+#panel-c2 .al-chip:hover{border-color:rgba(var(--c2-rgb),.5)}
+#panel-c2 .al-chip.active{color:var(--c2);border-color:rgba(var(--c2-rgb),.55);background:rgba(var(--c2-rgb),.1)}
+#panel-c2 .al-chip[data-f="PHISHING"].active{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 55%,transparent);background:color-mix(in srgb,var(--danger) 10%,transparent)}
+#panel-c2 .al-chip[data-f="SUSPICIOUS"].active{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 55%,transparent);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+#panel-c2 .al-chip[data-f="SAFE"].active{color:var(--safe);border-color:color-mix(in srgb,var(--safe) 55%,transparent);background:color-mix(in srgb,var(--safe) 10%,transparent)}
+#panel-c2 .al-tools{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap}
+#panel-c2 .al-tools input,#panel-c2 .al-tools select{font-family:inherit;font-size:11px;color:var(--t0);padding:6px 10px;border-radius:8px;
+  border:1px solid var(--g-brd);background:var(--field-bg);outline:none}
+#panel-c2 .al-tools input{width:190px}
+#panel-c2 .al-tools input:focus,#panel-c2 .al-tools select:focus{border-color:rgba(var(--c2-rgb),.6)}
+#panel-c2 .al-btn{font-family:inherit;font-size:10.5px;font-weight:700;color:var(--t1);padding:6px 12px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--g-brd);background:rgba(var(--tint),.045);transition:border-color .15s,color .15s,background .15s}
+#panel-c2 .al-btn:hover{border-color:rgba(var(--c2-rgb),.55);color:var(--c2)}
+#panel-c2 #al-clear[data-confirm="1"]{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 55%,transparent)}
+#panel-c2 .al-count{width:100%;font-size:10px;color:var(--t2);letter-spacing:.04em}
+#panel-c2 #al-list{display:flex;flex-direction:column;gap:9px}
+#panel-c2 #al-none{flex:none;padding:30px;gap:12px}
+
+#panel-c2 .al-card{--vc:var(--t2);background:linear-gradient(158deg,var(--g-a) 0%,var(--g-b) 100%);border:1px solid var(--g-brd);
+  border-left:3px solid var(--vc);border-radius:13px;box-shadow:var(--g-inset),var(--g-shadow);overflow:hidden;
+  transition:border-color .2s,box-shadow .2s}
+#panel-c2 .al-card.safe,#panel-c2 .al-card.whitelisted{--vc:var(--safe)}
+#panel-c2 .al-card.verified{--vc:var(--c2)}
+#panel-c2 .al-card.suspicious{--vc:var(--warn)}
+#panel-c2 .al-card.phishing{--vc:var(--danger)}
+#panel-c2 .al-card.new{animation:slideIn .3s ease}
+#panel-c2 .al-card:hover{border-color:color-mix(in srgb,var(--vc) 38%,var(--g-brd))}
+#panel-c2 .al-row{display:flex;align-items:center;gap:14px;padding:11px 14px;cursor:pointer;outline:none}
+#panel-c2 .al-row:focus-visible{box-shadow:inset 0 0 0 2px var(--c2)}
+#panel-c2 .al-ring{--p:0;--c:var(--t2);flex-shrink:0;width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:conic-gradient(var(--c) calc(var(--p) * 1%),rgba(var(--tint),.09) 0);position:relative}
+#panel-c2 .al-ring::before{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--bg2)}
+#panel-c2 .al-ring b{position:relative;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums}
+#panel-c2 .al-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+#panel-c2 .al-top{display:flex;align-items:baseline;gap:9px;min-width:0}
+#panel-c2 .al-v{font-size:9px;font-weight:800;letter-spacing:.07em;padding:2px 8px;border-radius:20px;flex-shrink:0;align-self:center;
+  color:var(--vc);border:1px solid color-mix(in srgb,var(--vc) 40%,transparent);background:color-mix(in srgb,var(--vc) 11%,transparent)}
+#panel-c2 .al-host{font-size:13px;font-weight:700;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1}
+#panel-c2 .al-path{font-family:var(--mono);font-size:10.5px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#panel-c2 .al-reason{font-size:11.5px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-c2 .al-sigs{display:flex;gap:5px;flex-wrap:wrap}
+#panel-c2 .al-sig{font-size:9.5px;font-weight:700;padding:1px 8px;border-radius:20px;color:var(--chip);
+  border:1px solid color-mix(in srgb,var(--chip) 40%,transparent);background:color-mix(in srgb,var(--chip) 10%,transparent)}
+#panel-c2 .al-side{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;color:var(--t3)}
+#panel-c2 .al-time{font-size:10.5px;color:var(--t2);font-variant-numeric:tabular-nums}
+#panel-c2 .al-dur{font-size:9.5px;color:var(--t3);font-variant-numeric:tabular-nums}
+#panel-c2 .al-chev{transition:transform .2s}
+#panel-c2 .al-card.open .al-chev{transform:rotate(180deg)}
+#panel-c2 .al-body{display:none;padding:2px 16px 14px 74px;flex-direction:column;gap:12px}
+#panel-c2 .al-card.open .al-body{display:flex}
+#panel-c2 .al-why{margin:0;padding:8px 12px 8px 26px;font-size:11.5px;line-height:1.55;color:var(--t1);border-radius:10px;
+  border:1px solid color-mix(in srgb,var(--vc) 28%,transparent);background:color-mix(in srgb,var(--vc) 7%,transparent)}
+#panel-c2 .al-layers{display:flex;flex-direction:column;gap:7px}
+#panel-c2 .al-none-layers{font-size:11px;color:var(--t2);font-style:italic}
+#panel-c2 .al-actions{display:flex;flex-wrap:wrap;gap:7px}
+#panel-c2 .al-actions .lv-trust{margin-left:auto}
+@media (max-width:900px){
+  #panel-c2 .al-tools{margin-left:0;width:100%}
+  #panel-c2 .al-tools input{flex:1;min-width:120px}
+  #panel-c2 .al-body{padding-left:16px}
+  #panel-c2 .al-path,#panel-c2 .al-dur{display:none}
+}
+@media (prefers-reduced-motion:reduce){#panel-c2 .al-card.new{animation:none}#panel-c2 .al-chev{transition:none}}
 </style>
 </head>
 <body>
@@ -3132,6 +3208,26 @@ input,textarea,select{font-family:inherit}
 
     <!-- ALERTS -->
     <div class="pane" id="pane-alerts">
+      <div id="al-toolbar" style="display:none">
+        <div class="al-chips" id="al-chips" role="tablist" aria-label="Filter alerts by verdict">
+          <button type="button" class="al-chip active" data-f="ALL">All <b id="alc-all">0</b></button>
+          <button type="button" class="al-chip" data-f="PHISHING">Phishing <b id="alc-phishing">0</b></button>
+          <button type="button" class="al-chip" data-f="SUSPICIOUS">Suspicious <b id="alc-suspicious">0</b></button>
+          <button type="button" class="al-chip" data-f="SAFE">Safe <b id="alc-safe">0</b></button>
+        </div>
+        <div class="al-tools">
+          <input type="search" id="al-search" placeholder="Search URL or title" aria-label="Search alerts" autocomplete="off">
+          <select id="al-sort" aria-label="Sort alerts"><option value="new">Newest first</option><option value="risk">Highest risk</option></select>
+          <button type="button" class="al-btn" id="al-collapse" title="Collapse every expanded alert">Collapse all</button>
+          <button type="button" class="al-btn" id="al-clear" title="Empties this list only. History keeps every saved alert">Clear</button>
+        </div>
+        <div class="al-count" id="al-count"></div>
+      </div>
+      <div id="al-list"></div>
+      <div class="empty" id="al-none" style="display:none">
+        <div class="emsg">No alerts match the current filter</div>
+        <button type="button" class="al-btn" id="al-reset">Reset filters</button>
+      </div>
       <div class="empty" id="empty-alerts">
         <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
         <div class="emsg">No alerts yet &mdash; results will appear here</div>
@@ -7186,29 +7282,37 @@ async function liveAction(tab, btn) {
   if (act === 'details' && r && r.id != null) return openC2AlertModal(r.id);
   if (act === 'report' && r && r.id != null) return window.open(API + '/alerts/' + r.id + '/report.html', '_blank');
   if (act === 'revisit') return navigatePw(st.url);
-  if (act === 'copy') {
-    try { await navigator.clipboard.writeText(st.url); }
-    catch { const t = document.createElement('textarea'); t.value = st.url; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
-    return showToast('URL copied');
+  if (act === 'copy') return c2CopyText(st.url);
+  if (act === 'trust') return c2TrustToggle(st.url, btn, () => liveUpdateCard(st));
+}
+
+async function c2CopyText(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+  showToast('URL copied');
+}
+
+// Trust / untrust one host from a Live or Alerts card. The first click only asks;
+// `restore` puts the button's label back if the user does not confirm or it fails.
+async function c2TrustToggle(url, btn, restore) {
+  const host = liveHost(url), undo = liveTrusted.has(host);
+  if (!undo && btn.dataset.confirm !== '1') {
+    btn.dataset.confirm = '1'; btn.textContent = 'Click again to trust ' + host;
+    setTimeout(() => { if (btn.dataset.confirm === '1') { btn.dataset.confirm = ''; restore(); } }, 3500);
+    return;
   }
-  if (act === 'trust') {
-    const host = liveHost(st.url), undo = liveTrusted.has(host);
-    if (!undo && btn.dataset.confirm !== '1') {            // first click asks, second confirms
-      btn.dataset.confirm = '1'; btn.textContent = 'Click again to trust ' + host;
-      setTimeout(() => { if (btn.dataset.confirm === '1') liveUpdateCard(st); }, 3500);
-      return;
-    }
-    try {
-      const res = await fetch(API + '/c2/whitelist', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                       body: JSON.stringify({ domain: st.url, remove: undo }) });
-      const d = await res.json();
-      if (!res.ok) { showToast(d.detail || 'Could not update the trusted list'); return liveUpdateCard(st); }
-      if (undo) liveTrusted.delete(host); else liveTrusted.add(host);
-      showToast(undo ? `${host} is no longer trusted` : `${host} is now trusted and will not be analysed`);
-      loadSettings();                                       // keep the Settings whitelist box in step
-    } catch { showToast('Could not reach the backend'); }
-    Object.values(liveUi).forEach(liveUpdateCard);
-  }
+  btn.dataset.confirm = '';
+  try {
+    const res = await fetch(API + '/c2/whitelist', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                     body: JSON.stringify({ domain: url, remove: undo }) });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.detail || 'Could not update the trusted list'); return restore(); }
+    if (undo) liveTrusted.delete(host); else liveTrusted.add(host);
+    showToast(undo ? `${host} is no longer trusted` : `${host} is now trusted and will not be analysed`);
+    loadSettings();                                         // keep the Settings whitelist box in step
+  } catch { showToast('Could not reach the backend'); }
+  Object.values(liveUi).forEach(liveUpdateCard);
+  renderAlerts();
 }
 
 function renderLiveSummary() {
@@ -7239,45 +7343,155 @@ function renderLiveTabs() {
 
 // ══════════════════════════════════════════════════════════════
 //  Render Alerts
+//  The list is rebuilt from `alerts` on every change (it is capped at 200), so
+//  anything the user has changed on a card lives in state, not in the DOM:
+//  alOpen = expanded cards, alFilter / alQuery / alSort = the toolbar.
 // ══════════════════════════════════════════════════════════════
-function renderAlerts() {
-  const pane = document.getElementById('pane-alerts');
-  document.getElementById('empty-alerts').style.display = alerts.length ? 'none' : 'flex';
-  pane.querySelectorAll('.acard').forEach(e => e.remove());
-  alerts.forEach(a => pane.appendChild(makeAlertCard(a)));
+let alFilter = 'ALL', alQuery = '', alSort = 'new';
+const alOpen = new Set();
+const alSeen = new Set();
+const AL_BUCKET = { PHISHING: 'PHISHING', SUSPICIOUS: 'SUSPICIOUS', SAFE: 'SAFE', VERIFIED: 'SAFE', WHITELISTED: 'SAFE' };
+
+function alKey(a) { return a.id != null ? 'i' + a.id : 't' + a.timestamp + '|' + a.url; }
+
+function alReasons(a) {
+  if (Array.isArray(a.reasons) && a.reasons.length) return a.reasons;       // sent by the backend
+  const top = (a.layers || []).filter(l => l.score >= 0.28).sort((x, y) => y.score - x.score).slice(0, 3);
+  if (!top.length) return ['No detection layer exceeded the warning line'];
+  return top.map(l => `${l.name || l.id} (${Math.round(l.score * 100)}%)${l.detail ? ': ' + l.detail : ''}`);
 }
 
-function makeAlertCard(a) {
-  const vc  = a.verdict.toLowerCase();
-  const col = vc === 'phishing' ? 'var(--danger)' : vc === 'suspicious' ? 'var(--warn)' : 'var(--safe)';
-  const pct = Math.round(a.risk_score);
-  const card = document.createElement('div');
-  card.className = 'acard ' + vc;
-  card.innerHTML = `
-    <div class="ahdr">
-      <span class="vbadge ${vc}">${esc(a.verdict)}</span>
-      <span class="aurl" title="${esc(a.url)}">${esc(a.url)}</span>
-      ${a.id != null ? `<button class="c2h-xbtn c2-detail-btn" data-alert-id="${esc(a.id)}">Details</button>` : ''}
-      <span class="atime">${esc(fmtTime(a.timestamp))}</span>
-    </div>
-    <div class="rbar-row">
-      <span class="rbar-lbl">Risk</span>
-      <div class="rbar-wrap"><div class="rbar" style="width:${pct}%;background:${col}"></div></div>
-      <span class="rbar-val" style="color:${col}">${pct}%</span>
-    </div>
-    <div class="layers">${(a.layers || []).map(layerHTML).join('')}</div>`;
-  card.querySelector('.ahdr').addEventListener('click', () => card.classList.toggle('open'));
-  // The Details button lives inside .ahdr, whose click toggles the card. Without
-  // stopPropagation the modal would open and the card would expand behind it.
-  const detailBtn = card.querySelector('.c2-detail-btn');
-  if (detailBtn) {
-    detailBtn.addEventListener('click', ev => {
-      ev.stopPropagation();
-      openC2AlertModal(detailBtn.dataset.alertId);
-    });
-  }
-  return card;
+function alSplitUrl(u) {
+  try { const x = new URL(u); return [x.hostname.replace(/^www\./, ''), (x.pathname + x.search).replace(/^\/$/, '')]; }
+  catch { return [u || '', '']; }
 }
+
+function alLayerRows(a) {
+  return (a.layers || []).map(l => {
+    const p = Math.round((l.score || 0) * 100), c = liveLayerColour(p);
+    return `<div class="lv-lrow done">
+      <span class="lv-lid">${esc(l.id)}</span><span class="lv-lname">${esc(l.name || l.id)}</span>
+      <div class="lv-bar"><i style="width:${p}%;background:${c}"></i></div><span class="lv-lval" style="color:${c}">${p}%</span>
+      ${l.detail ? `<div class="lv-ldet">${esc(l.detail)}</div>` : ''}</div>`;
+  }).join('') || '<div class="al-none-layers">No layer details for this result.</div>';
+}
+
+function alCardHTML(a) {
+  const v = String(a.verdict || '').toUpperCase(), vc = v.toLowerCase();
+  const pct = Math.max(0, Math.min(100, Math.round(a.risk_score || 0)));
+  const col = liveColour(v), key = alKey(a);
+  const [host, path] = alSplitUrl(a.url);
+  const reasons = alReasons(a);
+  const sigs = (a.layers || []).filter(l => l.score >= 0.28).sort((x, y) => y.score - x.score).slice(0, 4);
+  const open = alOpen.has(key), isNew = !alSeen.has(key);
+  const trusted = liveTrusted.has(liveHost(a.url));
+  return `<div class="al-card ${vc}${open ? ' open' : ''}${isNew ? ' new' : ''}" data-key="${esc(key)}">
+    <div class="al-row" role="button" tabindex="0" aria-expanded="${open}">
+      <div class="al-ring" style="--p:${pct};--c:${col}"><b style="color:${col}">${pct}</b></div>
+      <div class="al-main">
+        <div class="al-top"><span class="al-v">${esc(v)}</span><span class="al-host" title="${esc(a.url)}">${esc(host)}</span><span class="al-path">${esc(path)}</span></div>
+        <div class="al-reason">${esc(reasons[0])}</div>
+        ${sigs.length ? `<div class="al-sigs">${sigs.map(l => `<span class="al-sig" style="--chip:${l.score > 0.6 ? 'var(--danger)' : 'var(--warn)'}">${esc(l.id)} ${Math.round(l.score * 100)}%</span>`).join('')}</div>` : ''}
+      </div>
+      <div class="al-side">
+        <span class="al-time" data-ts="${esc(a.timestamp)}">${esc(fmtTime(a.timestamp))}</span>
+        ${a.duration_ms != null ? `<span class="al-dur">${(a.duration_ms / 1000).toFixed(1)} s</span>` : ''}
+        <svg class="al-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+    <div class="al-body">
+      ${reasons.length > 1 || (a.reasons && a.reasons.length) ? `<ul class="al-why">${reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
+      <div class="al-layers">${alLayerRows(a)}</div>
+      <div class="al-actions">
+        <button type="button" class="lv-act" data-act="details"${a.id == null ? ' disabled' : ''}>Details</button>
+        <button type="button" class="lv-act" data-act="report"${a.id == null ? ' disabled' : ''}>Report</button>
+        <button type="button" class="lv-act" data-act="revisit">Re-analyze</button>
+        <button type="button" class="lv-act" data-act="copy">Copy URL</button>
+        ${v === 'VERIFIED' || v === 'WHITELISTED' ? '' : `<button type="button" class="lv-act lv-trust${trusted ? ' on' : ''}" data-act="trust">${trusted ? 'Undo trust' : 'Trust this site'}</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderAlerts() {
+  const list = document.getElementById('al-list');
+  if (!list) return;
+  const real = alerts.filter(a => a.verdict !== 'SKIP');
+  const counts = { ALL: real.length, PHISHING: 0, SUSPICIOUS: 0, SAFE: 0 };
+  real.forEach(a => { const b = AL_BUCKET[String(a.verdict).toUpperCase()]; if (b) counts[b]++; });
+  Object.keys(counts).forEach(k => { const e = document.getElementById('alc-' + k.toLowerCase()); if (e) e.textContent = counts[k]; });
+
+  const q = alQuery.trim().toLowerCase();
+  let rows = real.filter(a =>
+    (alFilter === 'ALL' || AL_BUCKET[String(a.verdict).toUpperCase()] === alFilter) &&
+    (!q || String(a.url).toLowerCase().includes(q) || String(a.title || '').toLowerCase().includes(q)));
+  if (alSort === 'risk') rows = rows.slice().sort((x, y) => (y.risk_score || 0) - (x.risk_score || 0));
+
+  list.innerHTML = rows.map(alCardHTML).join('');
+  rows.forEach(a => alSeen.add(alKey(a)));
+  document.getElementById('al-count').textContent = real.length ? `Showing ${rows.length} of ${real.length}` : '';
+  document.getElementById('empty-alerts').style.display = real.length ? 'none' : 'flex';
+  document.getElementById('al-none').style.display = (real.length && !rows.length) ? 'flex' : 'none';
+  document.getElementById('al-toolbar').style.display = real.length ? '' : 'none';
+}
+
+// toolbar
+document.getElementById('al-chips').addEventListener('click', ev => {
+  const b = ev.target.closest('.al-chip'); if (!b) return;
+  alFilter = b.dataset.f;
+  document.querySelectorAll('#al-chips .al-chip').forEach(x => x.classList.toggle('active', x === b));
+  renderAlerts();
+});
+document.getElementById('al-search').addEventListener('input', ev => { alQuery = ev.target.value; renderAlerts(); });
+document.getElementById('al-sort').addEventListener('change', ev => { alSort = ev.target.value; renderAlerts(); });
+document.getElementById('al-collapse').addEventListener('click', () => {
+  alOpen.clear(); document.querySelectorAll('#al-list .al-card.open').forEach(c => { c.classList.remove('open'); c.querySelector('.al-row').setAttribute('aria-expanded', 'false'); });
+});
+document.getElementById('al-clear').addEventListener('click', ev => {
+  const b = ev.currentTarget;
+  if (b.dataset.confirm !== '1') {
+    b.dataset.confirm = '1'; b.textContent = 'Click to confirm';
+    setTimeout(() => { b.dataset.confirm = ''; b.textContent = 'Clear'; }, 3000);
+    return;
+  }
+  b.dataset.confirm = ''; b.textContent = 'Clear';
+  alerts.length = 0; alOpen.clear(); alSeen.clear(); renderAlerts();
+  showToast('Alert list cleared. History still has every saved alert.');
+});
+document.getElementById('al-reset').addEventListener('click', () => {
+  alFilter = 'ALL'; alQuery = ''; document.getElementById('al-search').value = '';
+  document.querySelectorAll('#al-chips .al-chip').forEach(x => x.classList.toggle('active', x.dataset.f === 'ALL'));
+  renderAlerts();
+});
+
+// cards: expand / collapse and the action buttons (one delegated listener)
+function alToggle(card) {
+  const open = card.classList.toggle('open');
+  card.querySelector('.al-row').setAttribute('aria-expanded', open);
+  open ? alOpen.add(card.dataset.key) : alOpen.delete(card.dataset.key);
+}
+document.getElementById('al-list').addEventListener('click', ev => {
+  const card = ev.target.closest('.al-card'); if (!card) return;
+  const btn = ev.target.closest('.lv-act');
+  if (!btn) { if (ev.target.closest('.al-row')) alToggle(card); return; }
+  if (btn.disabled) return;
+  const a = alerts.find(x => alKey(x) === card.dataset.key); if (!a) return;
+  const act = btn.dataset.act;
+  if (act === 'details' && a.id != null) return openC2AlertModal(a.id);
+  if (act === 'report' && a.id != null) return window.open(API + '/alerts/' + a.id + '/report.html', '_blank');
+  if (act === 'revisit') return navigatePw(a.url);
+  if (act === 'copy') return c2CopyText(a.url);
+  if (act === 'trust') return c2TrustToggle(a.url, btn, () => renderAlerts());
+});
+document.getElementById('al-list').addEventListener('keydown', ev => {
+  if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.classList.contains('al-row')) {
+    ev.preventDefault(); alToggle(ev.target.closest('.al-card'));
+  }
+});
+// keep "2m ago" honest while the tab sits open
+setInterval(() => {
+  document.querySelectorAll('#al-list .al-time').forEach(e => { e.textContent = fmtTime(e.dataset.ts); });
+}, 30000);
 
 function layerHTML(l) {
   const p   = Math.round(l.score * 100);
