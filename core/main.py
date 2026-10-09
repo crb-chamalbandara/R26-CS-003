@@ -233,6 +233,15 @@ _ANALYZING_HTML = """\
 alerts: list = []
 c1_history: list = []
 _pending_installs: dict = {}
+_blocked_installs: Set[str] = set()   # IDs blocked at the gate; cleared by the next click on that ID
+_ext_install_lock = asyncio.Lock()    # one browser restart at a time
+_bg_tasks: Set[asyncio.Task] = set()  # keeps background installs from being garbage collected
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
 
 
 def _store_c2_alert(record: dict) -> dict:
@@ -897,14 +906,13 @@ async def session_install_extension(req: InstallExtensionReq):
         raise HTTPException(status_code=500, detail=f"Extraction failed: {exc}")
 
     if pw_session.is_running:
-        pw_session.register_extension(ext_path)
-        await _broadcast({"type": "c1_extension_installed",
-                           "extension_id": ext_id,
-                           "extension_path": ext_path,
-                           "c1_result": c1_result})
-        return {"status": "installed", "extension_id": ext_id,
+        # Chromium only takes extensions at launch, so this restarts the session with it
+        # loaded. It takes several seconds, so answer now and report the outcome over the
+        # WebSocket (c1_extension_installed, or c1_install_error if it did not load).
+        _spawn(_bg_install_extension(ext_id, ext_path, "", source="report"))
+        return {"status": "installing", "extension_id": ext_id,
                 "extension_path": ext_path, "c1_result": c1_result,
-                "note": "Extension registered — will be active on next session start."}
+                "note": "Restarting the browser session with the extension loaded."}
     return {"status": "ready",
             "message": "Extension extracted. Start the browser session to load it.",
             "extension_id": ext_id, "extension_path": ext_path, "c1_result": c1_result}
@@ -920,6 +928,7 @@ async def _on_extension_install_click(ext_id: str, webstore_url: str) -> None:
     if not ext_id:
         return
     print(f"[C1] 'Add to Chrome' clicked: {ext_id}")
+    _blocked_installs.discard(ext_id)
     await _broadcast({"type": "c1_install_intercepted", "ext_id": ext_id,
                       "url": webstore_url, "state": "analyzing"})
     try:
@@ -961,8 +970,11 @@ async def _on_extension_install_click(ext_id: str, webstore_url: str) -> None:
                 c1_result = static_result
 
         _store_c1_result(c1_result, "webstore_intercept", webstore_url)
-        _pending_installs[ext_id] = {"c1_result": c1_result, "ext_path": ext_path,
-                                      "webstore_url": webstore_url}
+        # Blocked while the analysis was still running: keep the result for the record,
+        # but do not make the install approvable again.
+        if ext_id not in _blocked_installs:
+            _pending_installs[ext_id] = {"c1_result": c1_result, "ext_path": ext_path,
+                                          "webstore_url": webstore_url}
 
         state = {"SAFE": "safe", "SUSPICIOUS": "suspicious",
                  "MALICIOUS": "malicious"}.get(c1_result["verdict"], "suspicious")
@@ -1008,6 +1020,9 @@ async def websentinel_trigger_fallback(ext_id: str = "", url: str = ""):
 
 @app.post("/session/approve_install")
 async def approve_install(req: ApproveInstallReq):
+    if req.ext_id in _blocked_installs:
+        raise HTTPException(status_code=409,
+            detail="This extension was blocked. Click Add to Chrome again to re-analyse it.")
     pending = _pending_installs.get(req.ext_id)
     if not pending:
         raise HTTPException(status_code=404,
@@ -1015,29 +1030,101 @@ async def approve_install(req: ApproveInstallReq):
     verdict = pending["c1_result"].get("verdict", "SUSPICIOUS")
     if verdict != "SAFE":
         raise HTTPException(status_code=403,
-            detail=f"Cannot approve — extension verdict is {verdict}.")
+            detail=f"Cannot approve - extension verdict is {verdict}.")
     ext_path     = pending["ext_path"]
     webstore_url = pending.get("webstore_url", "")
     del _pending_installs[req.ext_id]
-    # Fire the restart in the background — return immediately so the dashboard
+    # Fire the restart in the background - return immediately so the dashboard
     # doesn't freeze during the ~5 s browser restart.
-    asyncio.create_task(_bg_install_extension(req.ext_id, ext_path, webstore_url))
+    _spawn(_bg_install_extension(req.ext_id, ext_path, webstore_url,
+                                 source="gate", pending=pending))
     return {"status": "installing", "ext_id": req.ext_id}
 
 
-async def _bg_install_extension(ext_id: str, ext_path: str, webstore_url: str) -> None:
+async def _load_extension_into_session(ext_path: str, restore_url: str = "") -> tuple:
+    """Load an unpacked extension into the live browser session; returns (loaded, reason).
+
+    Chromium only takes extensions at launch, so this restarts the session. Three things
+    about that restart used to go wrong, and each looked like "the install did nothing":
+      * C3 holds handles on the browser context that is about to be closed, so it is
+        stopped first and re-attached after, the same way /session/stop and
+        /session/start do it;
+      * the profile can stay locked for a moment after the old browser exits, so a
+        failed launch is retried instead of being reported as an install;
+      * --load-extension skips, silently, an extension Chromium cannot load, so success
+        is confirmed against what the browser actually loaded.
+    """
+    async with _ext_install_lock:
+        if not pw_session.is_running:
+            # load_extension() would start a bare browser with no monitoring attached.
+            # Queue the extension for the next real start and say so.
+            pw_session.register_extension(ext_path)
+            return False, ("the browser session is not running. Start it from the monitor "
+                           "and the extension will load with it, or approve again once it is running")
+        c3_was_on = pw_session.is_running and c3_interceptor.running
+        if c3_was_on:
+            await c3_analyzer.stop_loop()
+            await c3_interceptor.stop()
+
+        started, reason = False, ""
+        for attempt in range(3):
+            try:
+                started = bool(await pw_session.load_extension(ext_path, restore_url=restore_url))
+            except Exception as exc:
+                started, reason = False, str(exc)
+            if started:
+                break
+            await asyncio.sleep(1.5 * (attempt + 1))
+
+        if c3_was_on and pw_session.is_running:
+            try:
+                await c3_tagger.setup(pw_session.context)
+                await c3_interceptor.start(pw_session)
+                await c3_analyzer.start_loop(pw_session, _broadcast)
+            except Exception as exc:
+                print(f"[C1] C3 could not be re-attached after the extension load: {exc}")
+
+        if not started:
+            pw_session.forget_extension(ext_path)
+            if not pw_session.is_running:
+                await _broadcast({"type": "session_stopped"})
+            return False, reason or "the browser session did not restart"
+        if not await pw_session.extension_loaded(ext_path):
+            pw_session.forget_extension(ext_path)
+            return False, "Chromium did not load the extension (it rejected its manifest or files)"
+        return True, ""
+
+
+async def _bg_install_extension(ext_id: str, ext_path: str, webstore_url: str,
+                                source: str = "gate", pending: Optional[dict] = None) -> None:
+    """source is "gate" (Approve Install on a live card) or "report" (Install into Browser)."""
     try:
-        await pw_session.load_extension(ext_path, restore_url=webstore_url)
-        await _broadcast({"type": "c1_install_approved", "ext_id": ext_id,
-                          "extension_path": ext_path, "webstore_url": webstore_url})
+        loaded, reason = await _load_extension_into_session(ext_path, webstore_url)
     except Exception as exc:
-        print(f"[C1] Extension install failed for {ext_id}: {exc}")
-        await _broadcast({"type": "c1_install_error", "ext_id": ext_id, "error": str(exc)})
+        loaded, reason = False, str(exc)
+
+    if loaded:
+        if source == "gate":
+            await _broadcast({"type": "c1_install_approved", "ext_id": ext_id,
+                              "extension_path": ext_path, "webstore_url": webstore_url})
+        else:
+            await _broadcast({"type": "c1_extension_installed", "extension_id": ext_id,
+                              "extension_path": ext_path})
+        return
+
+    print(f"[C1] Extension install failed for {ext_id}: {reason}")
+    if pending is not None:
+        _pending_installs[ext_id] = pending      # keep the approval so it can be retried
+    await _broadcast({"type": "c1_install_error", "ext_id": ext_id,
+                      "source": source, "error": reason})
 
 
 @app.post("/session/block_install")
 async def block_install(req: ApproveInstallReq):
     _pending_installs.pop(req.ext_id, None)
+    # Remembered, so an analysis still running for this ID cannot make it approvable
+    # again when it finishes. Cleared by the next click on that extension.
+    _blocked_installs.add(req.ext_id)
     await _broadcast({"type": "c1_install_blocked", "ext_id": req.ext_id})
     return {"status": "blocked", "ext_id": req.ext_id}
 
@@ -2947,6 +3034,7 @@ async def dev_simulate_click():
 
 async def _simulate_click_task(manifest_str, source_code, ext_path, ext_id, webstore_url):
     print(f"[C1-SIM] Simulating 'Add to Chrome' click: {ext_id}")
+    _blocked_installs.discard(ext_id)
     await _broadcast({"type": "c1_install_intercepted", "ext_id": ext_id,
                       "url": webstore_url, "state": "analyzing"})
     try:
@@ -2961,8 +3049,9 @@ async def _simulate_click_task(manifest_str, source_code, ext_path, ext_id, webs
         else:
             c1_result = static_result
         _store_c1_result(c1_result, "simulated_click", webstore_url)
-        _pending_installs[ext_id] = {"c1_result": c1_result, "ext_path": ext_path,
-                                      "webstore_url": webstore_url}
+        if ext_id not in _blocked_installs:
+            _pending_installs[ext_id] = {"c1_result": c1_result, "ext_path": ext_path,
+                                          "webstore_url": webstore_url}
         state = {"SAFE": "safe", "SUSPICIOUS": "suspicious",
                  "MALICIOUS": "malicious"}.get(c1_result["verdict"], "suspicious")
         print(f"[C1-SIM] {ext_id} -> {c1_result['verdict']} (score={c1_result['score']:.3f})")

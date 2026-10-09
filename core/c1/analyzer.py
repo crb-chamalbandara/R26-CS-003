@@ -442,7 +442,7 @@ def _blocklist_result(
         name   = entry.get("extension_name") or ext_id
         reason = entry.get("reason") or "reason not established"
         when   = entry.get("date")
-        detail = f"Blocklist match — {name!r} flagged for {reason}"
+        detail = f"Blocklist match: {name!r} flagged for {reason}"
         detail += f" ({when})." if when else "."
         if entry.get("enriched"):
             detail += (" Evidence completed live from this intercept: "
@@ -572,7 +572,7 @@ async def analyze_extension(
         return {
             "score":   0.0,
             "verdict": "SUSPICIOUS",
-            "detail":  "Model or feature list missing — static analysis unavailable.",
+            "detail":  "Model or feature list missing, so static analysis is unavailable.",
             "flags":   ["MODEL_NOT_LOADED"],
             "static":  {"score": 0.0, "hash_match": False, "ml_score": 0.0, "anomaly_score": 0.0, "blocklist_details": None},
             "dynamic": {"score": 0.0, "executed": False, "signals": []},

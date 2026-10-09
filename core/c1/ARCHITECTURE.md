@@ -872,6 +872,97 @@ identically to the live run.
 
 ---
 
+## Panel redesign and performance (2026-10-07, revised 2026-10-08)
+
+The C1 panel was rebuilt around what C1 is: a **gate** that holds an extension
+install until a verdict is in. It deliberately does not share C3's layout (C3 is a
+traffic monitor: stat tiles, a tab bar, tables). Its lag was measured and removed.
+The panel is in `frontend/dashboard.html`, inside C1's own CSS, markup and JS
+regions. The only backend change is wording: the report, permission, evidence and
+isolation strings that reach the UI no longer use a dash as punctuation (see
+"Writing for this panel" below).
+
+### Layout
+
+| Piece | What it does |
+|-------|--------------|
+| Session strip | A single row at the top of the panel, above the tabs, that applies to every section: the **session posture** on the left and the sandbox **containment** selects on the right. It wraps to two rows in a narrow window. |
+| Session posture | A bar whose segment widths are the real malicious / suspicious / safe counts, with the totals. |
+| Tabs | Folder-style tabs under the strip, grouped Gate / Analyze / Records (Install gate; Upload CRX, Web Store, Manual; Case ledger, Blocklist). The open tab is the same ink as the stage so it reads as attached. Left/Right (also Up/Down), Home and End move through them. The layout is a vertical flow: strip, tabs, stage. An earlier revision used a left rail; it was dropped because a side-oriented panel did not suit the dashboard. |
+| Install gate | The default view. A hero with four live facts (blocklist size as an approximate figure such as "around 7K", containment, analyses this session, last verdict), the **detection pipeline**, then the intercept cards. Descriptions run the full width of the panel instead of wrapping at a character cap. |
+| Detection pipeline | Five stages (Intercept, Blocklist, Static analysis, Sandbox, Decision) joined by a line. At rest every stage is armed and the blocklist and sandbox chips show what the machine reports. During an intercept it follows the most recent install, driven by the same WebSocket messages as the live cards: `analyzing` runs blocklist and static, `sandbox_running` runs the sandbox, and the result marks every stage done, with the sandbox shown as "Not run" for a static only case, a blocklist hit marked on its stage, and the decision stage taking the verdict colour. A stage is never marked done on a guess. The line and the stages draw in once each time the gate is opened; the only loop is the ring on a stage that is genuinely running. It is built once and updated by class, so updates do not replay the entrance. |
+| Score ring | `.c1-rs`: a circle whose arc is the threat score out of 100, coloured by verdict, with the number inside. Used in the ledger (48px) and on live cards (80px, with a "risk" caption and a count up). The arc draws in once on the top ten ledger rows and on live cards. |
+| Case ledger | Every analysis as a **case file**: score ring, name and ID, risk tags (blocklist hit, high risk permissions, permission count, sandbox hosts or "static only") and a verdict **badge**, in aligned score / name / verdict / time columns. Filter by verdict, search by name or ID, and a **threat skyline** where each bar's height is that case's score. **Restored from `GET /extension/history` on start**, so the ledger and posture survive a restart instead of beginning empty. |
+| Visual language | Violet-ink surfaces with a faint dot grid, 6px corners, scanner-bracket corners on the gate, live cards and report hero, verdict badges, and "key" buttons with a hard bottom edge. Lavender paper in the light theme. |
+| Verdict badge | `.c1-vb`: a solid icon cell (tick / exclamation / cross, so colour is never the only cue) plus the verdict word in sentence case on a tint of the same colour. One element; the glyph is a CSS mask on `::before`, so a ledger of 50 cases adds no extra nodes. Sizes `md` (live cards) and `lg` (report hero). Static, never rotated or animated. On paper it keeps its colour (`print-color-adjust`) but the word stays dark ink, and the hero's scanner brackets are hidden. |
+| Report modal | Same content; restyled to the same vocabulary, and the cost below removed. |
+
+### Why it was laggy, and the rules that now apply
+
+The dashboard runs in Electron with `app.disableHardwareAcceleration()`, so
+everything is software-rasterised. Measured in headless Chromium with the GPU off,
+a 4x-throttled CPU and a 1920x1010 window:
+
+| Scenario | Before (avg frame) | After |
+|----------|--------------------|-------|
+| Open a report | 67 ms | 17 ms |
+| Report open, idle | 72 ms (14 fps) | 18 ms |
+| Click a history row | 70 ms | 17 ms |
+| Toggle Simple/Advanced | 77 ms | 22 ms |
+| Idle on C1: paint + raster per 4 s | 571 ms | 0 ms |
+
+The cause was one `backdrop-filter:blur()` over the whole viewport under the
+report modal, re-run every frame because of the animations running behind it.
+
+Rules for anything added to this panel:
+
+- **No `backdrop-filter`.** Use a flat translucent fill.
+- **No infinite animations.** The gate indicator and status dot are static; the only looping motion is a ring on something that is genuinely running (an analysis spinner, a running pipeline stage). Entrances are one shot and stop.
+- **Bound entrance animations.** The pipeline entrance is six animations, the ledger ring draw is capped at the top ten rows (a burst of new cases must not start a burst of animations; adding 40 cases at once measured 46 ms per frame without the cap and about 30 with it).
+- The verdict filter is pure CSS (`data-f` on the ledger), so it costs one attribute write however many cases there are; only the text search touches rows.
+- **No `transition:all`**, and bars grow with `transform:scaleX`, never an animated `width`.
+- **No per-item staggered entrance animations.** Opening a report used to start 15 animations in the Simple view and 76 in the Advanced one; it is now 7 and 20.
+- Long lists use `content-visibility:auto`; counters share one rAF driver.
+- `innerHTML +=` in a loop is banned; build one string and assign once.
+
+### Things worth knowing before editing
+
+- **`.c1-btn` is shared.** The C2 panel and the Live Test Runner use the same class. The global rules are therefore kept exactly as they were and the new button look is scoped to `#panel-c1` / `#c1r-modal`. Restyling it globally changed those panels' buttons; a pixel comparison caught it.
+- **One rule reaches into C3, deliberately.** `body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{animation:none}`. C3's hidden beacon overlay animates a 50px-blur `box-shadow` forever, which costs ~280 ms of paint per 4 s on every panel. The rule pauses it only while C1 is on screen and the overlay is inactive, so C3's alert is unchanged when it fires. Delete the rule to undo it; the proper fix is to scope that animation to `.active` in C3's own CSS.
+- The extension ID in a WebSocket message and extension names in history rows are escaped / sanitised before they reach `innerHTML` or an inline handler; both can be influenced by the monitored browser.
+- Failures in this panel use `showToast`, not `alert()` (a modal alert freezes the whole window).
+
+### Writing for this panel
+
+- **No dash as punctuation** in anything the user reads: no em dash, en dash or spaced hyphen. Use a full stop, a comma or a colon. Plain compound words (read only, sign in) are written as words where that reads naturally. Extension names are data and are shown exactly as the extension spells them.
+- **Descriptions are not width capped.** A `max-width` in `ch` leaves a wrapped column and a blank right half on a wide window. Let the text fill its container.
+- **Stored analyses carry the wording of the backend that wrote them.** `_c1Prose()` normalises generated prose (summary, flag and permission descriptions, recommendation, detail) when it is rendered: a comma before a connective such as "including", a colon otherwise, and a short list of old hyphenated compounds as plain words. Apply it to generated prose only, never to names.
+- **The blocklist size is approximate on the Install gate** (`c1ApproxCount`, for example "around 7K"). The Blocklist tab is a coverage audit and keeps the exact counts.
+
+## Install, approve and block (2026-10-08)
+
+Three ways an extension reaches the monitored browser, and what each guarantees.
+
+| Action | Where | What happens |
+|--------|-------|--------------|
+| **Approve Install** | Install gate card, SAFE verdicts only | `POST /session/approve_install` takes the held approval and loads the unpacked extension into the live session. |
+| **Install into Browser** | Report (Web Store lookups and live intercepts) | `POST /session/install_extension` downloads and analyses the extension, then loads it into the live session. A MALICIOUS verdict needs the explicit "Force Install" label. |
+| **Block** | Install gate card | `POST /session/block_install` drops the held approval and remembers the ID until the next Add to Chrome click on it. |
+
+Chromium only accepts extensions at launch, so loading one **restarts the browser session** (about 5 s). Both install paths answer at once and finish in the background through `_bg_install_extension` and `_load_extension_into_session` in `core/main.py`, then report over the WebSocket: `c1_install_approved` (gate), `c1_extension_installed` (report), or `c1_install_error`.
+
+What the restart has to get right, each of which used to look like "the button does nothing":
+
+- **C3 is detached and re-attached.** It holds handles on the browser context that gets closed. The same stop and start calls as `/session/stop` and `/session/start` are made around the restart.
+- **Success is checked, not assumed.** `--load-extension` skips an extension it cannot load without any error. `PlaywrightSession.extension_loaded()` reads `chrome://extensions-internals` and confirms the path is really loaded; a rejected one is dropped from the launch list and reported.
+- **A failed launch is retried** (the profile can stay locked for a moment after the old browser exits), and one restart runs at a time (`_ext_install_lock`).
+- **A stopped session is not started by an install.** The extension is queued and the approval is kept, with a message saying so. Starting a bare browser would leave it with no monitoring attached.
+- **A failure keeps the approval**, so the card offers "Retry install" instead of hanging on "Installing...".
+
+The dashboard side: the report's install button is shared by every report, so it is reset on each render (it used to stay disabled after the first use) and shows an Installed state for extensions loaded this session. Block updates the card itself and reports failure instead of relying on the WebSocket to echo it. A second Add to Chrome click on an extension builds a new card (the old one kept its Blocked actions, so the extension could not be approved).
+
+Block is remembered for the session: an analysis still running when Block is clicked finishes onto a card that cannot be approved, and `approve_install` answers 409 for a blocked ID. The next click on that extension clears the block.
+
 ## Verdict Engine
 
 ### Score Fusion

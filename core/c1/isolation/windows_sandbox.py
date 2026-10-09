@@ -315,7 +315,7 @@ class WindowsSandboxBackend(IsolationBackend):
             return False, "Windows Sandbox exists only on Windows"
         if not os.path.isfile(_WSB_EXE):
             return False, (
-                "the Windows Sandbox feature is not enabled — run as "
+                "the Windows Sandbox feature is not enabled. Run as "
                 "Administrator: Enable-WindowsOptionalFeature -Online "
                 "-FeatureName Containers-DisposableClientVM -All  (needs a reboot)"
             )
@@ -574,5 +574,5 @@ class WindowsSandboxBackend(IsolationBackend):
             if not os.path.exists(staging):
                 return
             time.sleep(1.0 + attempt)
-        print(f"[C1-WSB] Could not remove staging directory {staging} — "
-              f"it will need deleting manually.")
+        print(f"[C1-WSB] Could not remove staging directory {staging}. "
+              f"It will need deleting manually.")

@@ -555,6 +555,55 @@ class PlaywrightSession:
 
         return ok
 
+    def forget_extension(self, ext_path: str) -> None:
+        """Drop an extension from the launch list, e.g. one Chromium refused to load."""
+        abs_path = os.path.abspath(ext_path)
+        if abs_path in self._extensions:
+            self._extensions.remove(abs_path)
+
+    async def extension_loaded(self, ext_path: str) -> bool:
+        """True when Chromium really loaded the unpacked extension at ext_path.
+
+        --load-extension skips, without a word, an extension it cannot load (a bad
+        manifest, a service worker file that is missing), so a browser that restarted
+        cleanly proves nothing about it. chrome://extensions-internals lists what is
+        actually loaded. If that page cannot be read the answer is True: an unreadable
+        check must not turn a working install into a reported failure.
+        """
+        if not self.is_running or self._ctx is None:
+            return False
+        import json
+        want = os.path.normcase(os.path.abspath(ext_path))
+        previous = self._page
+        page = None
+        try:
+            page = await self._ctx.new_page()
+            await page.goto("chrome://extensions-internals",
+                            wait_until="domcontentloaded", timeout=8_000)
+            entries = json.loads(await page.evaluate("document.body.innerText"))
+            return any(
+                e.get("path") and os.path.normcase(os.path.abspath(e["path"])) == want
+                for e in entries
+            )
+        except Exception as exc:
+            print(f"[PW] Could not read the loaded extension list: {exc}")
+            return True
+        finally:
+            if page is not None:
+                try:
+                    await page.close()
+                except Exception:
+                    pass
+            # Opening a tab made it the active page; put the real one back.
+            await asyncio.sleep(0.05)
+            try:
+                if previous is not None and not previous.is_closed():
+                    self._page = previous
+                elif self._ctx.pages:
+                    self._page = self._ctx.pages[0]
+            except Exception:
+                pass
+
     async def unload_extension(self, ext_path: str) -> bool:
         abs_path = os.path.abspath(ext_path)
         if abs_path in self._extensions:

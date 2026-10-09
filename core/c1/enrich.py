@@ -367,11 +367,11 @@ def derive_reason(
     crypto_hits = len({m.group(0).lower() for m in _KW_CRYPTO.finditer(code)})
     if crypto_hits >= 2:
         add(CATEGORY_CRYPTO, 30 + min(crypto_hits, 6) * 4,
-            f"{crypto_hits} distinct crypto-wallet identifiers in the extension source")
+            f"{crypto_hits} distinct cryptocurrency wallet identifiers in the extension source")
     if crypto_hits and (feat("xhr_fetch_count") >= 1 or "DATA_POST_TO_EXTERNAL" in flagset):
-        add(CATEGORY_CRYPTO, 22, "Wallet/seed-phrase strings combined with outbound network calls")
+        add(CATEGORY_CRYPTO, 22, "Wallet and seed phrase strings combined with outbound network calls")
     if crypto_hits and feat("has_clipboardRead"):
-        add(CATEGORY_CRYPTO, 18, "clipboardRead permission alongside wallet-related code (address swapping)")
+        add(CATEGORY_CRYPTO, 18, "clipboardRead permission alongside code that handles crypto wallets (address swapping)")
 
     # ── Spyware / data exfiltration ───────────────────────────────
     if "COOKIE_EXFILTRATION_RISK" in flagset:
@@ -387,9 +387,9 @@ def derive_reason(
     if "FORM_SUBMIT_OBSERVED" in flagset:
         add(CATEGORY_EXFIL, 16, "Sandbox observed a form submission routed to an external URL")
     if feat("has_cookies") and feat("has_all_urls"):
-        add(CATEGORY_SPYWARE, 18, "cookies permission combined with all-URLs host access")
+        add(CATEGORY_SPYWARE, 18, "cookies permission combined with access to all URLs")
     if feat("cookie_in_code") >= 3:
-        add(CATEGORY_SPYWARE, 12, f"{int(feat('cookie_in_code'))} cookie-access call sites in the source")
+        add(CATEGORY_SPYWARE, 12, f"{int(feat('cookie_in_code'))} call sites that read cookies in the source")
     if feat("has_history") or feat("has_clipboardRead"):
         add(CATEGORY_SPYWARE, 10, "Reads browsing history / clipboard contents")
     if _KW_EXFIL_SINK.search(code) and feat("external_url_count") >= 3:
@@ -401,13 +401,13 @@ def derive_reason(
     if overrides.get("homepage") or overrides.get("startup_pages"):
         add(CATEGORY_SEARCH_HIJACK, 20, "manifest overrides the homepage / startup pages")
     if url_overrides.get("newtab"):
-        add(CATEGORY_SEARCH_HIJACK, 22, "manifest replaces the new-tab page")
+        add(CATEGORY_SEARCH_HIJACK, 22, "manifest replaces the new tab page")
     search_hits = len(_KW_SEARCH.findall(code))
     if search_hits >= 4 and (feat("has_webRequest") or feat("has_declarativeNetRequest")):
         add(CATEGORY_SEARCH_HIJACK, 20,
-            f"{search_hits} search-redirection patterns plus request-rewriting permissions")
+            f"{search_hits} search redirection patterns plus permissions that can rewrite requests")
     if feat("has_webRequestBlocking") and search_hits >= 2:
-        add(CATEGORY_SEARCH_HIJACK, 14, "webRequestBlocking used around search-query handling")
+        add(CATEGORY_SEARCH_HIJACK, 14, "webRequestBlocking used around search query handling")
 
     # ── Adware ────────────────────────────────────────────────────
     # One stray ad-network string is weak evidence — plenty of legitimate
@@ -422,7 +422,7 @@ def derive_reason(
     elif ad_hits:
         add(CATEGORY_ADWARE, 6, "1 ad-network identifier in the source")
     if feat("has_content_scripts") and feat("has_all_urls") and ad_hits >= 2:
-        add(CATEGORY_ADWARE, 18, "Injects content scripts into every site alongside ad-network code")
+        add(CATEGORY_ADWARE, 18, "Injects content scripts into every site alongside ad network code")
     if "HIGH_REQUEST_VOLUME" in flagset:
         add(CATEGORY_ADWARE, 14, "Sandbox recorded an unusually high volume of external requests")
     if feat("has_declarativeNetRequest") and ad_hits >= 2:
@@ -430,29 +430,29 @@ def derive_reason(
 
     # ── Bundling unwanted software ────────────────────────────────
     if feat("has_nativeMessaging"):
-        add(CATEGORY_BUNDLING, 30, "nativeMessaging permission — can drive a companion desktop binary")
+        add(CATEGORY_BUNDLING, 30, "nativeMessaging permission, which can drive a companion desktop binary")
     if feat("has_downloads") and _KW_INSTALLER.search(code):
         add(CATEGORY_BUNDLING, 22, "downloads permission used around installer/executable references")
     if feat("has_management"):
-        add(CATEGORY_BUNDLING, 16, "management permission — can install/disable other extensions")
+        add(CATEGORY_BUNDLING, 16, "management permission, which can install or disable other extensions")
 
     # ── Malware (obfuscation, dynamic code, C2) ───────────────────
     if "HIGH_EVAL_USAGE" in flagset:
-        add(CATEGORY_MALWARE, 24, f"{int(feat('eval_count'))} eval() call sites — dynamic payload execution")
+        add(CATEGORY_MALWARE, 24, f"{int(feat('eval_count'))} eval() call sites, enabling dynamic payload execution")
     if "DYNAMIC_CODE_INJECTION" in flagset:
-        add(CATEGORY_MALWARE, 18, f"{int(feat('exec_script_count'))} script-injection call sites")
+        add(CATEGORY_MALWARE, 18, f"{int(feat('exec_script_count'))} script injection call sites")
     if "BASE64_OBFUSCATION" in flagset:
-        add(CATEGORY_MALWARE, 14, f"{int(feat('atob_count'))} base64 decode call sites — hidden payloads")
+        add(CATEGORY_MALWARE, 14, f"{int(feat('atob_count'))} base64 decode call sites that can hide payloads")
     if "OBFUSCATED_STRINGS" in flagset:
-        add(CATEGORY_MALWARE, 12, f"{int(feat('long_string_count'))} long encoded strings — packed payload")
+        add(CATEGORY_MALWARE, 12, f"{int(feat('long_string_count'))} long encoded strings that suggest a packed payload")
     if feat("hex_escape_count") >= 4:
-        add(CATEGORY_MALWARE, 10, "Hex-escaped string obfuscation in the source")
+        add(CATEGORY_MALWARE, 10, "Hex escaped string obfuscation in the source")
     if "WEBSOCKET_TO_EXTERNAL" in flagset or _KW_C2.search(code):
-        add(CATEGORY_MALWARE, 22, "Persistent external channel consistent with command-and-control")
+        add(CATEGORY_MALWARE, 22, "Persistent external channel consistent with command and control")
     if "EVAL_AT_RUNTIME" in flagset:
         add(CATEGORY_MALWARE, 20, "Sandbox caught eval() executing at runtime")
     if "WEBREQUEST_BLOCKING_WITH_EVAL" in flagset:
-        add(CATEGORY_MALWARE, 20, "webRequestBlocking combined with eval() — request tampering")
+        add(CATEGORY_MALWARE, 20, "webRequestBlocking combined with eval(), which allows request tampering")
     if code_available:
         if ml_prob >= 0.90:
             add(CATEGORY_MALWARE, 32,
@@ -464,7 +464,7 @@ def derive_reason(
             add(CATEGORY_MALWARE, 12, f"XGBoost probability {ml_prob * 100:.1f}%")
     if "ZERO_DAY_ANOMALY" in flagset:
         add(CATEGORY_MALWARE, 14,
-            f"Isolation Forest anomaly {anomaly_score:.0f}/100 — unlike any benign extension in training")
+            f"Isolation Forest anomaly {anomaly_score:.0f}/100, unlike any benign extension in training")
 
     # ── Policy violation (broad, unjustified capability) ──────────
     broad: List[str] = []
@@ -481,7 +481,7 @@ def derive_reason(
     if feat("total_permission_count") >= 8:
         broad.append(f"{int(feat('total_permission_count'))} declared permissions")
     if len(broad) >= 2:
-        add(CATEGORY_POLICY, 8 + 4 * min(len(broad), 4), "Over-broad capability set: " + ", ".join(broad))
+        add(CATEGORY_POLICY, 8 + 4 * min(len(broad), 4), "Overly broad capability set: " + ", ".join(broad))
     if code_available and ml_prob >= 0.50:
         add(CATEGORY_POLICY, 10, f"XGBoost probability {ml_prob * 100:.1f}% over the decision boundary")
     if code_available and static_score >= 40:
@@ -537,7 +537,7 @@ def derive_reason(
             ]
 
     if not code_available:
-        method = "declared capability only (archived manifest — extension delisted)"
+        method = "declared capability only (archived manifest, extension delisted)"
     elif sandbox_ran:
         method = "XGBoost + Isolation Forest + dynamic sandbox"
     else:
