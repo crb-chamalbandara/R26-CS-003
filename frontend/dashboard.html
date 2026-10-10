@@ -3604,6 +3604,136 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
 #panel-c4 #c4-link-card .c4-card-b{padding:0}
 @media (max-width:1100px){.lc-body{flex-direction:column;height:auto}.lc-stage{height:440px;flex:none}.lc-full .lc-stage{flex:1}.lc-side{width:auto;border-left:none;border-top:1px solid var(--lc-brd);max-height:260px}}
 @media (prefers-reduced-motion:reduce){.lc-e.chain{animation:none}.lc-n,.lc-e,.lc-lbl{transition:none}}
+
+/* ==============================================================================
+   C2 DETECTION PIPELINE + REPORT VIEWER (additive)
+   ============================================================================== */
+#panel-c2 .lv-unit{--vc:var(--t2);display:flex;flex-direction:column;flex-shrink:0}
+#panel-c2 .lv-unit[data-v="safe"],#panel-c2 .lv-unit[data-v="whitelisted"]{--vc:var(--safe)}
+#panel-c2 .lv-unit[data-v="verified"],#panel-c2 .lv-unit[data-v="analyzing"]{--vc:var(--c2)}
+#panel-c2 .lv-unit[data-v="suspicious"]{--vc:var(--warn)}
+#panel-c2 .lv-unit[data-v="phishing"]{--vc:var(--danger)}
+#panel-c2 .lv-unit>.lv-card{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-color:transparent}
+
+#panel-c2 .lv-pipe{background:linear-gradient(158deg,var(--g-a) 0%,var(--g-b) 100%);border:1px solid var(--g-brd);border-left:3px solid var(--vc);
+  border-top:1px dashed var(--g-brd);border-radius:0 0 14px 14px;padding:12px 16px 12px;box-shadow:var(--g-inset),var(--g-shadow)}
+#panel-c2 .lv-pipe-hdr{display:flex;align-items:center;gap:12px}
+#panel-c2 .lv-pipe-t{font-size:12px;font-weight:700;color:var(--t0)}
+#panel-c2 .lv-pipe-s{font-size:10px;color:var(--t2);margin-top:1px}
+#panel-c2 .lv-pipe-status{margin-left:auto;display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:20px;white-space:nowrap;
+  background:rgba(var(--tint),.045);border:1px solid var(--g-brd);font-size:10.5px;font-weight:700;color:var(--t1)}
+#panel-c2 .lv-pipe-status i{width:7px;height:7px;border-radius:50%;background:var(--t3);flex-shrink:0}
+#panel-c2 .lv-pipe-status[data-s="run"] i{background:var(--c2);animation:lvPulse 1s ease-in-out infinite}
+#panel-c2 .lv-pipe-status[data-s="safe"] i{background:var(--safe)}
+#panel-c2 .lv-pipe-status[data-s="sus"] i{background:var(--warn)}
+#panel-c2 .lv-pipe-status[data-s="mal"] i{background:var(--danger)}
+@keyframes lvPulse{50%{opacity:.35}}
+
+#panel-c2 .lv-pipeline{--pf:0;position:relative;display:grid;grid-template-columns:1fr 2.4fr 1fr 1fr 1fr;padding:14px 0 2px}
+#panel-c2 .lv-pline{position:absolute;top:34px;left:7.8%;right:7.8%;height:4px;border-radius:2px;background:var(--g-brd);overflow:hidden}
+#panel-c2 .lv-pline b{display:block;height:100%;transform-origin:left center;transform:scaleX(var(--pf));
+  background:linear-gradient(90deg,var(--c2),var(--safe));transition:transform .7s cubic-bezier(.22,1,.36,1)}
+#panel-c2 .lv-pstep{position:relative;padding:0 8px;text-align:center;min-width:0}
+#panel-c2 .lv-pnode{position:relative;z-index:1;width:44px;height:44px;margin:0 auto 10px;display:grid;place-items:center;border-radius:50%;
+  background:var(--bg2);border:2px solid color-mix(in srgb,var(--c2) 22%,var(--g-brd));color:var(--t2);cursor:default;outline:none;
+  transition:border-color .3s,color .3s,background-color .3s,transform .15s}
+#panel-c2 .lv-pnode svg{width:19px;height:19px}
+#panel-c2 .lv-pnode:hover,#panel-c2 .lv-pnode:focus-visible,#panel-c2 .lv-ln:hover,#panel-c2 .lv-ln:focus-visible{transform:translateY(-2px);border-color:var(--c2)}
+#panel-c2 .lv-pnode:focus-visible,#panel-c2 .lv-ln:focus-visible{box-shadow:0 0 0 3px rgba(var(--c2-rgb),.35)}
+#panel-c2 .lv-pname{font-size:11.5px;font-weight:700;color:var(--t0)}
+#panel-c2 .lv-pnote{font-size:10px;color:var(--t3);line-height:1.5;margin-top:3px}
+#panel-c2 .lv-pchip{display:inline-block;margin-top:7px;font:800 9px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border-radius:5px;background:rgba(var(--tint),.06);color:var(--t2)}
+#panel-c2 .lv-pchip:empty{display:none}
+#panel-c2 .lv-lnodes{display:flex;align-items:center;justify-content:center;gap:7px;height:44px;margin-bottom:10px;position:relative;z-index:1}
+#panel-c2 .lv-ln{position:relative;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:800;color:var(--t2);
+  background:var(--bg2);border:2px solid color-mix(in srgb,var(--c2) 22%,var(--g-brd));outline:none;cursor:default;transition:border-color .3s,color .3s,transform .15s,opacity .3s}
+
+/* stage states */
+#panel-c2 .lv-pstep.is-todo .lv-pnode,#panel-c2 .lv-ln.is-todo{opacity:.45}
+#panel-c2 .lv-pstep.is-todo .lv-pname{color:var(--t2)}
+#panel-c2 .lv-pstep.is-now .lv-pnode,#panel-c2 .lv-ln.is-now{border-color:var(--c2);color:var(--c2)}
+#panel-c2 .lv-pstep.is-now .lv-pnode::before,#panel-c2 .lv-ln.is-now::before{content:'';position:absolute;inset:-6px;border-radius:50%;border:2px solid transparent;
+  border-top-color:var(--c2);animation:lvSpin 1s linear infinite}
+#panel-c2 .lv-ln.is-now::before{inset:-5px}
+#panel-c2 .lv-pstep.is-done .lv-pnode{border-color:var(--safe);color:var(--safe);background-image:linear-gradient(var(--safe-bg),var(--safe-bg))}
+#panel-c2 .lv-pstep.is-done.k-sus .lv-pnode{border-color:var(--warn);color:var(--warn);background-image:linear-gradient(var(--warn-bg),var(--warn-bg))}
+#panel-c2 .lv-pstep.is-done.k-mal .lv-pnode,#panel-c2 .lv-pstep.is-hit .lv-pnode{border-color:var(--danger);color:var(--danger);background-image:linear-gradient(var(--danger-bg),var(--danger-bg))}
+#panel-c2 .lv-pstep.is-warnst .lv-pnode{border-color:var(--warn);color:var(--warn);background-image:linear-gradient(var(--warn-bg),var(--warn-bg))}
+#panel-c2 .lv-pstep.is-skip .lv-pnode,#panel-c2 .lv-ln.is-off{border-style:dashed;color:var(--t3)}
+#panel-c2 .lv-ln.is-off{opacity:.38}
+#panel-c2 .lv-ln.is-done.k-ok{border-color:var(--safe);color:var(--safe);background-image:linear-gradient(var(--safe-bg),var(--safe-bg))}
+#panel-c2 .lv-ln.is-done.k-warn{border-color:var(--warn);color:var(--warn);background-image:linear-gradient(var(--warn-bg),var(--warn-bg))}
+#panel-c2 .lv-ln.is-done.k-bad{border-color:var(--danger);color:var(--danger);background-image:linear-gradient(var(--danger-bg),var(--danger-bg))}
+#panel-c2 .lv-pchip{transition:background .3s,color .3s}
+#panel-c2 .lv-pstep.is-done .lv-pchip,#panel-c2 .lv-pstep.is-now .lv-pchip{color:var(--t1)}
+#panel-c2 .lv-pstep.k-mal .lv-pchip,#panel-c2 .lv-pstep.is-hit .lv-pchip{background:var(--danger-bg);color:var(--danger)}
+#panel-c2 .lv-pstep.k-sus .lv-pchip,#panel-c2 .lv-pstep.is-warnst .lv-pchip{background:var(--warn-bg);color:var(--warn)}
+#panel-c2 .lv-pstep.k-safe .lv-pchip{background:var(--safe-bg);color:var(--safe)}
+@media (max-width:900px){#panel-c2 .lv-pnote{display:none}#panel-c2 .lv-pstep{padding:0 3px}#panel-c2 .lv-ln{width:26px;height:26px;font-size:9px}#panel-c2 .lv-lnodes{gap:4px}}
+@media (prefers-reduced-motion:reduce){#panel-c2 .lv-pstep.is-now .lv-pnode::before,#panel-c2 .lv-ln.is-now::before,#panel-c2 .lv-pipe-status[data-s="run"] i{animation:none}#panel-c2 .lv-pline b{transition:none}}
+
+/* hover card */
+#lv-tip{position:fixed;z-index:9900;max-width:330px;min-width:220px;padding:11px 13px;border-radius:12px;pointer-events:none;
+  background:var(--bg2);border:1px solid var(--b2);box-shadow:var(--shadow-lg);opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s;
+  font-family:'Plus Jakarta Sans','Inter',-apple-system,'Segoe UI',sans-serif}
+#lv-tip.show{opacity:1;transform:none}
+#lv-tip .lt-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#lv-tip .lt-h b{font-size:12.5px;color:var(--t0)}
+#lv-tip .lt-pill{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 9px;border-radius:20px;color:var(--t2);border:1px solid var(--b2)}
+#lv-tip .lt-pill.ok{color:var(--safe);border-color:color-mix(in srgb,var(--safe) 45%,transparent);background:var(--safe-bg)}
+#lv-tip .lt-pill.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent);background:var(--warn-bg)}
+#lv-tip .lt-pill.bad{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent);background:var(--danger-bg)}
+#lv-tip .lt-pill.run{color:var(--c2);border-color:color-mix(in srgb,var(--c2) 45%,transparent)}
+#lv-tip .lt-d{font-size:11px;line-height:1.55;color:var(--t2);margin-top:6px}
+#lv-tip .lt-rows{margin-top:9px;padding-top:8px;border-top:1px solid var(--b1);display:flex;flex-direction:column;gap:4px}
+#lv-tip .lt-r{display:flex;justify-content:space-between;gap:14px;font-size:11px;color:var(--t2)}
+#lv-tip .lt-r b{color:var(--t0);text-align:right;font-weight:700;max-width:190px;word-break:break-word}
+#lv-tip .lt-sub{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin-top:6px}
+#lv-tip .lt-w{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:10px;color:var(--t1);font-variant-numeric:tabular-nums}
+
+/* report viewer */
+#c2-viewer{position:fixed;inset:0;z-index:9700;display:none;align-items:center;justify-content:center;background:var(--scrim);padding:24px}
+#c2-viewer.open{display:flex}
+#c2-viewer .cv-box{width:min(1080px,100%);height:min(86vh,900px);display:flex;flex-direction:column;border-radius:16px;overflow:hidden;
+  background:var(--bg2);border:1px solid var(--b2);box-shadow:var(--shadow-lg);font-family:'Plus Jakarta Sans','Inter',-apple-system,'Segoe UI',sans-serif}
+#c2-viewer .cv-hdr{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--b1);background:var(--bg1);flex-wrap:wrap}
+#c2-viewer .cv-hdr-m{flex:1;min-width:160px}
+#c2-viewer .cv-title{font-size:14px;font-weight:700;color:var(--t0)}
+#c2-viewer .cv-sub{font-size:10.5px;color:var(--t2);margin-top:1px}
+#c2-viewer .cv-tools{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+#c2-viewer .cv-btn,#c2-viewer .cv-seg button{font-family:inherit;font-size:11px;font-weight:700;color:var(--t1);padding:6px 13px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--b2);background:rgba(var(--tint),.045);transition:border-color .15s,color .15s,background .15s}
+#c2-viewer .cv-btn:hover:not(:disabled),#c2-viewer .cv-seg button:hover{border-color:var(--c2);color:var(--c2)}
+#c2-viewer .cv-btn:disabled{opacity:.4;cursor:default}
+#c2-viewer .cv-btn.primary{color:#fff;background:var(--c2);border-color:var(--c2)}
+#c2-viewer .cv-btn.primary:hover:not(:disabled){color:#fff;filter:brightness(1.1)}
+#c2-viewer .cv-btn:focus-visible,#c2-viewer .cv-seg button:focus-visible{outline:2px solid var(--c2);outline-offset:2px}
+#c2-viewer .cv-seg{display:inline-flex}
+#c2-viewer .cv-seg button{border-radius:0}.cv-seg button:first-child{border-radius:8px 0 0 8px}.cv-seg button:last-child{border-radius:0 8px 8px 0;border-left:none}
+#c2-viewer .cv-seg button.on{color:var(--c2);border-color:var(--c2);background:rgba(var(--c2-rgb),.1)}
+#c2-viewer [hidden]{display:none !important}
+#c2-viewer .cv-body{flex:1;min-height:0;overflow:auto;background:var(--bg1)}
+#c2-viewer .cv-frame{width:100%;height:100%;border:0;background:#fff;display:block}
+#c2-viewer .cv-msg{padding:40px;text-align:center;color:var(--t2);font-size:12.5px}
+#c2-viewer .cv-msg.err{color:var(--danger)}
+#c2-viewer .cv-raw{margin:0;padding:16px 18px;font:11.5px/1.6 'JetBrains Mono','Cascadia Code',Consolas,monospace;color:var(--t1);white-space:pre-wrap;word-break:break-word}
+#c2-viewer .cv-tree{padding:14px 18px;font:11.5px/1.65 'JetBrains Mono','Cascadia Code',Consolas,monospace;color:var(--t1)}
+#c2-viewer .cv-tree details>summary{cursor:pointer;list-style:none;display:inline-flex;gap:8px;align-items:baseline}
+#c2-viewer .cv-tree details>summary::-webkit-details-marker{display:none}
+#c2-viewer .cv-tree details>summary::before{content:'▸';display:inline-block;width:12px;color:var(--t3);transition:transform .12s}
+#c2-viewer .cv-tree details[open]>summary::before{transform:rotate(90deg)}
+#c2-viewer .cv-kids{margin-left:18px;padding-left:12px;border-left:1px solid var(--b1)}
+#c2-viewer .cv-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 2px}
+#c2-viewer .cv-key{color:var(--c2);font-weight:700}.cv-idx{color:var(--t3);margin-right:4px}
+#c2-viewer .cv-str{color:var(--safe)}#c2-viewer .cv-num{color:var(--warn)}#c2-viewer .cv-bool{color:var(--c1)}#c2-viewer .cv-null{color:var(--t3)}
+#c2-viewer .cv-punc,#c2-viewer .cv-count{color:var(--t3)}
+#c2-viewer .cv-tablewrap{overflow:auto;max-height:calc(100% - 34px)}
+#c2-viewer .cv-table{width:100%;border-collapse:collapse;font-size:11px}
+#c2-viewer .cv-table th{position:sticky;top:0;background:var(--bg2);text-align:left;padding:8px 12px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--t2);border-bottom:1px solid var(--b2)}
+#c2-viewer .cv-table td{padding:7px 12px;border-bottom:1px solid var(--b1);color:var(--t1);max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#c2-viewer .cv-table tr:hover td{background:rgba(var(--c2-rgb),.05)}
+#c2-viewer .cv-foot{padding:9px 16px;font-size:10.5px;color:var(--t2);border-top:1px solid var(--b1);background:var(--bg2)}
+@media (max-width:700px){#c2-viewer{padding:0}#c2-viewer .cv-box{height:100%;border-radius:0}}
 </style>
 </head>
 <body>
@@ -4918,6 +5048,10 @@ function connectPwWs() {
       liveOnStart(msg);
     } else if (msg.type === 'c2_layer') {
       liveOnLayer(msg);
+    } else if (msg.type === 'c2_capture') {
+      liveOnCapture(msg);
+    } else if (msg.type === 'c2_reanalyze_failed') {
+      showToast('Re-analyze failed: ' + (msg.message || 'the page could not be loaded'));
     } else if (msg.type === 'c2_preview') {
       liveOnPreview(msg);
     } else if (msg.type === 'tab_closed') {
@@ -4983,12 +5117,16 @@ async function navigatePw(url) {
   }
   updateMonUrl(url);
   try {
-    await fetch(API + '/session/navigate', {
+    const res = await fetch(API + '/session/navigate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     });
-  } catch {}
+    if (!res.ok) {
+      let why = ''; try { why = (await res.json()).detail || ''; } catch {}
+      showToast(why || 'Could not open that page');
+    }
+  } catch { showToast('Could not reach the backend'); }
 }
 
 document.getElementById('nav-input').addEventListener('keydown', (e) => {
@@ -7761,6 +7899,7 @@ function liveOnStart(msg) {
   st.status = 'analyzing';
   st.planned = msg.layers || [];
   st.layers = {};
+  st.cap = null;
   st.startedAt = Date.now();
   renderLiveTabs();
 }
@@ -7771,6 +7910,13 @@ function liveOnLayer(msg) {
   if (!st || st.status !== 'analyzing' || st.url !== msg.url || !msg.layer) return;
   st.layers[msg.layer.id] = msg.layer;
   if (!st.planned.includes(msg.layer.id)) st.planned.push(msg.layer.id);
+  liveUpdateCard(st);
+}
+
+function liveOnCapture(msg) {
+  const st = liveUi[msg.tab_id != null ? msg.tab_id : 0];
+  if (!st || st.status !== 'analyzing' || st.url !== msg.url) return;
+  st.cap = msg;
   liveUpdateCard(st);
 }
 
@@ -7788,10 +7934,15 @@ function liveOnResult(tab, r) {
   st.url = r.url;
   st.title = r.title || '';
   st.result = r;
+  if (r.capture) st.cap = r.capture;
   st.status = skipped ? 'skipped' : 'done';
   st.layers = {};
   (r.layers || []).forEach(l => { st.layers[l.id] = l; });
-  if (!skipped && !(r.layers || []).length) st.planned = [];
+  if (!skipped && r.verified && !(r.layers || []).length && st.planned.includes('L5')) {
+    // A verified domain still gets the L5 reputation check; it just returned nothing to flag.
+    st.planned = ['L5'];
+    st.layers.L5 = { id: 'L5', name: 'Reputation Check', score: 0, detail: 'Checked: no reputation feed flagged this verified domain' };
+  } else if (!skipped && !(r.layers || []).length) st.planned = [];
   else if (!st.planned.length || !st.planned.every(id => st.layers[id])) st.planned = (r.layers || []).map(l => l.id);
   if (!skipped) {
     liveStats.pages++;
@@ -7914,21 +8065,23 @@ function liveUpdateCard(st) {
   const hasId = r && r.id != null && st.status === 'done';
   const q = a => el.querySelector(`.lv-act[data-act="${a}"]`);
   q('details').disabled = !hasId; q('report').disabled = !hasId;
-  q('revisit').disabled = analyzing;
+  q('revisit').disabled = analyzing; q('revisit').textContent = 'Re-analyze';
   const trustable = st.status === 'done' && !['VERIFIED'].includes(v) && !!st.url;
   const tb = q('trust'); tb.style.display = trustable ? '' : 'none';
   const host = liveHost(st.url);
   tb.textContent = liveTrusted.has(host) ? 'Undo trust' : 'Trust this site';
   tb.classList.toggle('on', liveTrusted.has(host));
   tb.dataset.confirm = '';
+  if (st.unit) st.unit.dataset.v = vc;
+  lvPipeUpdate(st);
 }
 
 async function liveAction(tab, btn) {
   const st = liveUi[tab]; if (!st) return;
   const act = btn.dataset.act, r = st.result;
   if (act === 'details' && r && r.id != null) return openC2AlertModal(r.id);
-  if (act === 'report' && r && r.id != null) return window.open(API + '/alerts/' + r.id + '/report.html', '_blank');
-  if (act === 'revisit') return navigatePw(st.url);
+  if (act === 'report' && r && r.id != null) return c2ViewAlertReport(r.id, 'html');
+  if (act === 'revisit') return c2Reanalyze(tab, st.url, btn);
   if (act === 'copy') return c2CopyText(st.url);
   if (act === 'trust') return c2TrustToggle(st.url, btn, () => liveUpdateCard(st));
 }
@@ -7975,17 +8128,390 @@ function renderLiveTabs() {
   const ids = Object.keys(liveUi).map(Number).sort((a, b) => a - b);
   document.getElementById('live-empty').style.display = ids.length ? 'none' : 'flex';
   // drop cards for tabs that are gone
-  host.querySelectorAll('.lv-card').forEach(c => { if (!liveUi[c.dataset.tab]) c.remove(); });
+  host.querySelectorAll('.lv-unit').forEach(c => { if (!liveUi[c.dataset.tab]) { c.remove(); lvTipHide(); } });
   ids.forEach(id => {
     const st = liveUi[id];
-    if (!st.el || !st.el.isConnected) { st.el = liveCardBuild(st); }
-    if (st.el.parentNode !== host) host.appendChild(st.el);
+    if (!st.unit || !st.unit.isConnected) {
+      // every live card is followed by its own detection pipeline
+      st.el = liveCardBuild(st); st.pipeEl = lvPipeBuild(st);
+      st.unit = document.createElement('div'); st.unit.className = 'lv-unit'; st.unit.dataset.tab = id;
+      st.unit.append(st.el, st.pipeEl);
+    }
+    if (st.unit.parentNode !== host) host.appendChild(st.unit);
     liveUpdateCard(st);
   });
   // keep DOM order == tab order, and only touch the DOM when it actually differs
-  const now = [...host.querySelectorAll('.lv-card')].map(c => +c.dataset.tab);
-  if (now.join() !== ids.join()) ids.forEach(id => host.appendChild(liveUi[id].el));
+  const now = [...host.querySelectorAll('.lv-unit')].map(c => +c.dataset.tab);
+  if (now.join() !== ids.join()) ids.forEach(id => host.appendChild(liveUi[id].unit));
   renderLiveSummary();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  C2 Detection Pipeline (one under every live card)
+//  Same visual language as C1's pipeline, but fed by the live events:
+//  c2_analysis_start -> c2_capture -> c2_layer x6 -> analysis (+ c2_preview).
+//  Nothing is marked done on a guess: each stage turns when its own message
+//  arrives. Hover (or focus) a stage for what it does and what it measured.
+// ══════════════════════════════════════════════════════════════
+const LV_PIPE_ICO = {
+  capture: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></svg>',
+  fusion:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6l4 6h6M4 18h6l4-6"/><path d="M17 9l3 3-3 3"/></svg>',
+  verdict: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+  response:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+};
+const LV_LAYER_INFO = {
+  L1: ['BitB Detection', 'Looks for a fake browser window drawn inside the page (fixed iframes, fake address bars, window chrome) using DOM rules plus a trained model.'],
+  L2: ['URL Analysis', 'Scores the address itself: lookalike brand words, free hosting, odd length or characters, using a trained URL classifier.'],
+  L3: ['Visual Similarity', 'Compares the page screenshot with known brand logos using perceptual hashes.'],
+  L4: ['Form Destination', 'Checks where password and login forms send their data. Posting to another domain is a strong phishing signal.'],
+  L5: ['Reputation Check', 'Asks Google Safe Browsing and the PhishTank feed whether this URL is already known as phishing.'],
+  L6: ['Runtime Behavior', 'Watches live page behaviour: keystroke and clipboard hooks, drag-blocking, and credentials sent to other origins.'],
+};
+
+function lvPipeBuild(st) {
+  const el = document.createElement('div');
+  el.className = 'lv-pipe';
+  el.dataset.tab = st.tab;
+  el.innerHTML = `
+    <div class="lv-pipe-hdr">
+      <div><div class="lv-pipe-t">Detection pipeline</div><div class="lv-pipe-s"></div></div>
+      <div class="lv-pipe-status" data-s="idle" role="status"><i></i><span>Waiting</span></div>
+    </div>
+    <div class="lv-pipeline" style="--pf:0">
+      <i class="lv-pline" aria-hidden="true"><b></b></i>
+      <div class="lv-pstep" data-k="capture" style="--i:0"><div class="lv-pnode" tabindex="0" role="button" aria-label="Capture stage">${LV_PIPE_ICO.capture}</div><div class="lv-pname">Capture</div><div class="lv-pnote">Page, screenshot, runtime</div><span class="lv-pchip"></span></div>
+      <div class="lv-pstep lv-pgroup" style="--i:1"><div class="lv-lnodes">${['L1', 'L2', 'L3', 'L4', 'L5', 'L6'].map(id =>
+        `<div class="lv-ln" data-k="${id}" tabindex="0" role="button" aria-label="${LV_LAYER_INFO[id][0]}">${id}</div>`).join('')}</div>
+        <div class="lv-pname">Detection layers</div><div class="lv-pnote">Six checks run in parallel</div><span class="lv-pchip"></span></div>
+      <div class="lv-pstep" data-k="fusion" style="--i:2"><div class="lv-pnode" tabindex="0" role="button" aria-label="Score fusion stage">${LV_PIPE_ICO.fusion}</div><div class="lv-pname">Score fusion</div><div class="lv-pnote">Combine into one risk</div><span class="lv-pchip"></span></div>
+      <div class="lv-pstep" data-k="verdict" style="--i:3"><div class="lv-pnode" tabindex="0" role="button" aria-label="Verdict stage">${LV_PIPE_ICO.verdict}</div><div class="lv-pname">Verdict</div><div class="lv-pnote">Safe, suspicious, phishing</div><span class="lv-pchip"></span></div>
+      <div class="lv-pstep" data-k="response" style="--i:4"><div class="lv-pnode" tabindex="0" role="button" aria-label="Response stage">${LV_PIPE_ICO.response}</div><div class="lv-pname">Response</div><div class="lv-pnote">Warn, block, log</div><span class="lv-pchip"></span></div>
+    </div>`;
+  const line = el.querySelector('.lv-pipeline');
+  const tipFor = ev => { const t = ev.target.closest('[data-k]'); return t && line.contains(t) ? t : null; };
+  line.addEventListener('mouseover', ev => { const t = tipFor(ev); if (t) lvTipShow(st.tab, t); });
+  line.addEventListener('mousemove', ev => { if (tipFor(ev)) lvTipMove(ev.clientX, ev.clientY); });
+  line.addEventListener('mouseout', ev => { if (tipFor(ev)) lvTipHide(); });
+  line.addEventListener('focusin', ev => { const t = tipFor(ev); if (t) lvTipShow(st.tab, t, true); });
+  line.addEventListener('focusout', lvTipHide);
+  return el;
+}
+
+// Work out each stage's state from what has actually arrived.
+function lvPipeModel(st) {
+  const r = st.result, analyzing = st.status === 'analyzing';
+  const planned = st.planned || [], got = st.layers || {};
+  const capDone = !!(st.cap || (!analyzing && r));
+  const verified = !!(r && r.verified) || (st.cap && st.cap.skipped);
+  const allIn = planned.length > 0 && planned.every(id => got[id]);
+  const stages = {};
+  stages.capture = { state: capDone ? (st.cap && st.cap.skipped ? 'skip' : 'done') : 'now', chip: st.cap ? (st.cap.skipped ? 'Skipped' : st.cap.ms + ' ms') : '' };
+  const layers = {};
+  ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'].forEach(id => {
+    const l = got[id], on = planned.includes(id);
+    layers[id] = l ? { state: 'done', score: l.score || 0, k: (l.score || 0) * 100 > 60 ? 'bad' : (l.score || 0) * 100 > 28 ? 'warn' : 'ok' }
+      : on ? { state: capDone ? 'now' : 'todo' } : { state: 'off' };
+  });
+  const done = planned.filter(id => got[id]).length;
+  stages.layers = { state: allIn ? 'done' : capDone ? 'now' : 'todo', chip: planned.length ? `${done}/${planned.length}` : '' };
+  stages.fusion = { state: !analyzing && r ? 'done' : allIn ? 'now' : 'todo', chip: !analyzing && r && r.fusion && r.fusion.method !== 'verified_domain_gate' ? 'Risk ' + Math.round(r.risk_score) : !analyzing && r ? 'Gate' : '' };
+  const v = !analyzing && r ? String(r.verdict || '').toUpperCase() : '';
+  stages.verdict = { state: v ? 'done' : 'todo', chip: v, k: v === 'PHISHING' ? 'mal' : v === 'SUSPICIOUS' ? 'sus' : v ? 'safe' : '' };
+  const act = !analyzing && r ? r.action : null;
+  stages.response = { state: !analyzing && r ? (act === 'block' ? 'hit' : act === 'warn' ? 'warnst' : act === 'off' ? 'skip' : 'done') : 'todo',
+                      chip: act === 'block' ? 'Blocked' : act === 'warn' ? 'Warned' : act === 'off' ? 'Off' : act === 'none' ? 'Allowed' : '',
+                      k: act === 'block' ? 'mal' : act === 'warn' ? 'sus' : act ? 'safe' : '' };
+  const pf = !analyzing && r ? 1 : allIn ? 0.8 : capDone ? 0.18 + 0.5 * (planned.length ? done / planned.length : 0) : 0.06;
+  return { stages, layers, pf, verified, analyzing, done, total: planned.length };
+}
+
+function lvPipeUpdate(st) {
+  const el = st.pipeEl; if (!el) return;
+  el.style.display = st.status === 'skipped' ? 'none' : '';
+  if (st.status === 'skipped') return;
+  const M = lvPipeModel(st);
+  el.querySelector('.lv-pipe-s').textContent = `Tab ${st.tab} · ${liveHost(st.url)}`;
+  const line = el.querySelector('.lv-pipeline');
+  line.style.setProperty('--pf', M.pf);
+  const setStep = (sel, s) => {
+    const step = line.querySelector(sel); if (!step) return;
+    const cls = 'lv-pstep' + (step.classList.contains('lv-pgroup') ? ' lv-pgroup' : '') + ' is-' + s.state + (s.k ? ' k-' + s.k : '');
+    if (step.className !== cls) step.className = cls;
+    const chip = step.querySelector('.lv-pchip');
+    if (chip.textContent !== (s.chip || '')) chip.textContent = s.chip || '';
+  };
+  setStep('[data-k="capture"]', M.stages.capture);
+  setStep('.lv-pgroup', M.stages.layers);
+  setStep('[data-k="fusion"]', M.stages.fusion);
+  setStep('[data-k="verdict"]', M.stages.verdict);
+  setStep('[data-k="response"]', M.stages.response);
+  ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'].forEach(id => {
+    const n = line.querySelector(`.lv-ln[data-k="${id}"]`), s = M.layers[id];
+    const cls = 'lv-ln is-' + s.state + (s.k ? ' k-' + s.k : '');
+    if (n.className !== cls) n.className = cls;
+  });
+  const status = el.querySelector('.lv-pipe-status'), label = status.lastChild;
+  let s;
+  if (M.analyzing) s = !st.cap ? ['run', 'Capturing the page'] : M.done < M.total || !M.total ? ['run', `Running layers ${M.done}/${M.total || '?'}`] : ['run', 'Combining scores'];
+  else if (st.result) {
+    const v = String(st.result.verdict || '').toUpperCase(), ms = st.result.duration_ms;
+    s = [v === 'PHISHING' ? 'mal' : v === 'SUSPICIOUS' ? 'sus' : 'safe', `${v}${ms != null ? ' in ' + (ms / 1000).toFixed(1) + ' s' : ''}`];
+  } else s = ['idle', 'Waiting'];
+  if (status.dataset.s !== s[0]) status.dataset.s = s[0];
+  if (label.textContent !== s[1]) label.textContent = s[1];
+  // a hover card that is open follows live changes
+  if (_lvTip.open && _lvTip.tab === st.tab) lvTipFill(st, _lvTip.key);
+}
+
+// ── hover card ───────────────────────────────────────────────
+const _lvTip = { open: false, tab: null, key: null, el: null };
+function lvTipEl() {
+  if (!_lvTip.el) { const e = document.createElement('div'); e.id = 'lv-tip'; e.setAttribute('role', 'tooltip'); document.body.appendChild(e); _lvTip.el = e; }
+  return _lvTip.el;
+}
+function lvTipHide() { _lvTip.open = false; if (_lvTip.el) _lvTip.el.classList.remove('show'); }
+function lvTipMove(x, y) {
+  const e = lvTipEl(), w = e.offsetWidth, h = e.offsetHeight;
+  let left = x + 16, top = y + 18;
+  if (left + w > innerWidth - 8) left = x - w - 16;
+  if (top + h > innerHeight - 8) top = y - h - 14;
+  e.style.left = Math.max(8, left) + 'px'; e.style.top = Math.max(8, top) + 'px';
+}
+function lvTipShow(tab, node, byKey) {
+  const st = liveUi[tab]; if (!st) return;
+  _lvTip.open = true; _lvTip.tab = tab; _lvTip.key = node.dataset.k;
+  lvTipFill(st, node.dataset.k);
+  const e = lvTipEl(); e.classList.add('show');
+  if (byKey) { const r = node.getBoundingClientRect(); lvTipMove(r.left + r.width / 2, r.bottom); }
+}
+function lvTipFill(st, key) {
+  const M = lvPipeModel(st), r = st.result, T = (r && r.timings) || {}, th = (r && r.thresholds) || {};
+  const row = (k, v) => v == null || v === '' ? '' : `<div class="lt-r"><span>${esc(k)}</span><b>${esc(v)}</b></div>`;
+  const pill = (txt, k) => `<span class="lt-pill ${k || ''}">${esc(txt)}</span>`;
+  let title = '', desc = '', status = '', rows = '';
+  if (key === 'capture') {
+    const c = st.cap || (r && r.capture);
+    title = 'Capture'; desc = 'Collects what the detection layers need from the live page: its HTML, a screenshot for the visual check, and the runtime signals.';
+    status = !c ? pill('Running', 'run') : c.skipped ? pill('Skipped', '') : pill('Done', 'ok');
+    rows = c ? (c.skipped ? row('Why', 'Verified, trusted or internal page: nothing to capture') : row('Time', c.ms + ' ms') + row('Page HTML', (c.dom_bytes / 1024).toFixed(1) + ' KB') + row('Screenshot', c.screenshot ? 'Taken' : 'Not needed') + row('Runtime signals', c.runtime ? 'Collected' : 'None')) : '';
+  } else if (LV_LAYER_INFO[key]) {
+    const l = st.layers[key], on = (st.planned || []).includes(key), p = l ? Math.round((l.score || 0) * 100) : null;
+    title = key + ' · ' + LV_LAYER_INFO[key][0]; desc = LV_LAYER_INFO[key][1];
+    status = l ? pill(p + '%', p > 60 ? 'bad' : p > 28 ? 'warn' : 'ok') : on ? pill('Running', 'run') : pill('Off', '');
+    const ms = (l && l.ms != null ? l.ms : (T.layers || {})[key]);
+    rows = l ? row('Finding', l.detail || 'Nothing notable') + row('Time', ms != null ? ms + ' ms' : '') : on ? '' : row('State', 'Turned off in Settings, or skipped for this page');
+  } else if (key === 'fusion') {
+    const f = r && r.fusion;
+    title = 'Score fusion'; desc = 'Combines the layer scores into one risk number from 0 to 100. A near-certain browser-in-the-browser page can raise the result by a hard rule.';
+    status = r && st.status !== 'analyzing' ? pill('Done', 'ok') : M.stages.fusion.state === 'now' ? pill('Running', 'run') : pill('Waiting', '');
+    if (f && r && st.status !== 'analyzing') {
+      rows = f.method === 'verified_domain_gate' ? row('Method', 'Verified-domain gate (heuristic layers skipped)')
+        : row('Method', f.method === 'meta_classifier' ? 'Learned meta-classifier' : 'Weighted sum')
+          + row('Weighted score', f.pre_floor_risk != null ? Math.round(f.pre_floor_risk) : '')
+          + row('Hard rule', f.floor_applied ? 'Raised to ' + String(f.floor_applied).toUpperCase() : 'None')
+          + row('Final risk', Math.round(r.risk_score)) + row('Time', T.fusion_ms != null ? T.fusion_ms + ' ms' : '');
+      if (f.weights_applied) rows += `<div class="lt-sub">Weights</div><div class="lt-w">${Object.keys(f.weights_applied).map(k => `<span>${esc(k)} ${(+f.weights_applied[k]).toFixed(2)}</span>`).join('')}</div>`;
+    }
+  } else if (key === 'verdict') {
+    const v = r && st.status !== 'analyzing' ? String(r.verdict || '').toUpperCase() : '';
+    title = 'Verdict'; desc = 'Turns the risk number into a label using your thresholds from Settings.';
+    status = v ? pill(v, v === 'PHISHING' ? 'bad' : v === 'SUSPICIOUS' ? 'warn' : 'ok') : pill('Waiting', '');
+    rows = v ? row('Risk', Math.round(r.risk_score) + ' / 100') + row('Suspicious from', th.suspicious) + row('Phishing from', th.phishing) : '';
+  } else if (key === 'response') {
+    const a = r && st.status !== 'analyzing' ? r.action : null;
+    title = 'Response'; desc = 'What the monitored browser is told to do: a warning page, a blocking page, or nothing. The alert is also saved to History.';
+    status = a ? pill(a === 'block' ? 'Blocked' : a === 'warn' ? 'Warned' : a === 'off' ? 'Off' : 'Allowed', a === 'block' ? 'bad' : a === 'warn' ? 'warn' : 'ok') : pill('Waiting', '');
+    rows = a ? row('Action', { block: 'Blocking page shown', warn: 'Warning page shown', none: 'Page left alone', off: 'Warning pages are switched off' }[a])
+      + row('Warn from', th.warn) + row('Block from', th.block) + row('Saved as', r.id != null ? 'Alert #' + r.id : '') : '';
+  }
+  lvTipEl().innerHTML = `<div class="lt-h"><b>${esc(title)}</b>${status}</div><div class="lt-d">${esc(desc)}</div>${rows ? `<div class="lt-rows">${rows}</div>` : ''}`;
+}
+
+// ── re-analyze (replaces re-navigating, which analysed nothing) ─────────────
+async function c2Reanalyze(tab, url, btn) {
+  if (!url) return;
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Re-analysing…'; }
+  try {
+    const res = await fetch(API + '/c2/reanalyze', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                       body: JSON.stringify({ url, tab_id: tab == null ? null : tab }) });
+    let d = {}; try { d = await res.json(); } catch {}
+    if (!res.ok) showToast(d.detail || 'Could not re-analyse this page');
+    else showToast({ current: 'Analysing the page as it is now…', navigated: 'Taking that tab back to the page and analysing it…',
+                     reopened: 'That tab was closed. Loading the page in the active tab…' }[d.mode] || 'Re-analysing…');
+  } catch { showToast('Could not reach the backend'); }
+  if (btn) setTimeout(() => { btn.disabled = false; btn.textContent = label || 'Re-analyze'; }, 1200);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  In-app report viewer
+//  Reports and exports used to open as a download (the backend sent them as an
+//  attachment), so the user got a Save dialog instead of a report. This fetches
+//  them with ?inline=1 and shows them here: HTML in a sandboxed frame, JSON as a
+//  collapsible tree, CSV as a table. Saving is a separate, explicit button.
+// ══════════════════════════════════════════════════════════════
+let _cvState = null;
+
+function cvEnsure() {
+  let ov = document.getElementById('c2-viewer');
+  if (ov) return ov;
+  ov = document.createElement('div');
+  ov.id = 'c2-viewer';
+  ov.innerHTML = `
+    <div class="cv-box" role="dialog" aria-modal="true" aria-labelledby="cv-title">
+      <div class="cv-hdr">
+        <div class="cv-hdr-m"><div class="cv-title" id="cv-title"></div><div class="cv-sub"></div></div>
+        <div class="cv-tools">
+          <div class="cv-seg" data-role="modes" hidden>
+            <button type="button" data-mode="view" class="on">View</button><button type="button" data-mode="raw">Raw</button>
+          </div>
+          <button type="button" class="cv-btn" data-act="expand" hidden>Expand all</button>
+          <button type="button" class="cv-btn" data-act="collapse" hidden>Collapse all</button>
+          <button type="button" class="cv-btn" data-act="copy">Copy</button>
+          <button type="button" class="cv-btn" data-act="print" hidden>Print</button>
+          <button type="button" class="cv-btn primary" data-act="save">Save</button>
+          <button type="button" class="cv-btn" data-act="close" aria-label="Close">Close</button>
+        </div>
+      </div>
+      <div class="cv-body"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', ev => { if (ev.target === ov) cvClose(); });
+  ov.querySelector('.cv-tools').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-act],[data-mode]'); if (!b || !_cvState) return;
+    if (b.dataset.mode) { _cvState.mode = b.dataset.mode; cvRender(); return; }
+    const a = b.dataset.act;
+    if (a === 'close') cvClose();
+    else if (a === 'save') cvSave();
+    else if (a === 'copy') cvCopy();
+    else if (a === 'print') cvPrint();
+    else if (a === 'expand' || a === 'collapse') ov.querySelectorAll('.cv-tree details').forEach(d => { d.open = a === 'expand'; });
+  });
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && document.getElementById('c2-viewer').classList.contains('open')) { cvClose(); ev.stopPropagation(); } }, true);
+  return ov;
+}
+
+function cvClose() {
+  const ov = document.getElementById('c2-viewer'); if (ov) ov.classList.remove('open');
+  _cvState = null;
+  const body = document.querySelector('#c2-viewer .cv-body'); if (body) body.textContent = '';
+}
+
+async function c2OpenViewer(o) {
+  // o = { title, sub, kind: 'html' | 'json' | 'csv', path, filename }
+  const ov = cvEnsure();
+  _cvState = { ...o, text: '', mode: 'view', ok: false };
+  ov.querySelector('.cv-title').textContent = o.title || 'Report';
+  ov.querySelector('.cv-sub').textContent = o.sub || '';
+  ov.classList.add('open');
+  cvToolbar();
+  const body = ov.querySelector('.cv-body');
+  body.innerHTML = '<div class="cv-msg"><span class="spinner"></span> Loading…</div>';
+  try {
+    const res = await fetch(API + o.path + (o.path.includes('?') ? '&' : '?') + 'inline=1');
+    if (!res.ok) {
+      let why = ''; try { why = (await res.json()).detail || ''; } catch {}
+      throw new Error(why || ('The backend answered ' + res.status));
+    }
+    if (!_cvState || _cvState.path !== o.path) return;          // closed or replaced while loading
+    _cvState.text = await res.text(); _cvState.ok = true;
+  } catch (e) {
+    if (!_cvState) return;
+    body.innerHTML = `<div class="cv-msg err">Could not load this ${esc(o.kind === 'html' ? 'report' : 'file')}: ${esc(e.message || e)}</div>`;
+    cvToolbar(); return;
+  }
+  cvToolbar(); cvRender();
+}
+
+function cvToolbar() {
+  const ov = document.getElementById('c2-viewer'), s = _cvState; if (!ov || !s) return;
+  const show = (sel, on) => { const e = ov.querySelector(sel); if (e) e.hidden = !on; };
+  const rich = s.ok && (s.kind === 'json' || s.kind === 'csv');
+  show('[data-role="modes"]', rich);
+  show('[data-act="expand"]', s.ok && s.kind === 'json' && s.mode === 'view');
+  show('[data-act="collapse"]', s.ok && s.kind === 'json' && s.mode === 'view');
+  show('[data-act="print"]', s.ok && s.kind === 'html');
+  ov.querySelectorAll('[data-role="modes"] button').forEach(b => b.classList.toggle('on', b.dataset.mode === s.mode));
+  ov.querySelector('[data-act="save"]').disabled = !s.ok;
+  ov.querySelector('[data-act="copy"]').disabled = !s.ok;
+}
+
+function cvRender() {
+  const s = _cvState; if (!s || !s.ok) return;
+  const body = document.querySelector('#c2-viewer .cv-body');
+  cvToolbar();
+  if (s.kind === 'html') {
+    // No allow-scripts: a report is a document, and nothing in it should run.
+    body.innerHTML = '<iframe class="cv-frame" title="Report" sandbox="allow-same-origin allow-modals"></iframe>';
+    body.firstChild.srcdoc = s.text;
+    return;
+  }
+  if (s.mode === 'raw') { body.innerHTML = `<pre class="cv-raw">${esc(s.text)}</pre>`; return; }
+  if (s.kind === 'json') {
+    let data;
+    try { data = JSON.parse(s.text); } catch { body.innerHTML = `<pre class="cv-raw">${esc(s.text)}</pre>`; return; }
+    body.innerHTML = `<div class="cv-tree">${cvTree(data, 0)}</div>`;
+    return;
+  }
+  if (s.kind === 'csv') {
+    const rows = cvParseCsv(s.text), head = rows.shift() || [], MAX = 300;
+    body.innerHTML = `<div class="cv-tablewrap"><table class="cv-table"><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.slice(0, MAX).map(r => `<tr>${head.map((_, i) => `<td title="${esc(r[i] || '')}">${esc(r[i] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <div class="cv-foot">${rows.length > MAX ? `Showing the first ${MAX} of ${rows.length} rows. ` : `${rows.length} row${rows.length === 1 ? '' : 's'}. `}Save the file to get all of it.</div>`;
+  }
+}
+
+function cvTree(v, depth) {
+  const scalar = x => x === null ? '<span class="cv-null">null</span>'
+    : typeof x === 'string' ? `<span class="cv-str">"${esc(x)}"</span>`
+    : typeof x === 'number' ? `<span class="cv-num">${x}</span>` : `<span class="cv-bool">${x}</span>`;
+  if (v === null || typeof v !== 'object') return scalar(v);
+  const arr = Array.isArray(v), keys = arr ? v.map((_, i) => i) : Object.keys(v);
+  if (!keys.length) return `<span class="cv-punc">${arr ? '[]' : '{}'}</span>`;
+  const open = depth < 2 ? ' open' : '';
+  return `<details${open}><summary><span class="cv-punc">${arr ? '[' : '{'}</span><span class="cv-count">${keys.length} ${arr ? 'item' : 'key'}${keys.length === 1 ? '' : 's'}</span></summary>
+    <div class="cv-kids">${keys.map(k => {
+      const child = v[k], nested = child !== null && typeof child === 'object' && Object.keys(child).length;
+      return `<div class="cv-row"><span class="cv-key">${arr ? '' : esc(k)}${arr ? `<span class="cv-idx">${k}</span>` : ''}</span>${nested ? '' : '<span class="cv-punc">: </span>'}${cvTree(child, depth + 1)}</div>`;
+    }).join('')}</div></details>`;
+}
+
+function cvParseCsv(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); cell = ''; if (row.length > 1 || row[0] !== '') rows.push(row); row = []; }
+    else cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+function cvSave() {
+  const s = _cvState; if (!s || !s.ok) return;
+  const type = s.kind === 'html' ? 'text/html' : s.kind === 'csv' ? 'text/csv' : 'application/json';
+  lcSave(new Blob([s.text], { type }), s.filename || 'report.' + s.kind);
+  showToast('Saved ' + (s.filename || 'the file'));
+}
+async function cvCopy() {
+  const s = _cvState; if (!s || !s.ok) return;
+  try { await navigator.clipboard.writeText(s.text); }
+  catch { const t = document.createElement('textarea'); t.value = s.text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+  showToast(s.kind === 'html' ? 'Report source copied' : 'Copied');
+}
+function cvPrint() {
+  const f = document.querySelector('#c2-viewer .cv-frame');
+  if (f && f.contentWindow) { f.contentWindow.focus(); f.contentWindow.print(); }
+}
+
+// ── the buttons that used to open a download ────────────────────
+function c2Stamp() { return new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19); }
+function c2ViewAlertReport(id, kind) {            // kind: 'html' | 'json'
+  c2OpenViewer({ title: kind === 'html' ? `Alert #${id} report` : `Alert #${id} data`, sub: kind === 'html' ? 'Evidence report' : 'Stored record as JSON',
+                 kind, path: `/alerts/${encodeURIComponent(id)}/report.${kind}`, filename: `c2_alert_${id}.${kind}` });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -8125,8 +8651,8 @@ document.getElementById('al-list').addEventListener('click', ev => {
   const a = alerts.find(x => alKey(x) === card.dataset.key); if (!a) return;
   const act = btn.dataset.act;
   if (act === 'details' && a.id != null) return openC2AlertModal(a.id);
-  if (act === 'report' && a.id != null) return window.open(API + '/alerts/' + a.id + '/report.html', '_blank');
-  if (act === 'revisit') return navigatePw(a.url);
+  if (act === 'report' && a.id != null) return c2ViewAlertReport(a.id, 'html');
+  if (act === 'revisit') return c2Reanalyze(a.tab_id, a.url, btn);
   if (act === 'copy') return c2CopyText(a.url);
   if (act === 'trust') return c2TrustToggle(a.url, btn, () => renderAlerts());
 });
@@ -8311,14 +8837,18 @@ function closeC2AlertModal() {
 
 function c2ExportAlert(kind) {
   if (_c2DetailId == null) return;
-  window.open(API + '/alerts/' + encodeURIComponent(_c2DetailId) + '/report.' + kind, '_blank');
+  c2ViewAlertReport(_c2DetailId, kind);        // shown in the app; Save is a button in the viewer
 }
 
 function c2ExportLog(kind) {
   const verdict = (document.getElementById('c2h-verdict') || {}).value || '';
   const limit   = (document.getElementById('c2h-limit')   || {}).value || '50';
   const qs = new URLSearchParams({ limit, ...(verdict ? { verdict } : {}) });
-  window.open(API + '/alerts/export.' + kind + '?' + qs, '_blank');
+  const names = { csv: ['csv', 'Alert log (CSV)', 'Flat table, one row per alert'], json: ['json', 'Alert log (JSON)', 'Every alert with its evidence'],
+                  siem: ['json', 'Alert log (SIEM)', 'SIEM-ready events'] };
+  const [type, title, sub] = names[kind] || names.json;
+  c2OpenViewer({ title, sub: sub + (verdict ? ' · ' + verdict : '') + ' · last ' + limit, kind: type,
+                 path: '/alerts/export.' + kind + '?' + qs, filename: `c2_alerts_${kind}_${c2Stamp()}.${type}` });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -8399,14 +8929,14 @@ function renderTimeline() {
             ${(a.layers || []).map(layerHTML).join('')}
             <div class="tl-actions">
               ${a.id != null ? `<button class="c2h-xbtn tl-detail" data-alert-id="${esc(a.id)}">Details</button>` : ''}
-              <button class="c2h-xbtn tl-revisit">Revisit</button>
+              <button class="c2h-xbtn tl-revisit">Re-analyze</button>
             </div>
           </div>
         </div>`;
       node.querySelector('.tl-card').addEventListener('click', () => node.classList.toggle('open'));
       const d = node.querySelector('.tl-detail');
       if (d) d.addEventListener('click', ev => { ev.stopPropagation(); openC2AlertModal(d.dataset.alertId); });
-      node.querySelector('.tl-revisit').addEventListener('click', ev => { ev.stopPropagation(); navigatePw(a.url); });
+      node.querySelector('.tl-revisit').addEventListener('click', ev => { ev.stopPropagation(); c2Reanalyze(a.tab_id, a.url, ev.currentTarget); });
       rail.appendChild(node);
     });
     wrap.appendChild(lane);
