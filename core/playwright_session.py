@@ -703,6 +703,35 @@ class PlaywrightSession:
             self._page_ids[page] = tid
         return tid
 
+    def page_for_tab(self, tab_id):
+        """The open page that carries this tab id, or None if it is closed / unknown."""
+        for page, tid in list(self._page_ids.items()):
+            if tid == tab_id:
+                try:
+                    if not page.is_closed():
+                        return page
+                except Exception:
+                    pass
+        return None
+
+    def active_page(self):
+        """The page the session currently treats as active (None when closed)."""
+        page = self._page
+        try:
+            return None if page is None or page.is_closed() else page
+        except Exception:
+            return None
+
+    def forget_url(self, page) -> None:
+        """Drop a tab's last-seen URL so the next navigation to it is analysed again."""
+        self._last_url_by_page.pop(page, None)
+
+    async def navigate_page(self, page, url: str, timeout: int = 30_000) -> str:
+        if not self.is_running:
+            raise RuntimeError("Playwright session not running")
+        await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        return page.url
+
     # ── Navigation ─────────────────────────────────────────────────
     async def open_background_tab(self, url: str, timeout: int = 30_000) -> dict:
         """Open `url` in a SECOND tab and leave it in the background.

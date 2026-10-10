@@ -427,7 +427,7 @@ _c2_live_ctx: contextvars.ContextVar = contextvars.ContextVar("c2_live_ctx", def
 _C2_WARN_LINE = 0.28   # layer score at which the UI shows a layer as "warn"
 
 
-async def _c2_emit_layer(lid: str, lname: str, res) -> None:
+async def _c2_emit_layer(lid: str, lname: str, res, ms: Optional[int] = None) -> None:
     """Broadcast one finished layer to the live view. Never raises."""
     ctx = _c2_live_ctx.get()
     if not ctx:
@@ -439,10 +439,32 @@ async def _c2_emit_layer(lid: str, lname: str, res) -> None:
             row = {"id": lid, "name": lname,
                    "score": round(float(res.get("score", 0.0)), 4),
                    "detail": res.get("detail", "")}
+        if ms is not None:
+            row["ms"] = ms
         await _broadcast({"type": "c2_layer", "tab_id": ctx["tab_id"],
                           "url": ctx["url"], "layer": row})
     except Exception:
         pass
+
+
+def _c2_thresholds() -> dict:
+    """The cut-offs behind a verdict and the response, for the live pipeline's hover cards."""
+    return {"suspicious": settings.get("verdict_suspicious", 30),
+            "phishing": settings.get("verdict_phishing", 60),
+            "warn": settings.get("warn_threshold", 30),
+            "block": settings.get("block_threshold", 60),
+            "interstitial": bool(settings.get("interstitial_enabled", True))}
+
+
+def _c2_response_action(score: float) -> str:
+    """What the browser is told to do for this score: block | warn | none | off."""
+    if not settings.get("interstitial_enabled", True):
+        return "off"
+    if score >= settings.get("block_threshold", 60):
+        return "block"
+    if score >= settings.get("warn_threshold", 30):
+        return "warn"
+    return "none"
 
 
 def _c2_build_reasons(layers: list, verdict: str, fusion: Optional[dict] = None,
@@ -512,12 +534,16 @@ async def analyze(req: AnalyzeReq):
                       "layers": [{k: v for k, v in l5_row.items() if k != "evidence"}],
                       "verified": True,
                       "reasons": _c2_build_reasons([l5_row], "PHISHING", None, verified=True),
+                      "fusion": {"method": "verified_domain_gate"},
+                      "thresholds": _c2_thresholds(),
                       "timestamp": timestamp}
             stored_layers = [l5_row]
         else:
             result = {"url": url, "verdict": "VERIFIED", "risk_score": 0.0,
                       "layers": [], "verified": True,
                       "reasons": _c2_build_reasons([], "VERIFIED", None, verified=True),
+                      "fusion": {"method": "verified_domain_gate"},
+                      "thresholds": _c2_thresholds(),
                       "timestamp": timestamp}
             stored_layers = []
 
@@ -551,13 +577,18 @@ async def analyze(req: AnalyzeReq):
 
     # Run all layers concurrently: CPU layers (L1/L2/L3) run in worker threads while the
     # L5 network lookup overlaps — order is preserved from layer_jobs for the result rows.
+    layer_ms: dict = {}
+
     async def _run_layer(lid, lname, coro):
+        t0 = _time.perf_counter()
         try:
             res = await coro
         except BaseException as exc:          # report, then re-raise for gather()
-            await _c2_emit_layer(lid, lname, exc)
+            layer_ms[lid] = round((_time.perf_counter() - t0) * 1000)
+            await _c2_emit_layer(lid, lname, exc, layer_ms[lid])
             raise
-        await _c2_emit_layer(lid, lname, res)
+        layer_ms[lid] = round((_time.perf_counter() - t0) * 1000)
+        await _c2_emit_layer(lid, lname, res, layer_ms[lid])
         return res
 
     outcomes = await asyncio.gather(*(_run_layer(lid, lname, coro) for lid, lname, coro in layer_jobs),
@@ -586,9 +617,11 @@ async def analyze(req: AnalyzeReq):
     t_phish = settings.get("verdict_phishing", 60)
     t_susp  = settings.get("verdict_suspicious", 30)
     fusion_breakdown: dict = {}
+    _tf = _time.perf_counter()
     risk_score = round(min(100.0, max(0.0, _fuse_score(layer_results, weights,
                                                        t_susp, t_phish,
                                                        breakdown=fusion_breakdown))), 1)
+    fusion_ms = round((_time.perf_counter() - _tf) * 1000, 1)
     verdict = "PHISHING" if risk_score >= t_phish else "SUSPICIOUS" if risk_score >= t_susp else "SAFE"
 
     # strip the internal heuristic sub-score and the per-layer evidence from the
@@ -600,6 +633,10 @@ async def analyze(req: AnalyzeReq):
     result = {"url": url, "verdict": verdict, "risk_score": risk_score,
               "layers": public_layers,
               "reasons": _c2_build_reasons(public_layers, verdict, fusion_breakdown),
+              "fusion": {k: fusion_breakdown.get(k) for k in
+                         ("method", "weights_applied", "pre_floor_risk", "floor_applied", "final_risk")},
+              "timings": {"layers": dict(layer_ms), "fusion_ms": fusion_ms},
+              "thresholds": _c2_thresholds(),
               "timestamp": timestamp}
 
     # Persist the full record (evidence + fusion reasoning) so it survives a
@@ -645,33 +682,43 @@ async def alerts_stats():
             "db_path": c2_alert_store.path}
 
 
+def _c2_file_response(body, media_type: str, filename: str, inline: bool) -> Response:
+    """A report / export as a download, or (inline=True) as content the dashboard's
+    viewer can show. The default stays a download so existing links keep working."""
+    if inline:
+        headers = {"X-Content-Type-Options": "nosniff"}
+        if media_type.startswith("text/html"):
+            # Reports are self-contained (inline CSS, no scripts): lock them down anyway.
+            headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+    else:
+        headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    return Response(body, media_type=media_type, headers=headers)
+
+
 @app.get("/alerts/export.csv")
-async def alerts_export_csv(limit: int = 500, verdict: str = "", since: str = ""):
+async def alerts_export_csv(limit: int = 500, verdict: str = "", since: str = "", inline: bool = False):
     rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
-    return Response(_c2_generate_csv(rows), media_type="text/csv",
-        headers={"Content-Disposition":
-                 f"attachment; filename={_c2_report_filename('alerts')}.csv"})
+    return _c2_file_response(_c2_generate_csv(rows), "text/csv",
+                             f"{_c2_report_filename('alerts')}.csv", inline)
 
 
 @app.get("/alerts/export.siem")
-async def alerts_export_siem(limit: int = 500, verdict: str = "", since: str = ""):
+async def alerts_export_siem(limit: int = 500, verdict: str = "", since: str = "", inline: bool = False):
     rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
     payload = json.dumps(_c2_generate_siem(rows), indent=2, default=str)
-    return Response(payload, media_type="application/json",
-        headers={"Content-Disposition":
-                 f"attachment; filename={_c2_report_filename('siem')}.json"})
+    return _c2_file_response(payload, "application/json",
+                             f"{_c2_report_filename('siem')}.json", inline)
 
 
 @app.get("/alerts/export.json")
-async def alerts_export_json(limit: int = 500, verdict: str = "", since: str = ""):
+async def alerts_export_json(limit: int = 500, verdict: str = "", since: str = "", inline: bool = False):
     rows = await asyncio.to_thread(c2_alert_store.list_alerts, limit, verdict, since)
     payload = json.dumps({"export_type": "C2_Alert_Log",
                           "generated_at": datetime.now().isoformat(),
                           "total_alerts": len(rows),
                           "alerts": rows}, indent=2, default=str)
-    return Response(payload, media_type="application/json",
-        headers={"Content-Disposition":
-                 f"attachment; filename={_c2_report_filename('alerts')}.json"})
+    return _c2_file_response(payload, "application/json",
+                             f"{_c2_report_filename('alerts')}.json", inline)
 
 
 def _get_c2_alert_or_404(alert_id: int) -> dict:
@@ -690,21 +737,18 @@ async def get_alert_detail(alert_id: int):
 
 
 @app.get("/alerts/{alert_id}/report.html")
-async def get_alert_report_html(alert_id: int):
+async def get_alert_report_html(alert_id: int, inline: bool = False):
     alert = await asyncio.to_thread(_get_c2_alert_or_404, alert_id)
     html = await asyncio.to_thread(_c2_generate_html_report, alert)
-    return Response(html, media_type="text/html",
-        headers={"Content-Disposition":
-                 f"attachment; filename={_c2_report_filename(f'report_{alert_id}')}.html"})
+    return _c2_file_response(html, "text/html",
+                             f"{_c2_report_filename(f'report_{alert_id}')}.html", inline)
 
 
 @app.get("/alerts/{alert_id}/report.json")
-async def get_alert_report_json(alert_id: int):
+async def get_alert_report_json(alert_id: int, inline: bool = False):
     alert = await asyncio.to_thread(_get_c2_alert_or_404, alert_id)
-    return Response(json.dumps(alert, indent=2, default=str),
-        media_type="application/json",
-        headers={"Content-Disposition":
-                 f"attachment; filename={_c2_report_filename(f'report_{alert_id}')}.json"})
+    return _c2_file_response(json.dumps(alert, indent=2, default=str), "application/json",
+                             f"{_c2_report_filename(f'report_{alert_id}')}.json", inline)
 
 
 @app.post("/settings")
@@ -3724,7 +3768,8 @@ async def _c2_send_preview(page, tab_id: int, url: str, shot_b64: str = "") -> N
 
 
 async def _pw_nav_handler(url: str, page=None) -> None:
-    """C2 phishing analysis on every navigation. C1 runs on click, not navigation."""
+    """C2 phishing analysis on every navigation. C1 runs on click, not navigation.
+    Reads from the specific `page` that navigated so each tab is analyzed independently."""
     _t0 = _time.perf_counter()
     tab_id = pw_session.tab_id(page) if page is not None else 0
     # Tell the live view straight away that this tab is being analysed, and let
@@ -3734,15 +3779,11 @@ async def _pw_nav_handler(url: str, page=None) -> None:
                           "layers": _c2_layers_for(url)})
     _c2_live_ctx.set({"tab_id": tab_id, "url": url})
     c3_tagger.record_navigation(url)
-    dom        = await pw_session.get_dom()
-    screenshot = await pw_session.get_screenshot_b64()
-    title      = await pw_session.get_title()
-    req        = AnalyzeReq(url=url, dom=dom, screenshot=screenshot)
-    """C2 phishing analysis on every navigation. C1 runs on click, not navigation.
-    Reads from the specific `page` that navigated so each tab is analyzed independently."""
+
     # Skip the expensive captures for URLs analyze() will short-circuit (skip/whitelist/
     # verified); for the rest, only screenshot when L3 can actually use it.
-    if _needs_full_capture(url):
+    full = _needs_full_capture(url)
+    if full:
         dom = await pw_session.get_dom(page)
         if _L3_HAS_HASHES and settings.get("layers", {}).get("l3", True):
             screenshot = await pw_session.get_screenshot_b64(page)
@@ -3752,10 +3793,18 @@ async def _pw_nav_handler(url: str, page=None) -> None:
             active_probe=settings.get("runtime_active_probe", False), page=page)
     else:
         dom, screenshot, runtime = "", "", {}
-    title      = await pw_session.get_title(page)
-    req        = AnalyzeReq(url=url, dom=dom, screenshot=screenshot, runtime=runtime)
-    result     = await analyze(req)
+    title = await pw_session.get_title(page)
+    capture = {"ms": round((_time.perf_counter() - _t0) * 1000), "skipped": not full,
+               "dom_bytes": len(dom or ""), "screenshot": bool(screenshot), "runtime": bool(runtime)}
+    if _c2_will_analyze(url):
+        await _broadcast({"type": "c2_capture", "tab_id": tab_id, "url": url, **capture})
+
+    req    = AnalyzeReq(url=url, dom=dom, screenshot=screenshot, runtime=runtime)
+    result = await analyze(req)
     result["duration_ms"] = round((_time.perf_counter() - _t0) * 1000)
+    result["capture"] = capture
+    result.setdefault("timings", {})["capture_ms"] = capture["ms"]
+    result["action"] = _c2_response_action(result.get("risk_score", 0))
     # If the tab was closed while this analysis was in flight, don't emit a stale card.
     if page is not None:
         try:
@@ -3773,12 +3822,8 @@ async def _pw_nav_handler(url: str, page=None) -> None:
 
     # Threshold-driven in-browser interstitial (warning / blocking + continue) — on the
     # tab that navigated, so it never leaks onto another tab.
-    if settings.get("interstitial_enabled", True):
-        score = result.get("risk_score", 0)
-        if score >= settings.get("block_threshold", 60):
-            await pw_session.inject_interstitial("block", result, page=page)
-        elif score >= settings.get("warn_threshold", 30):
-            await pw_session.inject_interstitial("warn", result, page=page)
+    if result["action"] in ("block", "warn"):
+        await pw_session.inject_interstitial(result["action"], result, page=page)
 
 
 async def _pw_tab_closed(tab_id: int) -> None:
@@ -3841,6 +3886,56 @@ async def session_stop():
     await pw_session.stop()
     await _broadcast({"type": "session_stopped"})
     return {"status": "stopped"}
+
+
+class ReanalyzeReq(BaseModel):
+    url: str
+    tab_id: Optional[int] = None
+
+
+def _c2_same_url(a: str, b: str) -> bool:
+    norm = lambda u: (u or "").split("#")[0].rstrip("/")
+    return norm(a) == norm(b)
+
+
+@app.post("/c2/reanalyze")
+async def c2_reanalyze(req: ReanalyzeReq):
+    """Analyse a page again from its card.
+
+    The old Re-analyze button just re-navigated the most recently active tab. The
+    session ignores a navigation to the URL a tab is already on (so nothing was
+    analysed), and it hit the wrong tab whenever several were open. This works on
+    the card's own tab:
+      current   the tab is still on that page -> analyse what is on screen now,
+                with no reload (so a half-filled form is not lost)
+      navigated the tab has moved on -> take it back to the page and analyse it
+      reopened  the tab is gone -> load the page in the active tab and analyse it
+    """
+    url = (req.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url required")
+    if not pw_session.is_running:
+        raise HTTPException(status_code=400,
+                            detail="No monitoring session is running. Start one from the top bar first.")
+    page = pw_session.page_for_tab(req.tab_id) if req.tab_id is not None else None
+    if page is not None and _c2_same_url(page.url, url):
+        asyncio.create_task(_pw_nav_handler(page.url, page))
+        return {"status": "started", "mode": "current", "tab_id": req.tab_id}
+    mode = "navigated"
+    if page is None:
+        page, mode = pw_session.active_page(), "reopened"
+    if page is None:
+        raise HTTPException(status_code=409, detail="There is no open browser tab to analyse the page in.")
+
+    async def _go():
+        pw_session.forget_url(page)          # let the navigation listener analyse the same URL again
+        try:
+            await pw_session.navigate_page(page, url)
+        except Exception as exc:
+            print(f"[C2] re-analyze navigation failed: {exc}")
+            await _broadcast({"type": "c2_reanalyze_failed", "url": url, "message": str(exc)[:200]})
+    asyncio.create_task(_go())
+    return {"status": "started", "mode": mode, "tab_id": pw_session.tab_id(page)}
 
 
 @app.post("/session/navigate")

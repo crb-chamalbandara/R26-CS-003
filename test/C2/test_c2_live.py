@@ -3,6 +3,7 @@ C2 Live Analysis tests -- reasons, per-layer progress events, whitelist action.
 Run from project root:  python test/C2/test_c2_live.py
 """
 import asyncio
+import json
 import os
 import sys
 import unittest
@@ -195,6 +196,152 @@ class TestWhitelistEndpoint(unittest.TestCase):
     def test_garbage_is_rejected(self):
         self.assertEqual(self.client.post("/c2/whitelist", json={"domain": "  "}).status_code, 400)
         self.assertEqual(self.client.post("/c2/whitelist", json={"domain": "localhost"}).status_code, 400)
+
+
+class TestInlineReports(unittest.TestCase):
+    """Reports and exports must be viewable in the app, not forced to a Save dialog."""
+
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        self.client = TestClient(m.app)
+        self.alert = {"id": 7, "url": "https://victim.example/login", "verdict": "PHISHING", "risk_score": 80,
+                      "timestamp": "2026-10-09T10:00:00", "verified": False, "layers": [], "fusion": {}}
+        self._p = [mock.patch.object(m, "_get_c2_alert_or_404", lambda i: self.alert),
+                   mock.patch.object(m.c2_alert_store, "list_alerts", lambda *a, **k: [self.alert])]
+        for p in self._p: p.start()
+
+    def tearDown(self):
+        for p in self._p: p.stop()
+
+    def test_default_is_still_a_download(self):
+        for path in ("/alerts/7/report.html", "/alerts/7/report.json",
+                     "/alerts/export.csv", "/alerts/export.json", "/alerts/export.siem"):
+            r = self.client.get(path)
+            self.assertEqual(r.status_code, 200, path)
+            self.assertIn("attachment", r.headers.get("content-disposition", ""), path)
+
+    def test_inline_omits_the_attachment_header(self):
+        for path in ("/alerts/7/report.html", "/alerts/7/report.json",
+                     "/alerts/export.csv", "/alerts/export.json", "/alerts/export.siem"):
+            r = self.client.get(path + "?inline=1")
+            self.assertEqual(r.status_code, 200, path)
+            self.assertNotIn("content-disposition", r.headers, path)
+            self.assertEqual(r.headers.get("x-content-type-options"), "nosniff")
+
+    def test_inline_html_is_locked_down_and_keeps_its_content(self):
+        r = self.client.get("/alerts/7/report.html?inline=1")
+        self.assertIn("default-src 'none'", r.headers["content-security-policy"])
+        self.assertIn("victim.example", r.text)
+        self.assertTrue(r.headers["content-type"].startswith("text/html"))
+
+    def test_inline_json_is_valid_json(self):
+        r = self.client.get("/alerts/7/report.json?inline=1")
+        self.assertEqual(json.loads(r.text)["id"], 7)
+
+
+class TestPipelineData(unittest.TestCase):
+
+    def test_layer_events_carry_the_time_each_layer_took(self):
+        sent = []
+        async def fake_broadcast(d): sent.append(d)
+        async def go():
+            m._c2_live_ctx.set({"tab_id": 1, "url": "u"})
+            await m._c2_emit_layer("L1", "BitB", {"score": .5, "detail": ""}, 42)
+        with mock.patch.object(m, "_broadcast", fake_broadcast):
+            asyncio.run(go())
+        self.assertEqual(sent[0]["layer"]["ms"], 42)
+
+    def test_analyze_reports_timings_fusion_and_thresholds(self):
+        async def go():
+            m._c2_live_ctx.set(None)
+            return await m.analyze(m.AnalyzeReq(url="https://victim.example/login", dom="<html></html>"))
+        with mock.patch.object(m, "_store_c2_alert", lambda a: {}), mock.patch.object(m, "is_verified", lambda u: False):
+            r = asyncio.run(go())
+        self.assertEqual(set(r["timings"]["layers"]), {l["id"] for l in r["layers"]})
+        self.assertTrue(all(isinstance(v, int) for v in r["timings"]["layers"].values()))
+        self.assertIn("fusion_ms", r["timings"])
+        self.assertIn(r["fusion"]["method"], ("weighted_sum", "meta_classifier"))
+        self.assertEqual(set(r["thresholds"]), {"suspicious", "phishing", "warn", "block", "interstitial"})
+
+    def test_response_action_follows_the_thresholds(self):
+        s = {"interstitial_enabled": True, "warn_threshold": 30, "block_threshold": 60}
+        with mock.patch.dict(m.settings, s):
+            self.assertEqual(m._c2_response_action(10), "none")
+            self.assertEqual(m._c2_response_action(30), "warn")
+            self.assertEqual(m._c2_response_action(59.9), "warn")
+            self.assertEqual(m._c2_response_action(60), "block")
+        with mock.patch.dict(m.settings, {"interstitial_enabled": False}):
+            self.assertEqual(m._c2_response_action(99), "off")
+
+
+class _FakePage:
+    def __init__(self, url, closed=False): self.url, self._closed = url, closed
+    def is_closed(self): return self._closed
+
+
+class _FakeSession:
+    """Just enough of PlaywrightSession for the re-analyze endpoint."""
+    def __init__(self, running=True, pages=None, active=None):
+        self.is_running, self.pages, self.active = running, pages or {}, active
+        self.forgot, self.navigated = [], []
+    def page_for_tab(self, tab_id): return self.pages.get(tab_id)
+    def active_page(self): return self.active
+    def forget_url(self, page): self.forgot.append(page)
+    async def navigate_page(self, page, url): self.navigated.append((page, url))
+    def tab_id(self, page): return next((k for k, v in self.pages.items() if v is page), 0)
+
+
+class TestReanalyze(unittest.TestCase):
+
+    def _call(self, sess, **body):
+        calls = []
+        async def fake_handler(url, page=None): calls.append((url, page))
+        async def go():
+            res = await m.c2_reanalyze(m.ReanalyzeReq(**body))
+            await asyncio.sleep(0.05)               # let the background task run
+            return res
+        with mock.patch.object(m, "pw_session", sess), mock.patch.object(m, "_pw_nav_handler", fake_handler):
+            return asyncio.run(go()), calls
+
+    def test_a_tab_still_on_the_page_is_analysed_in_place_without_navigating(self):
+        page = _FakePage("https://victim.example/login")
+        sess = _FakeSession(pages={3: page})
+        res, calls = self._call(sess, url="https://victim.example/login/", tab_id=3)
+        self.assertEqual(res["mode"], "current")
+        self.assertEqual(calls, [("https://victim.example/login", page)])
+        self.assertEqual(sess.navigated, [])
+
+    def test_a_tab_that_moved_on_is_taken_back_and_its_url_forgotten_first(self):
+        page = _FakePage("https://elsewhere.example/")
+        sess = _FakeSession(pages={3: page})
+        res, calls = self._call(sess, url="https://victim.example/login", tab_id=3)
+        self.assertEqual(res["mode"], "navigated")
+        self.assertEqual(sess.forgot, [page])
+        self.assertEqual(sess.navigated, [(page, "https://victim.example/login")])
+        self.assertEqual(calls, [])
+
+    def test_a_closed_tab_falls_back_to_the_active_tab(self):
+        active = _FakePage("https://other.example/")
+        sess = _FakeSession(pages={}, active=active)
+        res, _ = self._call(sess, url="https://victim.example/login", tab_id=9)
+        self.assertEqual(res["mode"], "reopened")
+        self.assertEqual(sess.navigated, [(active, "https://victim.example/login")])
+
+    def test_errors_are_explained(self):
+        from fastapi import HTTPException
+        for sess, body, code in [
+            (_FakeSession(running=False), {"url": "https://x.test/"}, 400),
+            (_FakeSession(), {"url": "  "}, 400),
+            (_FakeSession(pages={}, active=None), {"url": "https://x.test/", "tab_id": 1}, 409),
+        ]:
+            with self.assertRaises(HTTPException) as cm:
+                self._call(sess, **body)
+            self.assertEqual(cm.exception.status_code, code)
+            self.assertTrue(cm.exception.detail)
+
+    def test_same_url_comparison_ignores_trailing_slash_and_fragment(self):
+        self.assertTrue(m._c2_same_url("https://a.test/x/", "https://a.test/x#top"))
+        self.assertFalse(m._c2_same_url("https://a.test/x", "https://a.test/y"))
 
 
 if __name__ == "__main__":
