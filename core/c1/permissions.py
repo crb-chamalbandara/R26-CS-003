@@ -65,7 +65,7 @@ _CATALOGUE: Dict[str, Dict[str, str]] = {
     "contentsettings": {
         "severity": HIGH,
         "desc": "Can change your browser's security settings per site, "
-                "including re-enabling things you turned off for safety.",
+                "including turning back on things you turned off for safety.",
     },
 
     # ── High: broad observation or modification of what you do
@@ -106,7 +106,7 @@ _CATALOGUE: Dict[str, Dict[str, str]] = {
     },
     "privacy": {
         "severity": HIGH,
-        "desc": "Can change privacy-related browser settings, such as turning "
+        "desc": "Can change browser privacy settings, such as turning "
                 "off protections that are on by default.",
     },
     "downloads": {
@@ -137,7 +137,7 @@ _CATALOGUE: Dict[str, Dict[str, str]] = {
     },
     "identity": {
         "severity": HIGH,
-        "desc": "Can obtain sign-in tokens for your Google account.",
+        "desc": "Can obtain login tokens for your Google account.",
     },
     "vpnprovider": {
         "severity": HIGH,
@@ -175,7 +175,7 @@ _CATALOGUE: Dict[str, Dict[str, str]] = {
     "sessions": {
         "severity": MEDIUM,
         "desc": "Can read recently closed tabs and tabs open on your other "
-                "signed-in devices.",
+                "devices where you are signed in.",
     },
     "notifications": {
         "severity": MEDIUM,
@@ -193,7 +193,7 @@ _CATALOGUE: Dict[str, Dict[str, str]] = {
     },
     "contextmenus": {
         "severity": LOW,
-        "desc": "Can add its own entries to the right-click menu.",
+        "desc": "Can add its own entries to the context menu.",
     },
     "search": {
         "severity": MEDIUM,
@@ -246,7 +246,7 @@ _CATALOGUE: Dict[str, Dict[str, str]] = {
     },
     "tts": {
         "severity": LOW,
-        "desc": "Can use the browser's text-to-speech engine.",
+        "desc": "Can use the browser's speech synthesis engine.",
     },
     "fontsettings": {
         "severity": LOW,

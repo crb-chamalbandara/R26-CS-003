@@ -908,39 +908,527 @@ input,textarea,select{font-family:inherit}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{width:18px;height:18px;border:2.5px solid var(--b2);
   border-top-color:var(--c2);border-radius:50%;animation:spin .7s linear infinite}
-/* ── C1 Extension Analyzer ─────────────────────────────── */
-/* ── C1 layout ─────────────────────────────────────────────── */
-#c1-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+/* ══ C1 Extension Analyzer ═════════════════════════════════════════════════
+   C1 is a GATE: it holds an extension install until a verdict is in. The design
+   follows from that rather than from any other panel -
+
+     - a vertical flow: a session strip (verdict mix + sandbox containment), then
+       folder-style tabs grouped Gate / Analyze / Records, then the stage;
+     - every analysis is a CASE FILE: a score block, risk tags and a verdict
+       badge, listed in a ledger you can filter and search;
+     - scanner-bracket corners, 6px radii and a violet-ink palette (the other
+       panels use rounded glass and blue/cyan);
+     - tactile "key" buttons with a hard bottom edge instead of gloss.
+
+   PERFORMANCE RULES (the dashboard runs in Electron with hardware acceleration
+   off, so every pixel is software-rasterised and a paint is the CPU's cost):
+     - no backdrop-filter anywhere. Measured on a 4x-throttled CPU, one
+       full-viewport blur under the report modal took it from ~55fps to ~14fps.
+     - no infinite animations. Motion happens on interaction as transform or
+       opacity, then stops. The gate indicator is static for the same reason.
+     - no `transition:all`; name the properties that change.
+     - long lists use content-visibility; bars use transform:scaleX, not width.
+   ═══════════════════════════════════════════════════════════════════════ */
 .tests-body{flex:1;overflow-y:auto;padding:16px 20px 0}
-.c1-card{background:var(--bg2);border:1px solid var(--b1);border-radius:var(--radius-lg);padding:13px 14px}
-.c1-lbl{font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
-.c1-ta{width:100%;background:var(--bg0);border:1px solid var(--b2);border-radius:var(--radius);
-  color:var(--t0);font-size:10.5px;font-family:monospace;padding:7px 9px;resize:vertical;
-  outline:none;line-height:1.5;transition:border-color .15s}
-.c1-ta:focus{border-color:var(--c1)}
-.c1-inp{width:100%;background:var(--bg0);border:1px solid var(--b2);border-radius:var(--radius);
-  color:var(--t0);font-size:10.5px;font-family:monospace;padding:5px 9px;outline:none;height:28px;transition:border-color .15s}
-.c1-inp:focus{border-color:var(--c1)}
+
+/* Panel-local tokens: deliberately not on :root, so they cannot leak into
+   C2/C3/C4. The report modal is a child of <body>, so it lists itself too.
+   The --c1-glass-* names are kept as aliases for rules elsewhere in the file. */
+#panel-c1,#c1r-modal{
+  --c1-acc:#9165f7;
+  --c1-ink-0:#0a0817;            /* strip + tab bar */
+  --c1-ink-1:#0e0b1d;            /* stage */
+  --c1-ink-2:#14102a;            /* cards */
+  --c1-ink-3:#1b1636;            /* raised / inputs */
+  --c1-line:rgba(167,139,250,.15);
+  --c1-line-hi:rgba(167,139,250,.5);
+  --c1-dot:rgba(167,139,250,.075);
+  --c1-slab:#4a2aa8;             /* hard bottom edge of a primary button */
+  --c1-scrim:rgba(4,2,12,.82);
+  --c1-glyph:#0b0a14;            /* icon on a verdict-colour cell */
+  --c1-mono:'JetBrains Mono','Cascadia Code','Fira Code',ui-monospace,Consolas,monospace;
+  --c1-glass-brd:var(--c1-line);--c1-glass-brd-hi:var(--c1-line-hi);
+  --c1-glass-a:var(--c1-ink-2);--c1-glass-b:var(--c1-ink-2);
+  --c1-inset:inset 0 1px 0 rgba(var(--tint),.04);
+  --c1-thead:var(--c1-ink-3);
+}
+/* Light: lavender paper instead of violet ink. The lifted text tokens below are
+   dark-theme values chosen for contrast on dark surfaces, so light needs its own. */
+:root[data-theme="light"] #panel-c1,
+:root[data-theme="light"] #c1r-modal{
+  --c1-acc:#7c3aed;
+  --c1-ink-0:#efeafb;--c1-ink-1:#f7f4fe;--c1-ink-2:#ffffff;--c1-ink-3:#f1edfb;
+  --c1-line:rgba(91,33,182,.16);--c1-line-hi:rgba(124,58,237,.5);
+  --c1-dot:rgba(91,33,182,.07);--c1-slab:#5b21b6;
+  --c1-scrim:rgba(30,18,60,.5);--c1-glyph:#fff;
+  --t3:#5d7288;--t2:#475f78;
+}
+/* One verdict colour pair, set by a class and read by every element of a case. */
+.k-mal{--k:var(--danger);--kbg:rgba(240,71,71,.12)}
+.k-sus{--k:var(--warn);--kbg:rgba(245,166,35,.12)}
+.k-safe{--k:var(--safe);--kbg:rgba(16,185,129,.12)}
+
+/* -- Scanner brackets: four corner ticks, drawn once, never animated --------- */
+.c1-brk{position:relative}
+.c1-brk::before,.c1-brk::after{content:'';position:absolute;inset:-1px;pointer-events:none;
+  --b:var(--c1-acc);
+  background:
+    linear-gradient(var(--b),var(--b)) 0 0/12px 2px no-repeat,
+    linear-gradient(var(--b),var(--b)) 0 0/2px 12px no-repeat,
+    linear-gradient(var(--b),var(--b)) 100% 0/12px 2px no-repeat,
+    linear-gradient(var(--b),var(--b)) 100% 0/2px 12px no-repeat}
+.c1-brk::after{
+  background:
+    linear-gradient(var(--b),var(--b)) 0 100%/12px 2px no-repeat,
+    linear-gradient(var(--b),var(--b)) 0 100%/2px 12px no-repeat,
+    linear-gradient(var(--b),var(--b)) 100% 100%/12px 2px no-repeat,
+    linear-gradient(var(--b),var(--b)) 100% 100%/2px 12px no-repeat}
+.c1-brk.k-mal::before,.c1-brk.k-mal::after{--b:var(--danger)}
+.c1-brk.k-sus::before,.c1-brk.k-sus::after{--b:var(--warn)}
+.c1-brk.k-safe::before,.c1-brk.k-safe::after{--b:var(--safe)}
+
+/* -- Header status dot: static ---------------------------------------------- */
+#panel-c1 .status-active{display:inline-flex;align-items:center;gap:6px}
+.c1-status-dot{width:7px;height:7px;border-radius:50%;background:var(--safe);
+  box-shadow:0 0 0 3px rgba(16,185,129,.18);flex-shrink:0}
+
+/* -- Frame: session strip, tabs, stage ------------------------------------------- */
+#c1-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:var(--c1-ink-1)}
+
+/* Session strip: the verdict mix of everything analysed, and what contains the
+   sandbox. Read at a glance, set once. */
+.c1-deck{flex-shrink:0;display:flex;align-items:center;flex-wrap:wrap;gap:10px 28px;
+  padding:11px 22px;background:var(--c1-ink-0)}
+.c1-deck-mod{display:flex;align-items:center;gap:12px;min-width:0}
+.c1-deck-mod.posture{flex:1 1 460px}
+.c1-deck-mod.contain{flex:0 1 auto;margin-left:auto;padding-left:28px;border-left:1px solid var(--c1-line)}
+.c1-cap{font:700 9px/1 var(--c1-mono);letter-spacing:.2em;text-transform:uppercase;color:var(--t3);white-space:nowrap}
+.c1-ratio{flex:1 1 140px;max-width:300px;display:flex;height:8px;gap:2px;border-radius:2px;overflow:hidden;
+  background:rgba(var(--tint),.06)}
+.c1-ratio i{display:block;min-width:0;flex:0 0 auto;height:100%}
+.c1-ratio i.mal{background:var(--danger)}.c1-ratio i.sus{background:var(--warn)}.c1-ratio i.safe{background:var(--safe)}
+.c1-pos-legend{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap}
+.c1-pos-row{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--t2);white-space:nowrap}
+.c1-pos-row i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.c1-pos-row b{font:700 12px/1 var(--c1-mono);color:var(--t0);font-variant-numeric:tabular-nums}
+.c1-pos-total{font-size:10.5px;color:var(--t3);white-space:nowrap}
+.c1-pos-total b{font:800 13px/1 var(--c1-mono);color:var(--t0);margin-right:4px}
+
+.c1-deck select{height:28px;padding:0 8px;background:var(--c1-ink-3);color:var(--t0);
+  border:1px solid var(--c1-line);border-radius:5px;font-size:10.5px;font-weight:600;font-family:inherit;
+  cursor:pointer;transition:border-color .14s,box-shadow .14s}
+.c1-deck select:hover{border-color:var(--c1-line-hi)}
+.c1-deck select:focus-visible{border-color:var(--c1-acc);box-shadow:0 0 0 3px rgba(145,101,247,.18);outline:none}
+#c1-iso-select{width:212px}
+#c1-iso-net{width:130px}
+.c1-deck .hint{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;line-height:1.4;color:var(--t2);
+  max-width:230px}
+.c1-iso-dot{width:7px;height:7px;border-radius:50%;background:var(--safe);flex-shrink:0;
+  box-shadow:0 0 0 3px rgba(16,185,129,.16)}
+.c1-iso-dot.warn{background:var(--warn);box-shadow:0 0 0 3px rgba(245,166,35,.16)}
+
+/* Tabs: folders in a case drawer. The open one is the same ink as the stage, so it
+   reads as attached to it. The rule under the bar is an inset shadow (not a border)
+   because a border would be clipped where the open tab overlaps it. */
+.c1-tabs{flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:6px 22px 0;overflow-x:auto;
+  background:var(--c1-ink-0);box-shadow:inset 0 -1px 0 var(--c1-line)}
+.c1-tab-grp{align-self:center;font:700 9px/1 var(--c1-mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--t3);padding:0 10px 2px 4px;white-space:nowrap}
+.c1-tab-grp:not(:first-child){margin-left:12px;padding-left:16px;border-left:1px solid var(--c1-line)}
+.c1-tab{position:relative;display:inline-flex;align-items:center;gap:8px;padding:10px 16px 11px;
+  background:transparent;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;
+  color:var(--t2);font-size:12px;font-weight:600;line-height:1.2;font-family:inherit;cursor:pointer;white-space:nowrap;
+  transition:background-color .14s,color .14s}
+.c1-tab:hover{background:rgba(var(--tint),.05);color:var(--t0)}
+.c1-tab.active{background:var(--c1-ink-1);color:var(--t0);border-color:var(--c1-line);
+  box-shadow:inset 0 2px 0 var(--c1-acc)}
+.c1-tab:focus-visible{outline:2px solid var(--c1-acc);outline-offset:-2px}
+.c1-tab-ico{width:14px;height:14px;flex-shrink:0;display:flex;color:var(--t3)}
+.c1-tab-ico svg{width:14px;height:14px}
+.c1-tab.active .c1-tab-ico{color:var(--c1-acc)}
+.c1-tab-badge{display:none;font:700 9.5px/1.5 var(--c1-mono);padding:0 6px;border-radius:3px;
+  background:rgba(var(--tint),.09);color:var(--t1)}
+.c1-tab-badge.on{display:inline-block}
+.c1-tab-badge.alert{background:var(--danger);color:#fff}
+
+/* -- Stage -------------------------------------------------------------------- */
+.c1-stage{flex:1;min-height:0;display:flex;flex-direction:column;
+  /* faint dot grid: a static background, rasterised once per tile */
+  background-image:radial-gradient(var(--c1-dot) 1px,transparent 1.2px);background-size:20px 20px}
+.c1-content{flex:1;min-height:0;position:relative;overflow:hidden}
+.c1-pane{display:none;height:100%;overflow-y:auto;padding:18px 22px 24px;flex-direction:column;gap:14px;
+  contain:layout style}
+.c1-pane.active{display:flex}
+.c1-pane > *{flex-shrink:0}
+.c1-stage-hdr{display:flex;align-items:flex-end;gap:16px;padding-bottom:12px;
+  border-bottom:1px solid var(--c1-line)}
+.c1-stage-hdr > div:first-child{flex:1;min-width:0}
+.c1-eyebrow{font:700 9.5px/1 var(--c1-mono);letter-spacing:.2em;text-transform:uppercase;color:var(--c1-acc)}
+.c1-stage-title{font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--t0);margin:7px 0 3px}
+.c1-stage-sub{font-size:11.5px;color:var(--t2);line-height:1.5}
+
+/* -- Cards --------------------------------------------------------------------- */
+.c1-card{background:var(--c1-ink-2);border:1px solid var(--c1-line);border-left:3px solid var(--c1-acc);
+  border-radius:6px;padding:16px 18px}
+.c1-card-hdr{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+.c1-card-icon{width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;color:var(--c1-acc)}
+.c1-card-icon svg{width:20px;height:20px}
+.c1-card-title{font-size:12px;font-weight:700;color:var(--t0)}
+.c1-card-sub{font-size:10.5px;color:var(--t3);margin-top:3px;line-height:1.5}
+.c1-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.c1-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:900px){.c1-grid2{grid-template-columns:1fr}}
+.c1-hint{font-size:10px;color:var(--t3);line-height:1.5}
+
+/* -- Forms ---------------------------------------------------------------------- */
+.c1-lbl{font:700 9px/1 var(--c1-mono);color:var(--t3);text-transform:uppercase;
+  letter-spacing:.14em;margin-bottom:7px}
+.c1-ta,.c1-inp{width:100%;background:var(--c1-ink-3);border:1px solid var(--c1-line);
+  border-radius:5px;color:var(--t0);font-size:10.5px;font-family:var(--c1-mono);outline:none;
+  transition:border-color .15s,box-shadow .15s}
+.c1-ta{padding:9px 11px;resize:vertical;line-height:1.55}
+.c1-inp{padding:5px 11px;height:32px}
+.c1-ta:focus,.c1-inp:focus{border-color:var(--c1-acc);box-shadow:0 0 0 3px rgba(145,101,247,.16)}
+.c1-ta::placeholder,.c1-inp::placeholder{color:var(--t3)}
+
+/* -- Buttons -------------------------------------------------------------------- */
+/* `.c1-btn` is ALSO used by the C2 panel and the Live Test Runner, so the original
+   global rules stay exactly as they were and the new look is scoped to C1's own
+   panel and report modal. */
 .c1-btn{padding:6px 14px;border-radius:var(--radius);border:none;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
 .c1-btn.primary{background:var(--c1);color:#fff}.c1-btn.primary:hover{background:#7c3aed}
 .c1-btn.primary:disabled{background:var(--b2);color:var(--t3);cursor:not-allowed}
 .c1-btn.ghost{background:var(--bg3);color:var(--t2);border:1px solid var(--b2)}.c1-btn.ghost:hover{background:var(--b1);color:var(--t0)}
-/* ── Mode tabs ─────────────────────────────────────────────── */
-.c1-tabs{display:flex;border-bottom:1px solid var(--b1);margin-bottom:14px;gap:2px}
-.c1-tab{padding:8px 14px;background:none;border:none;border-bottom:2px solid transparent;
-  color:var(--t3);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .18s}
-.c1-tab:hover{color:var(--t1)}.c1-tab.active{color:var(--c1);border-bottom-color:var(--c1)}
-.c1-pane{display:none}.c1-pane.active{display:block}
-/* ── Drop zone ─────────────────────────────────────────────── */
-#c1-dropzone{border:2px dashed var(--b2);border-radius:var(--radius-lg);padding:32px 20px;
-  text-align:center;cursor:pointer;transition:all .22s;background:var(--bg1)}
-#c1-dropzone.over{border-color:var(--c1);background:var(--c1b)}
-#c1-dropzone:hover{border-color:var(--b3);background:var(--bg3)}
-#c1-dropzone .dz-icon{display:flex;align-items:center;justify-content:center;margin:0 auto 12px;opacity:.4;width:40px;height:40px}
+
+/* A "key": flat fill with a hard bottom edge that presses in. */
+:is(#panel-c1,#c1r-modal) .c1-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;
+  border-radius:6px;border:1px solid transparent;font-size:11px;font-weight:700;letter-spacing:.02em;
+  font-family:inherit;cursor:pointer;
+  transition:transform .08s ease,box-shadow .08s ease,background-color .14s,border-color .14s,color .14s}
+:is(#panel-c1,#c1r-modal) .c1-btn.primary{color:#fff;background:#7c4df0;border-color:#9a74ff;
+  box-shadow:0 3px 0 var(--c1-slab)}
+:is(#panel-c1,#c1r-modal) .c1-btn.primary:hover:not(:disabled){background:#8a5cf6}
+:is(#panel-c1,#c1r-modal) .c1-btn.primary:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--c1-slab)}
+:is(#panel-c1,#c1r-modal) .c1-btn.primary:disabled{background:var(--c1-ink-3);color:var(--t3);
+  border-color:var(--c1-line);box-shadow:0 3px 0 rgba(var(--tint),.05);cursor:not-allowed}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost{background:transparent;color:var(--t1);border-color:var(--c1-line-hi)}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost:hover:not(:disabled){background:rgba(145,101,247,.12);color:var(--t0)}
+:is(#panel-c1,#c1r-modal) .c1-btn:focus-visible{outline:2px solid var(--c1-acc);outline-offset:2px}
+
+/* -- Drop zone ------------------------------------------------------------------ */
+#c1-dropzone{border:1.5px dashed var(--c1-line-hi);border-radius:6px;padding:34px 20px;text-align:center;
+  cursor:pointer;background:rgba(145,101,247,.035);
+  transition:border-color .16s,background-color .16s}
+#c1-dropzone:hover,#c1-dropzone:focus-visible{border-color:var(--c1-acc);
+  background:rgba(145,101,247,.08);outline:none}
+#c1-dropzone.over{border-style:solid;border-color:var(--c1-acc);background:rgba(145,101,247,.16)}
+#c1-dropzone .dz-icon{display:flex;align-items:center;justify-content:center;margin:0 auto 10px;
+  width:40px;height:40px;color:var(--c1-acc)}
 #c1-dropzone .dz-icon svg{width:40px;height:40px}
-#c1-dropzone .dz-title{font-size:13.5px;font-weight:600;color:var(--t1);margin-bottom:5px}
-#c1-dropzone .dz-sub{font-size:11px;color:var(--t3)}
+#c1-dropzone .dz-title{font-size:13px;font-weight:700;color:var(--t0);margin-bottom:4px}
+#c1-dropzone .dz-sub{font:600 9.5px var(--c1-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
 #c1-file-input{display:none}
+#c1-upload-filename{display:none;margin-top:10px;font-size:11px;color:var(--t1);padding:7px 11px;
+  background:var(--c1-ink-3);border-radius:5px;border:1px solid var(--c1-line);font-family:var(--c1-mono)}
+
+/* -- Install gate (Live) ----------------------------------------------------------- */
+.c1-gate{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 20px;align-items:center;
+  padding:20px 22px;background:var(--c1-ink-2);border:1px solid var(--c1-line);border-radius:6px}
+.c1-gate-emblem{width:64px;height:64px;color:var(--c1-acc);grid-row:1 / span 2}
+.c1-gate-emblem svg{width:64px;height:64px;display:block}
+.c1-gate-state{display:flex;align-items:center;gap:9px;font:800 11px/1 var(--c1-mono);
+  letter-spacing:.2em;text-transform:uppercase;color:var(--safe)}
+.c1-gate-state i{width:8px;height:8px;border-radius:50%;background:var(--safe);box-shadow:0 0 0 3px rgba(16,185,129,.2)}
+.c1-gate-text{font-size:12.5px;color:var(--t1);line-height:1.6}
+.c1-gate-text b{color:var(--c1-acc);font-weight:700}
+.c1-gate-facts{grid-column:1 / -1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;
+  margin-top:14px;border-top:1px solid var(--c1-line)}
+.c1-gate-facts > div{padding:12px 14px 0 0;min-width:0}
+.c1-gate-facts > div + div{padding-left:14px;border-left:1px solid var(--c1-line)}
+.c1-gate-facts dt{font:700 9px/1 var(--c1-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-bottom:6px}
+.c1-gate-facts dd{font-size:12px;font-weight:700;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c1-gate-facts dd small{font-weight:600;color:var(--t2)}
+@media (max-width:1100px){.c1-gate-facts{grid-template-columns:1fr 1fr}.c1-gate-facts > div:nth-child(3){padding-left:0;border-left:none}}
+
+.c1-waiting{display:flex;align-items:center;gap:14px;padding:16px 20px;border:1.5px dashed var(--c1-line-hi);
+  border-radius:6px;color:var(--t2);font-size:11.5px;line-height:1.55}
+.c1-waiting .eicon{width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  color:var(--c1-acc)}
+.c1-waiting .eicon svg{width:30px;height:30px}
+.c1-waiting b{color:var(--t0)}
+.c1-waiting .c1-btn{margin-left:auto;flex-shrink:0}
+
+/* -- Detection pipeline --------------------------------------------------------------
+   Five stages. At rest it describes them and shows the two facts the dashboard can
+   read (blocklist size, sandbox containment). During an intercept it follows the
+   most recent install through the stages, driven by the same WebSocket messages
+   that drive the live cards, so no stage is ever marked done on a guess.
+   Motion: the line and the nodes draw in once when the Install gate is opened, and
+   the line eases as a stage completes. The only loop is the ring on a stage that is
+   genuinely running. */
+.c1-pipecard .c1-card-hdr{align-items:center;margin-bottom:4px}
+.c1-pipe-status{margin-left:auto;display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:6px;
+  background:rgba(var(--tint),.04);border:1px solid var(--c1-line);font-size:11px;font-weight:600;color:var(--t1);white-space:nowrap}
+.c1-pipe-status i{width:7px;height:7px;border-radius:50%;background:var(--c1-acc);flex-shrink:0}
+.c1-pipe-status[data-s="run"] i,.c1-pipe-status[data-s="sus"] i{background:var(--warn)}
+.c1-pipe-status[data-s="safe"] i{background:var(--safe)}
+.c1-pipe-status[data-s="mal"] i,.c1-pipe-status[data-s="err"] i{background:var(--danger)}
+
+.c1-pipe{--pf:1;position:relative;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding:14px 0 4px}
+.c1-pipe-line{position:absolute;top:36px;left:10%;right:10%;height:4px;border-radius:2px;background:var(--c1-line);overflow:hidden}
+.c1-pipe-line b{display:block;height:100%;transform-origin:left center;transform:scaleX(var(--pf));
+  background:linear-gradient(90deg,var(--c1-acc),var(--safe));transition:transform .8s cubic-bezier(.22,1,.36,1)}
+.c1-pstep{position:relative;padding:0 12px;text-align:center}
+.c1-pnode{position:relative;z-index:1;width:48px;height:48px;margin:0 auto 12px;display:grid;place-items:center;
+  border-radius:50%;background:var(--c1-ink-2);border:2px solid var(--c1-line-hi);color:var(--t2);
+  transition:border-color .3s,color .3s,background-color .3s}
+.c1-pnode svg{width:20px;height:20px}
+.c1-pname{font-size:12.5px;font-weight:700;color:var(--t0)}
+.c1-pnote{font-size:10.5px;color:var(--t3);line-height:1.55;margin-top:4px}
+.c1-pchip{display:inline-block;margin-top:9px;font:700 9px/1 var(--c1-mono);letter-spacing:.06em;text-transform:uppercase;
+  padding:4px 8px;border-radius:4px;background:rgba(var(--tint),.06);color:var(--t2)}
+.c1-pchip:empty{display:none}
+.c1-pchip.on{background:var(--safe-bg);color:var(--safe)}
+.c1-pchip.warn{background:var(--warn-bg);color:var(--warn)}
+.c1-pchip.bad{background:var(--danger-bg);color:var(--danger)}
+
+/* stage states */
+.c1-pstep.is-armed .c1-pnode,.c1-pstep.is-now .c1-pnode{border-color:var(--c1-acc);color:var(--c1-acc)}
+.c1-pstep.is-todo .c1-pnode{opacity:.5}
+.c1-pstep.is-todo .c1-pname{color:var(--t2)}
+.c1-pstep.is-skip .c1-pnode{border-style:dashed;color:var(--t3)}
+.c1-pstep.is-done .c1-pnode{border-color:var(--k,var(--safe));color:var(--k,var(--safe));
+  background-image:linear-gradient(var(--kbg,var(--safe-bg)),var(--kbg,var(--safe-bg)))}
+.c1-pstep.is-hit .c1-pnode,.c1-pstep.is-err .c1-pnode{border-color:var(--danger);color:var(--danger);
+  background-image:linear-gradient(var(--danger-bg),var(--danger-bg))}
+.c1-pstep.is-now .c1-pnode::before{content:'';position:absolute;inset:-7px;border-radius:50%;
+  border:2px solid transparent;border-top-color:var(--c1-acc);animation:c1-spin .9s linear infinite}
+.c1-pstep.is-err .c1-pnode::before{display:none}
+/* the small mark on a finished stage: tick, exclamation or cross */
+.c1-pstep.is-done .c1-pnode::after,.c1-pstep.is-hit .c1-pnode::after{content:'';position:absolute;right:-5px;top:-5px;
+  width:18px;height:18px;border-radius:50%;box-shadow:0 0 0 2px var(--c1-ink-2);background-repeat:no-repeat;
+  background-position:center;background-size:10px 10px;
+  background-color:var(--k,var(--safe));
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E")}
+.c1-pstep.is-hit .c1-pnode::after,.c1-pstep.is-done.k-mal .c1-pnode::after{background-color:var(--danger);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round'%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3C/svg%3E")}
+.c1-pstep.is-done.k-sus .c1-pnode::after{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round'%3E%3Cline x1='12' y1='5' x2='12' y2='13.5'/%3E%3Cline x1='12' y1='19' x2='12.01' y2='19'/%3E%3C/svg%3E")}
+
+/* entrance: plays each time the Install gate is shown, then stops */
+@keyframes c1PipeIn{from{opacity:0;transform:translateY(10px)}}
+@keyframes c1PipeDraw{from{transform:scaleX(0)}}
+#c1-pane-live.active .c1-pstep{animation:c1PipeIn .55s cubic-bezier(.22,1,.36,1) backwards;animation-delay:calc(var(--i) * .13s)}
+#c1-pane-live.active .c1-pipe-line b{animation:c1PipeDraw 1.1s cubic-bezier(.22,1,.36,1) backwards}
+@media (max-width:1000px){.c1-pnote{display:none}.c1-pstep{padding:0 4px}}
+
+/* -- Empty state ---------------------------------------------------------------------- */
+.c1-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;padding:34px 24px;text-align:center;border:1.5px dashed var(--c1-line-hi);border-radius:6px}
+.c1-empty .eicon{width:46px;height:46px;display:flex;align-items:center;justify-content:center;color:var(--c1-acc)}
+.c1-empty .eicon svg{width:34px;height:34px}
+.c1-empty .emsg{font-size:13px;font-weight:700;color:var(--t0)}
+.c1-empty .ehint{font-size:11px;color:var(--t3);line-height:1.65;max-width:100ch}
+
+/* -- Case vocabulary: score block, tags -------------------------------------------- */
+/* Score ring: the arc is the threat score out of 100 and the colour is the verdict, so
+   the number can be read at a glance and the ring still shows how full the scale is.
+   The arc draws in once on the top ten rows (the ones on screen when the ledger opens,
+   and where a new case lands, since new cases are inserted at the top) and on a live
+   card. Not on every row: a list of fifty does not need fifty animations, and a burst
+   of new cases must not start a burst of them. */
+.c1-rs{--sz:48px;position:relative;width:var(--sz);height:var(--sz);flex-shrink:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;color:var(--k)}
+.c1-rs svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
+.c1-rs .t{fill:var(--kbg);stroke:rgba(var(--tint),.14);stroke-width:3.5}
+.c1-rs .a{fill:none;stroke:var(--k);stroke-width:3.5;stroke-linecap:round}
+.c1-rs b{position:relative;font-family:var(--c1-mono);font-weight:800;font-size:calc(var(--sz) * .34);line-height:1;
+  letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.c1-rs i{position:relative;margin-top:4px;font:700 7.5px/1 var(--c1-mono);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--t3);font-style:normal}
+.c1-rs.lg{--sz:80px}
+@keyframes c1RsDraw{from{stroke-dasharray:0 100}}
+.c1-case:nth-child(-n+10) .c1-rs .a,.c1-live-card .c1-rs .a{
+  animation:c1RsDraw .95s cubic-bezier(.22,1,.36,1) backwards}
+
+/* Verdict badge: a solid icon cell plus the verdict word on a tint of the same
+   colour. Colour is never the only cue - each verdict has its own glyph (tick,
+   exclamation, cross). One element; the glyph is a mask on its ::before, so a
+   ledger of 50 rows adds no extra nodes. Static: no rotation, no animation. */
+.c1-vb{--vb-h:24px;--vb-ico:12px;--vb-gap:9px;position:relative;display:inline-flex;align-items:center;flex-shrink:0;
+  height:var(--vb-h);padding:0 11px 0 calc(var(--vb-h) + var(--vb-gap));border-radius:6px;overflow:hidden;
+  background:linear-gradient(90deg,var(--k) var(--vb-h),var(--kbg) var(--vb-h));
+  box-shadow:inset 0 0 0 1px rgba(var(--tint),.2);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--k) 42%,transparent);
+  color:var(--k);font-size:11.5px;font-weight:700;line-height:1;letter-spacing:.01em;white-space:nowrap}
+.c1-vb::before{content:'';position:absolute;left:0;top:0;width:var(--vb-h);height:100%;background:var(--c1-glyph);
+  -webkit-mask-repeat:no-repeat;-webkit-mask-position:center;-webkit-mask-size:var(--vb-ico) var(--vb-ico);
+  -webkit-mask-image:var(--vb-mask)}
+.c1-vb.k-safe{--vb-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E")}
+.c1-vb.k-sus{--vb-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round'%3E%3Cline x1='12' y1='5' x2='12' y2='13.5'/%3E%3Cline x1='12' y1='19' x2='12.01' y2='19'/%3E%3C/svg%3E")}
+.c1-vb.k-mal{--vb-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round'%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3C/svg%3E")}
+.c1-vb.md{--vb-h:28px;--vb-ico:14px;font-size:12.5px}
+.c1-vb.lg{--vb-h:40px;--vb-ico:20px;--vb-gap:13px;padding-right:18px;border-radius:8px;font-size:19px;font-weight:800;letter-spacing:0}
+.c1-tag{display:inline-block;font:600 9.5px/1 var(--c1-mono);padding:3px 6px;border-radius:3px;
+  background:rgba(var(--tint),.06);color:var(--t2);white-space:nowrap}
+.c1-tag.hot{background:var(--danger-bg);color:var(--danger)}
+.c1-tag.bl{background:var(--c1-acc);color:#fff}
+
+/* -- Case ledger (History) ------------------------------------------------------------------ */
+#c1-pane-history{padding-top:0}
+#c1-pane-history .c1-stage-hdr{padding-top:18px}
+.c1-skyline{display:flex;align-items:flex-end;gap:16px;padding:14px 16px;background:var(--c1-ink-2);
+  border:1px solid var(--c1-line);border-radius:6px}
+.c1-skyline-lbl{font:700 9px/1.6 var(--c1-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--t3);
+  flex-shrink:0;width:92px}
+.c1-skyline-lbl b{display:block;font:800 18px/1.2 var(--c1-mono);color:var(--t0);letter-spacing:0}
+.c1-tape{flex:1;min-width:0;height:28px;display:flex;align-items:flex-end;gap:3px;overflow:hidden}
+.c1-tape i{flex:1 1 0;min-width:3px;max-width:22px;border-radius:2px 2px 0 0;background:var(--k)}
+.c1-filterbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px 0;background:var(--c1-ink-1)}
+.c1-chip{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:4px;
+  background:transparent;border:1px solid var(--c1-line);color:var(--t2);
+  font-size:10.5px;font-weight:700;line-height:1;font-family:inherit;cursor:pointer;
+  transition:background-color .12s,border-color .12s,color .12s}
+.c1-chip:hover{border-color:var(--c1-line-hi);color:var(--t0)}
+.c1-chip i{width:8px;height:8px;border-radius:2px;background:var(--k,var(--t3))}
+.c1-chip b{font:700 10px/1 var(--c1-mono);color:var(--t0)}
+.c1-chip.active{background:rgba(145,101,247,.16);border-color:var(--c1-acc);color:var(--t0)}
+.c1-search{margin-left:auto;width:240px;height:30px}
+.c1-filter-count{font:600 10px var(--c1-mono);color:var(--t3);width:100%;display:none}
+
+.c1-ledger{display:flex;flex-direction:column;gap:8px}
+.c1-ledger[data-f="mal"]  .c1-case:not(.k-mal),
+.c1-ledger[data-f="sus"]  .c1-case:not(.k-sus),
+.c1-ledger[data-f="safe"] .c1-case:not(.k-safe){display:none}
+.c1-case{display:grid;grid-template-columns:52px minmax(0,1fr) 116px 120px 14px;gap:14px;align-items:center;
+  padding:11px 14px;background:var(--c1-ink-2);border:1px solid var(--c1-line);
+  border-left:3px solid var(--k);border-radius:6px;cursor:pointer;
+  content-visibility:auto;contain-intrinsic-size:auto 70px;
+  transition:border-color .12s,background-color .12s}
+.c1-case[hidden]{display:none}
+.c1-case:hover{border-color:var(--c1-line-hi);border-left-color:var(--k);background:var(--c1-ink-3)}
+.c1-case:focus-visible{outline:2px solid var(--c1-acc);outline-offset:1px}
+.c1-case.is-new{animation:c1RowEnter 1.3s ease-out both}
+@keyframes c1RowEnter{0%{opacity:0;transform:translateY(-6px)}35%{opacity:1;transform:none}}
+.c1-case-main{min-width:0}
+.c1-hname{font-size:12.5px;font-weight:700;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c1-hid{font:500 9.5px var(--c1-mono);color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0 6px}
+.c1-tags{display:flex;gap:5px;flex-wrap:wrap}
+.c1-case > .c1-vb{justify-self:start}
+.c1-case-when{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font:500 9.5px var(--c1-mono);
+  color:var(--t3);white-space:nowrap}
+.c1-case-when b{font:600 11px var(--c1-mono);color:var(--t1)}
+@media (max-width:980px){
+  .c1-case{grid-template-columns:52px minmax(0,1fr) auto 14px}
+  .c1-case-when{display:none}
+}
+.c1-hgo{color:var(--t3);opacity:0;transition:opacity .12s;display:flex}
+.c1-case:hover .c1-hgo,.c1-case:focus-visible .c1-hgo{opacity:1}
+
+/* -- Live intercept cards: the same case-file vocabulary --------------------------------------- */
+.c1-live-card{background:var(--c1-ink-2);border:1px solid var(--c1-line);border-left:3px solid var(--c1-acc);
+  border-radius:6px;padding:16px 18px;animation:c1rRise .24s ease-out both}
+.c1-live-card.verdict-safe{border-left-color:var(--safe);--k:var(--safe)}
+.c1-live-card.verdict-suspicious{border-left-color:var(--warn);--k:var(--warn)}
+.c1-live-card.verdict-malicious{border-left-color:var(--danger);--k:var(--danger)}
+.c1-lc-hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.c1-lc-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;background:var(--c1-acc)}
+.c1-lc-dot.safe{background:var(--safe)}.c1-lc-dot.suspicious{background:var(--warn)}
+.c1-lc-dot.malicious{background:var(--danger)}.c1-lc-dot.error{background:var(--t3)}
+.c1-lc-info{flex:1;min-width:0}
+.c1-lc-title{font:800 10px/1 var(--c1-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--t0)}
+.c1-lc-extid{font:500 9.5px var(--c1-mono);color:var(--t3);margin-top:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c1-lc-dismiss{background:none;border:none;color:var(--t3);cursor:pointer;font-size:16px;
+  padding:0 4px;line-height:1;flex-shrink:0;transition:color .15s}
+.c1-lc-dismiss:hover{color:var(--t0)}
+.c1-lc-body{font-size:11px;color:var(--t2);display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}
+.c1-lc-detail{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.c1-lc-bit{display:inline-flex;align-items:baseline;gap:7px;padding:4px 9px;border-radius:5px;
+  background:rgba(var(--tint),.05);border:1px solid var(--c1-line);font-size:11px;font-weight:600;color:var(--t0)}
+.c1-lc-bit i{font:700 9px/1 var(--c1-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--t3);font-style:normal}
+.c1-lc-bit.hot{background:var(--danger-bg);border-color:transparent;color:var(--danger)}
+.c1-lc-note{font-size:10.5px;color:var(--t3);align-self:center}
+.c1-lc-actions{display:flex;gap:9px}
+.c1-lc-actions .c1-btn{padding:6px 13px;font-size:11px}
+/* Spinner: the only thing that loops, and only while an analysis is actually running. */
+@keyframes c1-spin{to{transform:rotate(360deg)}}
+.c1-ring{width:16px;height:16px;border:2.5px solid var(--c1-line-hi);border-top-color:var(--c1-acc);
+  border-radius:50%;animation:c1-spin .8s linear infinite;flex-shrink:0}
+#c1-spinner{display:none;align-items:center;gap:8px;font-size:11px;color:var(--t2)}
+.c1-busy{display:none;align-items:center;gap:8px;font-size:11px;color:var(--t2)}
+#c1-result-area{display:none}
+
+/* -- Blocklist ---------------------------------------------------------------------------------- */
+.c1-cov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+.c1-cov-tile{padding:12px 14px;border-radius:5px;background:var(--c1-ink-3);border:1px solid var(--c1-line)}
+.c1-cov-tile b{display:block;font:800 21px/1.15 var(--c1-mono);color:var(--t0);font-variant-numeric:tabular-nums}
+.c1-cov-tile span{font:700 9px var(--c1-mono);color:var(--t3);text-transform:uppercase;letter-spacing:.14em}
+.c1-cov-bar{height:8px;border-radius:2px;background:var(--c1-ink-3);border:1px solid var(--c1-line);
+  overflow:hidden;margin:2px 0 7px}
+.c1-cov-bar>div{height:100%;width:100%;transform-origin:left center;transform:scaleX(0);
+  background:linear-gradient(90deg,var(--safe),var(--c1-acc));
+  transition:transform .5s cubic-bezier(.22,1,.36,1)}
+.c1-cov-field{display:flex;justify-content:space-between;font-size:11px;color:var(--t2);
+  padding:6px 0;border-bottom:1px dashed var(--c1-line)}
+.c1-cov-field:last-child{border-bottom:none}
+.c1-cov-field b{color:var(--t0);font:700 11px var(--c1-mono)}
+.c1-cov-log{margin-top:10px;max-height:190px;overflow-y:auto;font-size:10.5px;
+  font-family:var(--c1-mono);line-height:1.7}
+.c1-cov-log:empty{display:none}
+.c1-cov-log div{padding:2px 0;border-bottom:1px solid var(--c1-line);color:var(--t2)}
+.c1-cov-log .ok{color:var(--safe)}
+.c1-cov-log .skip{color:var(--t3)}
+
+/* -- Narrower window --------------------------------------------------------------------------- */
+@media (max-width:1280px){
+  .c1-tab-grp{display:none}
+  .c1-deck-mod.contain{flex:1 1 100%;margin-left:0;padding-left:0;border-left:none}
+}
+@media (max-width:1100px){
+  .c1-tab{padding:10px 12px 11px}
+}
+
+/* -- Report modal surfaces: same ink, same corners ------------------------------------------------ */
+.c1r-hero{position:relative;border-radius:6px}
+.c1r-hero::before,.c1r-hero::after{content:'';position:absolute;inset:-1px;pointer-events:none;--b:var(--c1-acc);
+  background:
+    linear-gradient(var(--b),var(--b)) 0 0/14px 2px no-repeat,
+    linear-gradient(var(--b),var(--b)) 0 0/2px 14px no-repeat,
+    linear-gradient(var(--b),var(--b)) 100% 0/14px 2px no-repeat,
+    linear-gradient(var(--b),var(--b)) 100% 0/2px 14px no-repeat}
+.c1r-hero::after{
+  background:
+    linear-gradient(var(--b),var(--b)) 0 100%/14px 2px no-repeat,
+    linear-gradient(var(--b),var(--b)) 0 100%/2px 14px no-repeat,
+    linear-gradient(var(--b),var(--b)) 100% 100%/14px 2px no-repeat,
+    linear-gradient(var(--b),var(--b)) 100% 100%/2px 14px no-repeat}
+.c1r-hero.mal::before,.c1r-hero.mal::after{--b:var(--danger)}
+.c1r-hero.sus::before,.c1r-hero.sus::after{--b:var(--warn)}
+.c1r-hero.safe::before,.c1r-hero.safe::after{--b:var(--safe)}
+.c1r-stat,.c1r-panel,.c1r-export{background:var(--c1-ink-2);border-color:var(--c1-line);border-radius:6px}
+.c1r-modal-shell{background:var(--c1-ink-1);border-color:var(--c1-line);border-radius:10px}
+.c1r-modal-bar{background:var(--c1-ink-0);border-bottom-color:var(--c1-line)}
+
+/* -- Idle cost of a hidden C3 animation (measured) ------------------------------------------------
+   #c3-beacon-overlay is a full-viewport layer that stays in the DOM, and its ring
+   animates a box-shadow with a 50px blur forever, even while the overlay is
+   invisible. box-shadow cannot be composited, so that is a style recalc plus a
+   repaint on the main thread every frame, on every panel. With C1 on screen it
+   was ~280ms of paint and ~200ms of raster per 4 s at 4x CPU slowdown, for
+   something nobody can see.
+   This pauses the ring ONLY while C1 is the visible panel AND the overlay is
+   inactive. The instant a real beacon alert activates the overlay the
+   :not(.active) stops matching and C3's alert animates exactly as before. Nothing
+   in C3's own CSS or behaviour is changed; delete this rule to undo it.        */
+body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{animation:none}
+
+/* verdict colour on a live card's corner brackets */
+.c1-live-card.verdict-safe::before,.c1-live-card.verdict-safe::after{--b:var(--safe)}
+.c1-live-card.verdict-suspicious::before,.c1-live-card.verdict-suspicious::after{--b:var(--warn)}
+.c1-live-card.verdict-malicious::before,.c1-live-card.verdict-malicious::after{--b:var(--danger)}
 /* ── Verdict ───────────────────────────────────────────────── */
 .c1-verdict-block{display:flex;align-items:center;gap:16px;margin-bottom:14px}
 .c1-big-score{font-size:48px;font-weight:900;line-height:1;flex-shrink:0;letter-spacing:-.02em}
@@ -951,7 +1439,11 @@ input,textarea,select{font-family:inherit}
 .c1-score-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
 .c1-score-name{font-size:10.5px;color:var(--t2);width:100px;flex-shrink:0;font-weight:500}
 .c1-bar-wrap{flex:1;height:5px;background:var(--b1);border-radius:3px;overflow:hidden}
-.c1-bar{height:100%;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+/* Always full width and scaled on X: animating `width` forces a layout pass on
+   every frame of every bar, scaleX is a compositor-only transform. The wrapper's
+   own rounding is what the eye sees, so it looks identical. */
+.c1-bar{height:100%;width:100%;border-radius:3px;transform:scaleX(0);transform-origin:left center;
+  transition:transform .6s cubic-bezier(.4,0,.2,1)}
 .c1-score-val{font-size:10px;font-weight:700;width:38px;text-align:right;flex-shrink:0}
 /* ── Flags / signals ───────────────────────────────────────── */
 .c1-flags{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
@@ -999,6 +1491,9 @@ input,textarea,select{font-family:inherit}
    same warning red. */
 #c1r-modal #c1-install-btn.is-danger,
 #panel-c1 #c1-install-btn.is-danger{background:#c8232f!important}
+/* Loaded into the browser: finished, not disabled-looking */
+#c1r-modal #c1-install-btn.is-done{background:var(--safe)!important;border-color:var(--safe)!important;
+  color:#fff!important;box-shadow:none;cursor:default;opacity:1}
 
 /* ══ C1 Report v2 — Simple/Advanced report surface ═══════════════
    Namespaced `c1r-` so nothing here can collide with the existing
@@ -1015,7 +1510,6 @@ input,textarea,select{font-family:inherit}
 .c1r-segbtn:hover{color:var(--t0)}
 .c1r-segbtn.active{background:var(--c1);color:#fff;box-shadow:0 1px 5px rgba(145,101,247,.4)}
 /* Switching modes swaps a whole screen of content; without this it snaps. */
-#c1r-simple,#c1r-advanced{animation:c1rFade .3s ease both}
 @keyframes c1rFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* ── Verdict hero ───────────────────────────────────────────── */
@@ -1029,8 +1523,7 @@ input,textarea,select{font-family:inherit}
 .c1r-hero.safe{border-color:rgba(16,185,129,.4);
   background:linear-gradient(115deg,rgba(16,185,129,.13),rgba(16,185,129,.03) 65%,transparent)}
 .c1r-hero-main{flex:1;min-width:230px}
-.c1r-hero-verdict{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
-.c1r-hero-word{font-size:25px;font-weight:800;letter-spacing:.01em;line-height:1}
+.c1r-hero-verdict{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .c1r-hero-plain{font-size:12.5px;color:var(--t1);line-height:1.7;max-width:92ch;
   padding-right:16px}
 .c1r-hero-id{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap;
@@ -1179,64 +1672,43 @@ input,textarea,select{font-family:inherit}
 .c1r-body b{color:var(--t1);font-weight:600}
 .c1r-riskbadge{font-size:8.5px;font-weight:800;padding:4px 9px;border-radius:20px;
   letter-spacing:.07em;white-space:nowrap}
-.c1r-panel{position:relative;overflow:hidden}
+.c1r-panel{position:relative;overflow:hidden;
+  /* A long report is mostly below the fold. Skip layout+paint for panels that
+     are not on screen yet; `auto` remembers each panel's last real height so
+     the scrollbar does not jump when one is finally rendered. */
+  content-visibility:auto;contain-intrinsic-size:auto 280px}
 /* A one-pixel accent along the top edge — enough to make each panel read as a
    deliberate object rather than a grey rectangle. */
 .c1r-panel::before{content:'';position:absolute;inset:0 0 auto 0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(145,101,247,.35),transparent);
   opacity:0;transition:opacity .3s}
 .c1r-panel:hover::before{opacity:1}
-.c1r-panel{transition:border-color .2s,transform .2s,box-shadow .2s}
-.c1r-panel:hover{border-color:var(--b2);box-shadow:var(--shadow-md)}
+.c1r-panel{transition:border-color .2s}
+.c1r-panel:hover{border-color:var(--b2)}
 
 /* ── Motion ─────────────────────────────────────────────────────
-   Kept to two ideas: content arrives (a short rise+fade, staggered so the
-   eye lands on the verdict first), and numbers resolve (gauge arc sweeps,
-   figures count up). Everything is a transform/opacity so it stays on the
-   compositor, and all of it is off under prefers-reduced-motion.        */
-@keyframes c1rRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@keyframes c1rPop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
-@keyframes c1rSweep{from{opacity:0}to{opacity:1}}
-.c1r-anim{animation:c1rRise .42s cubic-bezier(.22,1,.36,1) both}
-.c1r-d1{animation-delay:.04s}.c1r-d2{animation-delay:.10s}
-.c1r-d3{animation-delay:.16s}.c1r-d4{animation-delay:.22s}
-.c1r-stat{animation:c1rRise .42s cubic-bezier(.22,1,.36,1) both}
-.c1r-stats .c1r-stat:nth-child(1){animation-delay:.08s}
-.c1r-stats .c1r-stat:nth-child(2){animation-delay:.13s}
-.c1r-stats .c1r-stat:nth-child(3){animation-delay:.18s}
-.c1r-stats .c1r-stat:nth-child(4){animation-delay:.23s}
-.c1r-perm{animation:c1rRise .34s cubic-bezier(.22,1,.36,1) both}
-.c1r-gnode{animation:c1rPop .4s cubic-bezier(.22,1,.36,1) both}
-.c1r-graph-wrap line{animation:c1rSweep .5s ease both;animation-delay:.12s}
-.c1r-stat:hover{border-color:var(--b3);transform:translateY(-2px)}
-.c1r-stat{transition:border-color .18s,transform .18s,box-shadow .18s}
-.c1r-stat:hover{box-shadow:var(--shadow-md)}
-.c1r-xbtn,.c1r-jump,.c1r-segbtn{transition:all .16s cubic-bezier(.22,1,.36,1)}
+   Kept deliberately small. A report arrives with one short rise+fade on its few
+   top-level blocks and its numbers count up. Nothing is staggered per item any
+   more: opening a report used to start 15 separate animations in the Simple
+   view and 76 in the Advanced one (every stat card, permission row, graph node,
+   graph edge and flag chip), and in a software-rendered window each is its own
+   style recalc and repaint. It is now 7 and 20. Only
+   transform/opacity, and all of it is off under prefers-reduced-motion.     */
+@keyframes c1rRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.c1r-anim{animation:c1rRise .3s cubic-bezier(.22,1,.36,1) both}
+.c1r-d1{animation-delay:.03s}.c1r-d2{animation-delay:.07s}
+.c1r-d3{animation-delay:.10s}.c1r-d4{animation-delay:.13s}
+.c1r-stat{transition:border-color .18s,transform .18s}
+.c1r-stat:hover{border-color:var(--c1-glass-brd-hi);transform:translateY(-2px)}
+.c1r-xbtn,.c1r-jump,.c1r-segbtn{
+  transition:background-color .16s,border-color .16s,color .16s,transform .16s}
 .c1r-xbtn:hover{transform:translateY(-1px)}
 @media (prefers-reduced-motion:reduce){
-  .c1r-anim,.c1r-stat,.c1r-perm,.c1r-gnode,.c1r-graph-wrap line{animation:none!important}
-  .c1r-stat:hover,.c1r-xbtn:hover,.c1r-hostrow:hover{transform:none}
+  .c1r-anim,.c1-live-card,.c1-case.is-new{animation:none!important}
+  .c1-rs .a,.c1-pstep,.c1-pipe-line b{animation:none!important}
+  .c1-pipe-line b{transition:none}
+  .c1r-stat:hover,.c1r-xbtn:hover,.c1r-hostrow:hover{transform:none!important}
 }
-
-/* ── Isolation bar ──────────────────────────────────────────────
-   Was a flat grey strip with bare selects. Same information, given the
-   same card treatment as everything else in the panel.               */
-.c1-iso-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;
-  padding:11px 14px;border-radius:var(--radius-lg);
-  background:linear-gradient(100deg,var(--bg2),var(--bg1));
-  border:1px solid var(--b1);box-shadow:var(--shadow-sm)}
-.c1-iso-bar label{display:inline-flex;align-items:center;gap:6px;font-size:9px;
-  color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.09em}
-.c1-iso-bar select{background:var(--bg0);color:var(--t0);border:1px solid var(--b2);
-  border-radius:7px;padding:6px 10px;font-size:10.5px;font-weight:600;
-  font-family:inherit;transition:border-color .16s,box-shadow .16s;cursor:pointer}
-.c1-iso-bar select:hover{border-color:var(--b3)}
-.c1-iso-bar select:focus{border-color:var(--c1);box-shadow:0 0 0 3px rgba(145,101,247,.14);outline:none}
-.c1-iso-bar .hint{font-size:10px;color:var(--t2);flex:1;min-width:180px;
-  display:flex;align-items:center;gap:6px}
-.c1-iso-dot{width:7px;height:7px;border-radius:50%;background:var(--safe);flex-shrink:0;
-  box-shadow:0 0 0 3px rgba(16,185,129,.16)}
-.c1-iso-dot.warn{background:var(--warn);box-shadow:0 0 0 3px rgba(245,166,35,.16)}
 
 /* ── Report modal ───────────────────────────────────────────────
    Width is capped rather than fluid: on a wide monitor an unbounded
@@ -1247,14 +1719,18 @@ input,textarea,select{font-family:inherit}
 .c1r-modal{position:fixed;inset:0;z-index:400;display:none;
   align-items:flex-start;justify-content:center;padding:38px 26px}
 .c1r-modal.open{display:flex}
-.c1r-modal-backdrop{position:absolute;inset:0;background:rgba(3,6,12,.72);
-  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
-  animation:c1rFadeIn .22s ease both}
+/* No backdrop-filter. A blur over the whole viewport has to be re-run every
+   time anything behind it repaints, and this dashboard is software-rendered
+   (Electron runs with hardware acceleration off). Measured on a 4x-throttled
+   CPU: report open + idle fell from ~72ms/frame (14fps) to ~18ms (55fps) once
+   the blur was replaced by this plain scrim. */
+.c1r-modal-backdrop{position:absolute;inset:0;background:var(--c1-scrim,rgba(3,6,12,.8));
+  animation:c1rFadeIn .18s ease both}
 .c1r-modal-shell{position:relative;width:100%;max-width:1060px;max-height:100%;
   display:flex;flex-direction:column;background:var(--bg1);
   border:1px solid var(--b2);border-radius:var(--radius-xl);
   box-shadow:0 24px 70px rgba(0,0,0,.66),0 2px 10px rgba(0,0,0,.5);
-  overflow:hidden;animation:c1rModalIn .3s cubic-bezier(.22,1,.36,1) both}
+  overflow:hidden;animation:c1rModalIn .22s cubic-bezier(.22,1,.36,1) both}
 @keyframes c1rFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes c1rModalIn{from{opacity:0;transform:translateY(16px) scale(.985)}
   to{opacity:1;transform:none}}
@@ -1280,28 +1756,6 @@ input,textarea,select{font-family:inherit}
   .c1r-modal-sub{max-width:100%}
 }
 
-/* ── Recent analyses ────────────────────────────────────────────
-   The list used to drop rows past the eighth, so a session that
-   analysed a dozen extensions silently lost the earliest ones —
-   exactly the entries an operator scrolls back to. Everything from
-   the session is kept and the list scrolls instead.               */
-.c1-hist-head{display:flex;align-items:center;gap:9px;margin-bottom:10px}
-.c1-hist-title{font-size:11px;font-weight:700;color:var(--t0)}
-.c1-hist-count{font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;
-  background:var(--c1b);color:var(--c1);border:1px solid rgba(145,101,247,.3)}
-.c1-hist-hint{margin-left:auto;font-size:9.5px;color:var(--t3)}
-#c1-history-list{max-height:326px;overflow-y:auto;padding-right:4px;
-  display:flex;flex-direction:column;gap:5px}
-#c1-history-list::-webkit-scrollbar{width:5px}
-#c1-history-list::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
-.c1-hist-row{cursor:pointer;transition:background .16s,border-color .16s,transform .16s;
-  border:1px solid transparent;border-radius:var(--radius);padding:8px 10px}
-.c1-hist-row:hover{background:var(--bg3);border-color:var(--b2);transform:translateX(3px)}
-.c1-hist-row:focus-visible{outline:2px solid var(--c1);outline-offset:2px}
-.c1-hist-open{font-size:9px;color:var(--t3);opacity:0;transition:opacity .16s}
-.c1-hist-row:hover .c1-hist-open{opacity:1}
-.c1-hist-empty{font-size:10.5px;color:var(--t3);padding:14px 0;text-align:center}
-
 /* ── Print / PDF export ─────────────────────────────────────── */
 @media print{
   body{background:#fff!important;color:#111!important;height:auto!important;
@@ -1316,7 +1770,7 @@ input,textarea,select{font-family:inherit}
     border-radius:0!important;overflow:visible!important;animation:none!important}
   .c1r-modal-body{overflow:visible!important;padding:0!important;max-height:none!important}
   body{overflow:visible!important}
-  #hdr,#sidebar,.c1-tabs,.c1-pane,.c1r-seg,.c1r-export,.c1r-jump,
+  #hdr,#sidebar,#panel-c1,.c1-tabs,.c1-pane,.c1r-seg,.c1r-export,.c1r-jump,
   #c1-install-bar,#c1-history-card,.panel:not(#panel-c1),
   .panel-hdr,.c1-iso-bar,.c1r-modebar,#c1-result-area > .c1-card:empty,
   .c1-tab,.c1-ring,#c1-spinner{display:none!important}
@@ -1333,8 +1787,10 @@ input,textarea,select{font-family:inherit}
     border-color:#ccc!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .c1-iso{background:#fafafa!important;border-color:#ccc!important}
   .c1-iso-timing{color:#555!important}
-  #panel-c1,#c1-body,#c1-result-area{
+  #c1-result-area{
     display:block!important;overflow:visible!important;height:auto!important}
+  /* content-visibility would leave off-screen panels unpainted on paper. */
+  .c1r-panel{content-visibility:visible!important}
   #c1r-simple,#c1r-advanced{display:flex!important;flex-direction:column;gap:10px;
     overflow:visible!important;height:auto!important}
   .c1r-panel,.c1-card,.c1r-hero,.c1r-stat{
@@ -1346,6 +1802,8 @@ input,textarea,select{font-family:inherit}
   .c1r-anim,.c1r-stat,.c1r-perm,.c1r-gnode,.c1r-graph-wrap line{
     animation:none!important;opacity:1!important;transform:none!important}
   .c1r-hero-id{background:#f4f4f4!important;border-color:#ddd!important;color:#222!important}
+  .c1-vb{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .c1r-hero::before,.c1r-hero::after{display:none!important}
   /* Both panels keep their engine block on paper; the bar segments are
      painted surfaces so they need colour-adjust to survive the printer. */
   .c1r-engine{background:#fafafa!important;border-color:#ddd!important}
@@ -1552,73 +2010,6 @@ input,textarea,select{font-family:inherit}
 .c1r-engine.is-idle::after{display:none}
 .c1r-engine.is-idle{opacity:.75}
 .c1r-engine.is-idle .c1r-engine-mark svg{filter:grayscale(.85)}
-/* Isolation selector in the panel header */
-.c1-iso-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;
-  padding:7px 10px;border-radius:var(--radius);background:var(--bg3);border:1px solid var(--b2)}
-.c1-iso-bar label{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-.c1-iso-bar select{background:var(--bg1);color:var(--t1);border:1px solid var(--b2);
-  border-radius:5px;padding:4px 8px;font-size:11px;font-family:inherit}
-.c1-iso-bar .hint{font-size:10px;color:var(--t3);flex:1;min-width:180px}
-
-/* ── Blocklist coverage tab ────────────────────────────────── */
-.c1-cov-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px}
-.c1-cov-tile{padding:10px 12px;border-radius:var(--radius);background:var(--bg3);border:1px solid var(--b2)}
-.c1-cov-tile b{display:block;font-size:19px;font-weight:700;color:var(--t0);line-height:1.15}
-.c1-cov-tile span{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em}
-.c1-cov-bar{height:7px;border-radius:4px;background:var(--bg1);overflow:hidden;margin:10px 0 4px}
-.c1-cov-bar>div{height:100%;background:linear-gradient(90deg,var(--safe),var(--c2));transition:width .4s}
-.c1-cov-field{display:flex;justify-content:space-between;font-size:10.5px;color:var(--t2);
-  padding:4px 0;border-bottom:1px solid var(--b1)}
-.c1-cov-field:last-child{border-bottom:none}
-.c1-cov-field b{color:var(--t1);font-weight:600}
-.c1-cov-log{margin-top:10px;max-height:190px;overflow-y:auto;font-size:10.5px;
-  font-family:'Cascadia Code','Fira Code','Consolas',monospace;line-height:1.7}
-.c1-cov-log div{padding:2px 0;border-bottom:1px solid var(--b1);color:var(--t2)}
-.c1-cov-log .ok{color:var(--safe)}
-.c1-cov-log .skip{color:var(--t3)}
-/* ── History ───────────────────────────────────────────────── */
-.c1-hist-row{display:flex;align-items:center;gap:10px;padding:8px 0;
-  border-bottom:1px solid var(--b1);cursor:pointer;transition:background .15s}
-.c1-hist-row:last-child{border-bottom:none}
-.c1-hist-row:hover .c1-hist-name{color:var(--t0)}
-.c1-hist-badge{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;
-  justify-content:center;font-size:10px;font-weight:800;flex-shrink:0}
-.c1-hist-badge.safe{background:var(--safe-bg);color:var(--safe)}
-.c1-hist-badge.warn{background:var(--warn-bg);color:var(--warn)}
-.c1-hist-badge.danger{background:var(--danger-bg);color:var(--danger)}
-.c1-hist-name{flex:1;font-size:11.5px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.c1-hist-src{font-size:9px;color:var(--t3);flex-shrink:0}
-/* ── Spinner ───────────────────────────────────────────────── */
-#c1-spinner{display:none;align-items:center;gap:8px;font-size:11px;color:var(--t2);padding:10px 0}
-@keyframes c1-spin{to{transform:rotate(360deg)}}
-.c1-ring{width:16px;height:16px;border:2.5px solid var(--b2);
-  border-top-color:var(--c1);border-radius:50%;animation:c1-spin .8s linear infinite;flex-shrink:0}
-#c1-result-area{display:none}
-/* ── Live detection cards ─────────────────────────── */
-.c1-live-card{background:var(--bg1);border:1px solid var(--b2);border-radius:var(--radius-lg);
-  padding:14px 16px;margin-bottom:10px;animation:slideIn .22s ease;box-shadow:var(--shadow-sm)}
-.c1-live-card.verdict-safe{border-left:3px solid var(--safe)}
-.c1-live-card.verdict-suspicious{border-left:3px solid var(--warn)}
-.c1-live-card.verdict-malicious{border-left:3px solid var(--danger)}
-.c1-lc-hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.c1-lc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--c1)}
-.c1-lc-dot.analyzing{background:var(--c1);animation:blink 1.2s infinite}
-.c1-lc-dot.safe{background:var(--safe)}.c1-lc-dot.suspicious{background:var(--warn)}
-.c1-lc-dot.malicious{background:var(--danger)}.c1-lc-dot.error{background:var(--t3)}
-.c1-lc-info{flex:1;min-width:0}
-.c1-lc-title{font-size:12px;font-weight:700;color:var(--t0)}
-.c1-lc-extid{font-size:9.5px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;color:var(--t3);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.c1-lc-dismiss{background:none;border:none;color:var(--t3);cursor:pointer;
-  font-size:16px;padding:0 4px;line-height:1;flex-shrink:0;transition:color .15s}
-.c1-lc-dismiss:hover{color:var(--t1)}
-.c1-lc-verdict{display:flex;align-items:center;gap:14px;margin-bottom:12px}
-.c1-lc-score{font-size:34px;font-weight:900;line-height:1;flex-shrink:0;letter-spacing:-.02em}
-.c1-lc-vlabel{font-size:15px;font-weight:700;letter-spacing:.02em}
-.c1-lc-detail{font-size:10px;color:var(--t2);margin-top:3px}
-.c1-lc-actions{display:flex;gap:7px}
-.c1-lc-actions .c1-btn{padding:5px 12px;font-size:11px}
-
 /* ── C4 Forensic Engine ─────────────────────────────────── */
 .c4-atabs{display:flex;gap:2px;border-bottom:1px solid var(--b1);background:var(--bg1);flex-shrink:0;overflow-x:auto;padding:0 14px}
 .c4-atab{padding:9px 14px;background:none;border:none;border-bottom:2px solid transparent;
@@ -3473,199 +3864,293 @@ input,textarea,select{font-family:inherit}
   </div>
 </div><!-- /panel-c2 -->
 
-<!-- ─── C1: Extension Analyzer (PLACEHOLDER) ─────────────── -->
+<!-- ─── C1: Extension Analyzer ───────────────────────────── -->
 <div class="panel active" id="panel-c1">
   <div class="panel-hdr">
     <div class="comp-badge c1">C1</div>
     <div>
       <div class="panel-title">Extension Analyzer</div>
-      <div class="panel-sub">Pre-install threat detection - Static ML Analysis + Dynamic Sandbox Analysis</div>
+      <div class="panel-sub">Detects threats before an extension is installed, using static ML analysis and a dynamic sandbox</div>
     </div>
-    <span class="status-active">Active</span>
+    <span class="status-active" id="c1-status-badge"><span class="c1-status-dot" aria-hidden="true"></span>Active</span>
   </div>
 
   <div id="c1-body">
 
-    <!-- Sandbox containment — what the dynamic analysis runs inside -->
-    <div class="c1-iso-bar">
-      <label for="c1-iso-select">Sandbox isolation</label>
-      <select id="c1-iso-select" onchange="c1SaveIsolation()">
-        <option value="auto">Auto — strongest available</option>
-        <option value="windows_sandbox">Disposable VM (Windows Sandbox)</option>
-        <option value="inprocess">Host process (fast, weakly isolated)</option>
-      </select>
-      <select id="c1-iso-net" onchange="c1SaveIsolation()"
-              title="Cutting egress protects the network but means no network behaviour is observed">
-        <option value="unrestricted">Network: allowed</option>
-        <option value="disabled">Network: blocked</option>
-      </select>
-      <span class="hint" id="c1-iso-status">Checking available backends&hellip;</span>
-    </div>
-
-    <!-- ── Input card ──────────────────────────────────────── -->
-    <div class="c1-card">
-      <div class="c1-tabs">
-        <button class="c1-tab" id="c1-tab-live" onclick="c1Tab('live',this)">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> Live <span id="c1-live-badge" style="display:none;background:var(--danger);
-            color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;
-            margin-left:4px;vertical-align:middle"></span>
-        </button>
-        <button class="c1-tab active" onclick="c1Tab('upload',this)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload CRX</button>
-        <button class="c1-tab"        onclick="c1Tab('webstore',this)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Web Store</button>
-        <button class="c1-tab"        onclick="c1Tab('manual',this)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Manual</button>
-        <button class="c1-tab"        onclick="c1Tab('blocklist',this);c1LoadBlocklistStats()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg> Blocklist</button>
+    <!-- ── Session strip: what has been analysed, and what contains the sandbox ── -->
+    <div class="c1-deck">
+      <div class="c1-deck-mod posture">
+        <span class="c1-cap">Session</span>
+        <!-- Verdict mix of everything analysed. Widths are the real counts. -->
+        <div class="c1-ratio" id="c1-ratio" role="img" aria-label="Share of analyses by verdict">
+          <i class="mal" id="c1-r-mal"></i><i class="sus" id="c1-r-sus"></i><i class="safe" id="c1-r-safe"></i>
+        </div>
+        <div class="c1-pos-legend">
+          <span class="c1-pos-row"><i style="background:var(--danger)"></i>Malicious<b id="c1-n-mal">0</b></span>
+          <span class="c1-pos-row"><i style="background:var(--warn)"></i>Suspicious<b id="c1-n-sus">0</b></span>
+          <span class="c1-pos-row"><i style="background:var(--safe)"></i>Safe<b id="c1-n-safe">0</b></span>
+        </div>
+        <span class="c1-pos-total"><b id="c1-pos-total">0</b>analysed</span>
       </div>
 
-      <!-- Tab: Live Analyzer -->
-      <div class="c1-pane" id="c1-pane-live">
-        <div id="c1-live-empty" style="padding:24px 0;text-align:center">
-          <div style="width:32px;height:32px;margin:0 auto 10px;opacity:.28;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 7V4M12 7V4M15 7V4M9 17v3M12 17v3M15 17v3M7 9H4M7 12H4M7 15H4M17 9h3M17 12h3M17 15h3"/></svg></div>
-          <div style="font-size:12.5px;font-weight:600;color:var(--t1);margin-bottom:4px">
-            Browser session is being monitored
-          </div>
-          <div style="font-size:11px;color:var(--t3);line-height:1.6">
-            Open the Chrome Web Store in the browser session<br>
-            and click <b style="color:var(--t2)">"Add to Chrome"</b> on any extension to trigger analysis
-          </div>
-          <button class="c1-btn ghost" onclick="c1SimulateClick()"
-            style="margin-top:16px;padding:6px 16px;font-size:11px;opacity:.7"
-            title="Runs the full click-intercept pipeline using the local test extension">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg> Simulate Click (Test Pipeline)
-          </button>
-        </div>
-        <div id="c1-live-cards"></div>
-      </div>
-
-      <!-- Tab: Upload CRX -->
-      <div class="c1-pane active" id="c1-pane-upload">
-        <div id="c1-dropzone"
-             onclick="document.getElementById('c1-file-input').click()"
-             ondragover="event.preventDefault();this.classList.add('over')"
-             ondragleave="this.classList.remove('over')"
-             ondrop="c1OnDrop(event)">
-          <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-          <div class="dz-title">Drop a .crx file here, or click to browse</div>
-          <div class="dz-sub">The extension file is parsed locally — nothing leaves your machine until you click Analyze</div>
-        </div>
-        <input type="file" id="c1-file-input" accept=".crx" onchange="c1OnFileSelect(event)" />
-        <div id="c1-upload-filename" style="display:none;margin-top:8px;font-size:11px;
-          color:var(--t2);padding:6px 10px;background:var(--bg3);border-radius:var(--radius);
-          border:1px solid var(--b2)">
-          <span id="c1-fname"></span>
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-          <button class="c1-btn primary" id="c1-upload-btn" onclick="c1UploadAnalyze()" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze File</button>
-          <div id="c1-spinner"><div class="c1-ring"></div><span id="c1-spin-label">Analyzing...</span></div>
-        </div>
-      </div>
-
-      <!-- Tab: Web Store URL -->
-      <div class="c1-pane" id="c1-pane-webstore">
-        <div class="c1-lbl">Chrome Web Store URL or Extension ID</div>
-        <input id="c1-ws-input" class="c1-inp" type="text"
-          placeholder="https://chromewebstore.google.com/detail/name/abcdefghijklmnopqrstuvwxyzabcdef" />
-        <div style="font-size:10px;color:var(--t3);margin-top:5px;margin-bottom:10px">
-          Works with both formats: full Web Store URL or just the 32-character extension ID.
-          WebSentinel downloads the extension from Google's servers and analyzes it.
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <button class="c1-btn primary" id="c1-ws-btn" onclick="c1WebstoreAnalyze()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Check Extension</button>
-          <div id="c1-ws-spinner" style="display:none;align-items:center;gap:8px;font-size:11px;color:var(--t2)">
-            <div class="c1-ring"></div><span>Downloading from Chrome Web Store...</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tab: Manual -->
-      <div class="c1-pane" id="c1-pane-manual">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
-          <div>
-            <div class="c1-lbl">manifest.json <span style="color:var(--danger)">*</span></div>
-            <textarea id="c1-manifest" class="c1-ta" rows="6" placeholder='{"permissions":["tabs","cookies"],...}'></textarea>
-          </div>
-          <div>
-            <div class="c1-lbl">JavaScript source (optional)</div>
-            <textarea id="c1-source" class="c1-ta" rows="6" placeholder="Paste concatenated JS source..."></textarea>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <div style="flex:1">
-            <div class="c1-lbl">Extension ID (optional)</div>
-            <input id="c1-extid" class="c1-inp" type="text" placeholder="hdokiejnpimakedhajhdlcegeplioahd" />
-          </div>
-          <div style="flex:1">
-            <div class="c1-lbl">Unpacked folder path (optional — triggers sandbox)</div>
-            <input id="c1-extpath" class="c1-inp" type="text" placeholder="C:\Extensions\my_ext\" />
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <button class="c1-btn primary" id="c1-submit-btn" onclick="c1Analyze()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze</button>
-          <button class="c1-btn ghost" onclick="c1FillMalicious()">Try malicious example</button>
-          <button class="c1-btn ghost" onclick="c1ClearManual()">Clear</button>
-        </div>
-      </div>
-
-      <!-- Tab: Blocklist evidence coverage -->
-      <div class="c1-pane" id="c1-pane-blocklist">
-        <div style="font-size:11px;color:var(--t3);line-height:1.6;margin-bottom:12px">
-          The finalized sheet merges an evidenced source (<b style="color:var(--t2)">MalExt Sentry</b>) with an
-          ID-only dump (<b style="color:var(--t2)">chrome-mal-ids</b>). Rows from the second carry no name, reason,
-          date, store, version or hash. C1 documents them from the extension itself — automatically on a live
-          intercept, or on demand here — and writes the completed row back to the CSV.
-        </div>
-
-        <div class="c1-cov-grid" id="c1-cov-tiles"></div>
-        <div class="c1-cov-bar"><div id="c1-cov-bar-fill" style="width:0%"></div></div>
-        <div style="font-size:10px;color:var(--t3);margin-bottom:12px" id="c1-cov-caption">Loading coverage…</div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div>
-            <div class="c1-lbl">Undocumented fields across the sheet</div>
-            <div id="c1-cov-fields"></div>
-          </div>
-          <div>
-            <div class="c1-lbl">Document a specific extension ID</div>
-            <input id="c1-cov-id" class="c1-inp" type="text" placeholder="pnlphjjfielecalmmjjdhjjninkbjdod" />
-            <label style="display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--t2);margin:8px 0">
-              <input type="checkbox" id="c1-cov-sandbox" checked /> Run the dynamic sandbox as well (slower, stronger evidence)
-            </label>
-            <button class="c1-btn primary" id="c1-cov-doc-btn" onclick="c1BlocklistDocument()"
-              style="padding:6px 12px;font-size:11px">Document this ID</button>
-          </div>
-        </div>
-
-        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1)">
-          <div class="c1-lbl">Sweep undocumented rows</div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <input id="c1-cov-limit" class="c1-inp" type="number" min="1" max="2000" value="25"
-              style="width:90px" title="How many undocumented rows to attempt" />
-            <button class="c1-btn ghost" id="c1-cov-sweep-btn" onclick="c1BlocklistBackfill()"
-              style="padding:6px 12px;font-size:11px">Run sweep</button>
-            <button class="c1-btn ghost" onclick="c1BlocklistReload()"
-              style="padding:6px 12px;font-size:11px"
-              title="Re-read the CSV from disk — picks up writes made by the offline sweep script">Reload sheet</button>
-            <span style="font-size:10px;color:var(--t3)">
-              Static stack only. Delisted extensions can't be downloaded — those rows are left untouched
-              rather than filled with guesses.
-            </span>
-          </div>
-          <div class="c1-cov-log" id="c1-cov-log"></div>
-        </div>
+      <!-- Sandbox containment: the two selects keep their ids, the Settings panel reads them. -->
+      <div class="c1-deck-mod contain">
+        <span class="c1-cap">Containment</span>
+        <select id="c1-iso-select" aria-label="Sandbox isolation backend" onchange="c1SaveIsolation()">
+          <option value="auto">Auto (strongest available)</option>
+          <option value="windows_sandbox">Disposable VM (Windows Sandbox)</option>
+          <option value="inprocess">Host process (fast, weakly isolated)</option>
+        </select>
+        <select id="c1-iso-net" aria-label="Sandbox network policy" onchange="c1SaveIsolation()"
+                title="Cutting egress protects the network but means no network behaviour is observed">
+          <option value="unrestricted">Network: allowed</option>
+          <option value="disabled">Network: blocked</option>
+        </select>
+        <div class="hint" id="c1-iso-status">Checking available backends&hellip;</div>
       </div>
     </div>
 
-    <!-- ── Result card ─────────────────────────────────────── -->
+    <nav class="c1-tabs" role="tablist" aria-orientation="horizontal"
+         aria-label="Extension analyzer sections" onkeydown="c1TabKey(event)">
+      <span class="c1-tab-grp" aria-hidden="true">Gate</span>
+      <button class="c1-tab active" id="c1-tab-live" role="tab" aria-selected="true" aria-controls="c1-pane-live" onclick="c1Tab('live',this)">
+        <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>Install gate<span class="c1-tab-badge alert" id="c1-live-badge"></span>
+      </button>
+      <span class="c1-tab-grp" aria-hidden="true">Analyze</span>
+      <button class="c1-tab" id="c1-tab-upload" role="tab" aria-selected="false" aria-controls="c1-pane-upload" onclick="c1Tab('upload',this)">
+        <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>Upload CRX
+      </button>
+      <button class="c1-tab" id="c1-tab-webstore" role="tab" aria-selected="false" aria-controls="c1-pane-webstore" onclick="c1Tab('webstore',this)">
+        <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>Web Store
+      </button>
+      <button class="c1-tab" id="c1-tab-manual" role="tab" aria-selected="false" aria-controls="c1-pane-manual" onclick="c1Tab('manual',this)">
+        <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>Manual
+      </button>
+      <span class="c1-tab-grp" aria-hidden="true">Records</span>
+      <button class="c1-tab" id="c1-tab-history" role="tab" aria-selected="false" aria-controls="c1-pane-history" onclick="c1Tab('history',this)">
+        <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg></span>Case ledger<span class="c1-tab-badge" id="c1-hist-count">0</span>
+      </button>
+      <button class="c1-tab" id="c1-tab-blocklist" role="tab" aria-selected="false" aria-controls="c1-pane-blocklist" onclick="c1Tab('blocklist',this);c1LoadBlocklistStats()">
+        <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg></span>Blocklist
+      </button>
+    </nav>
 
-    <!-- ── Recent analyses ─────────────────────────────────── -->
-    <div class="c1-card" id="c1-history-card" style="display:none">
-      <div class="c1-hist-head">
-        <span class="c1-hist-title">Recent analyses</span>
-        <span class="c1-hist-count" id="c1-hist-count">0</span>
-        <span class="c1-hist-hint">Click any row to open its report</span>
-      </div>
-      <div id="c1-history-list"></div>
-    </div>
+    <!-- ── Stage ───────────────────────────────────────────────────────────── -->
+    <section class="c1-stage">
+      <div class="c1-content">
 
+        <!-- INSTALL GATE -->
+        <div class="c1-pane active" id="c1-pane-live" role="tabpanel" aria-labelledby="c1-tab-live">
+          <header class="c1-stage-hdr"><div>
+            <div class="c1-eyebrow">01 · Gate</div>
+            <h2 class="c1-stage-title">Install gate</h2>
+            <p class="c1-stage-sub">Extension installs in the monitored browser are held here, analysed, and released only when you approve them.</p>
+          </div></header>
+
+          <div class="c1-gate c1-brk" id="c1-gate">
+            <div class="c1-gate-emblem" aria-hidden="true">
+              <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M32 6l20 8v16c0 13-8.5 22.5-20 28C20.500 52.500 12 43 12 30V14l20-8z"/><path d="M22 31h20" stroke-width="2"/><path d="M26 24h12M26 38h12" stroke-width="1.6" opacity=".55"/></svg>
+            </div>
+            <div class="c1-gate-state"><i></i>Gate armed</div>
+            <div class="c1-gate-text">Every <b>Add to Chrome</b> click is intercepted and checked against the blocklist, then scored by two models. When it looks risky, it runs in a sandbox before anything is installed.</div>
+            <dl class="c1-gate-facts">
+              <div><dt>Blocklist</dt><dd id="c1-g-bl">Loading…</dd></div>
+              <div><dt>Containment</dt><dd id="c1-g-iso">Loading…</dd></div>
+              <div><dt>This session</dt><dd id="c1-g-n">0 analysed</dd></div>
+              <div><dt>Last verdict</dt><dd id="c1-g-last">None yet</dd></div>
+            </dl>
+          </div>
+
+          <div class="c1-card c1-pipecard">
+            <div class="c1-card-hdr">
+              <div>
+                <div class="c1-card-title">Detection pipeline</div>
+                <div class="c1-card-sub">Five stages decide every install. The pipeline follows the most recent intercept as it moves through them.</div>
+              </div>
+              <div class="c1-pipe-status" id="c1-pipe-status" data-s="idle" role="status"><i></i><span>Waiting for an install</span></div>
+            </div>
+            <div class="c1-pipe" id="c1-pipeline" aria-label="Detection pipeline"></div>
+          </div>
+
+          <div class="c1-waiting" id="c1-live-empty">
+            <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 7V4M12 7V4M15 7V4M9 17v3M12 17v3M15 17v3M7 9H4M7 12H4M7 15H4M17 9h3M17 12h3M17 15h3"/></svg></div>
+            <div>Waiting for an install. Open the Chrome Web Store in the browser session and click <b>Add to Chrome</b> on any extension.</div>
+            <button class="c1-btn ghost" onclick="c1SimulateClick()"
+                    title="Runs the full click-intercept pipeline using the local test extension">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Simulate a click
+            </button>
+          </div>
+          <div id="c1-live-cards" style="display:flex;flex-direction:column;gap:12px"></div>
+
+        </div>
+
+        <!-- UPLOAD CRX -->
+        <div class="c1-pane" id="c1-pane-upload" role="tabpanel" aria-labelledby="c1-tab-upload">
+          <header class="c1-stage-hdr"><div>
+            <div class="c1-eyebrow">02 · Analyze</div>
+            <h2 class="c1-stage-title">Upload a package</h2>
+            <p class="c1-stage-sub">The .crx is parsed locally. Nothing leaves your machine until you press Analyze.</p>
+          </div></header>
+          <div class="c1-card">
+            <div id="c1-dropzone" tabindex="0" role="button" aria-label="Choose a .crx file to analyze"
+                 onclick="document.getElementById('c1-file-input').click()"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}"
+                 ondragover="event.preventDefault();this.classList.add('over')"
+                 ondragleave="this.classList.remove('over')"
+                 ondrop="c1OnDrop(event)">
+              <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+              <div class="dz-title">Drop a .crx file here, or click to browse</div>
+              <div class="dz-sub">Chrome extension packages only</div>
+            </div>
+            <input type="file" id="c1-file-input" accept=".crx" onchange="c1OnFileSelect(event)" />
+            <div id="c1-upload-filename"><span id="c1-fname"></span></div>
+            <div class="c1-row" style="margin-top:14px">
+              <button class="c1-btn primary" id="c1-upload-btn" onclick="c1UploadAnalyze()" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze file</button>
+              <div id="c1-spinner"><div class="c1-ring"></div><span id="c1-spin-label">Analyzing...</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WEB STORE -->
+        <div class="c1-pane" id="c1-pane-webstore" role="tabpanel" aria-labelledby="c1-tab-webstore">
+          <header class="c1-stage-hdr"><div>
+            <div class="c1-eyebrow">02 · Analyze</div>
+            <h2 class="c1-stage-title">Look up a listing</h2>
+            <p class="c1-stage-sub">WebSentinel downloads the extension from Google's servers and analyzes it, without installing it.</p>
+          </div></header>
+          <div class="c1-card">
+            <div class="c1-lbl">Chrome Web Store URL or extension ID</div>
+            <input id="c1-ws-input" class="c1-inp" type="text" spellcheck="false" autocomplete="off"
+              onkeydown="if(event.key==='Enter')c1WebstoreAnalyze()"
+              placeholder="https://chromewebstore.google.com/detail/name/abcdefghijklmnopqrstuvwxyzabcdef" />
+            <div class="c1-hint" style="margin:7px 0 14px">A full Web Store URL or just the extension ID both work. Press Enter to submit.</div>
+            <div class="c1-row">
+              <button class="c1-btn primary" id="c1-ws-btn" onclick="c1WebstoreAnalyze()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Check extension</button>
+              <div id="c1-ws-spinner" class="c1-busy"><div class="c1-ring"></div><span id="c1-ws-label">Downloading from Chrome Web Store...</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MANUAL -->
+        <div class="c1-pane" id="c1-pane-manual" role="tabpanel" aria-labelledby="c1-tab-manual">
+          <header class="c1-stage-hdr"><div>
+            <div class="c1-eyebrow">02 · Analyze</div>
+            <h2 class="c1-stage-title">Paste a manifest</h2>
+            <p class="c1-stage-sub">A quick static check from manifest.json, optionally with the JavaScript. Add an unpacked folder path to run the sandbox too.</p>
+          </div></header>
+          <div class="c1-card">
+            <div class="c1-grid2" style="margin-bottom:12px">
+              <div>
+                <div class="c1-lbl">manifest.json <span style="color:var(--danger)">*</span></div>
+                <textarea id="c1-manifest" class="c1-ta" rows="8" spellcheck="false" placeholder='{"permissions":["tabs","cookies"],...}'></textarea>
+              </div>
+              <div>
+                <div class="c1-lbl">JavaScript source (optional)</div>
+                <textarea id="c1-source" class="c1-ta" rows="8" spellcheck="false" placeholder="Paste concatenated JS source..."></textarea>
+              </div>
+            </div>
+            <div class="c1-grid2" style="margin-bottom:14px">
+              <div>
+                <div class="c1-lbl">Extension ID (optional)</div>
+                <input id="c1-extid" class="c1-inp" type="text" spellcheck="false" placeholder="hdokiejnpimakedhajhdlcegeplioahd" />
+              </div>
+              <div>
+                <div class="c1-lbl">Unpacked folder (optional, runs the sandbox)</div>
+                <input id="c1-extpath" class="c1-inp" type="text" spellcheck="false" placeholder="C:\Extensions\my_ext\" />
+              </div>
+            </div>
+            <div class="c1-row">
+              <button class="c1-btn primary" id="c1-submit-btn" onclick="c1Analyze()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze</button>
+              <button class="c1-btn ghost" onclick="c1FillMalicious()">Try malicious example</button>
+              <button class="c1-btn ghost" onclick="c1ClearManual()">Clear</button>
+              <div id="c1-manual-spinner" class="c1-busy"><div class="c1-ring"></div><span id="c1-manual-label">Analyzing...</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CASE LEDGER -->
+        <div class="c1-pane" id="c1-pane-history" role="tabpanel" aria-labelledby="c1-tab-history">
+          <header class="c1-stage-hdr"><div>
+            <div class="c1-eyebrow">03 · Records</div>
+            <h2 class="c1-stage-title">Case ledger</h2>
+            <p class="c1-stage-sub">Every extension analysed, newest first. Filter by verdict, search by name or ID, and select a case to reopen its full report.</p>
+          </div></header>
+
+          <div class="c1-empty" id="c1-history-empty">
+            <div class="eicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg></div>
+            <div class="emsg">No cases yet</div>
+            <div class="ehint">Analyse an extension from the gate, an upload, the Web Store or a manifest and it is filed here.</div>
+          </div>
+
+          <div id="c1-history-card" style="display:none">
+            <div class="c1-skyline">
+              <div class="c1-skyline-lbl">Threat skyline<b id="c1-sky-n">0</b></div>
+              <div class="c1-tape" id="c1-tape" role="img" aria-label="Threat score of each analysis, oldest to newest"></div>
+            </div>
+            <div class="c1-filterbar" role="toolbar" aria-label="Filter cases">
+              <button class="c1-chip active" data-f="all" onclick="c1SetFilter('all')">All <b id="c1-fc-all">0</b></button>
+              <button class="c1-chip k-mal" data-f="mal" onclick="c1SetFilter('mal')"><i></i>Malicious <b id="c1-fc-mal">0</b></button>
+              <button class="c1-chip k-sus" data-f="sus" onclick="c1SetFilter('sus')"><i></i>Suspicious <b id="c1-fc-sus">0</b></button>
+              <button class="c1-chip k-safe" data-f="safe" onclick="c1SetFilter('safe')"><i></i>Safe <b id="c1-fc-safe">0</b></button>
+              <input id="c1-search" class="c1-inp c1-search" type="search" spellcheck="false" autocomplete="off"
+                     placeholder="Search name or ID" aria-label="Search cases" oninput="c1SearchCases(this.value)" />
+            </div>
+            <div class="c1-ledger" id="c1-history-list" data-f="all"></div>
+            <div class="c1-empty" id="c1-hist-none" style="display:none;margin-top:8px">
+              <div class="emsg">No cases match</div>
+              <div class="ehint">Try another verdict filter or clear the search.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BLOCKLIST -->
+        <div class="c1-pane" id="c1-pane-blocklist" role="tabpanel" aria-labelledby="c1-tab-blocklist">
+          <header class="c1-stage-hdr"><div>
+            <div class="c1-eyebrow">03 · Records</div>
+            <h2 class="c1-stage-title">Blocklist evidence</h2>
+            <p class="c1-stage-sub">The finalized sheet merges an evidenced source (MalExt Sentry) with a bare list of IDs (chrome-mal-ids). Rows from the second carry no name, reason, date, store, version or hash. C1 documents them from the extension itself, automatically on a live intercept or on demand here, and writes the completed row back to the CSV.</p>
+          </div></header>
+          <div class="c1-card">
+            <div class="c1-cov-grid" id="c1-cov-tiles"></div>
+            <div class="c1-cov-bar"><div id="c1-cov-bar-fill"></div></div>
+            <div class="c1-hint" id="c1-cov-caption">Loading coverage…</div>
+          </div>
+
+          <div class="c1-grid2">
+            <div class="c1-card">
+              <div class="c1-lbl">Undocumented fields across the sheet</div>
+              <div id="c1-cov-fields"></div>
+            </div>
+            <div class="c1-card">
+              <div class="c1-lbl">Document a specific extension ID</div>
+              <input id="c1-cov-id" class="c1-inp" type="text" spellcheck="false" placeholder="pnlphjjfielecalmmjjdhjjninkbjdod"
+                onkeydown="if(event.key==='Enter')c1BlocklistDocument()" />
+              <label style="display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--t2);margin:12px 0">
+                <input type="checkbox" id="c1-cov-sandbox" checked /> Run the dynamic sandbox as well (slower, stronger evidence)
+              </label>
+              <button class="c1-btn primary" id="c1-cov-doc-btn" onclick="c1BlocklistDocument()">Document this ID</button>
+            </div>
+          </div>
+
+          <div class="c1-card">
+            <div class="c1-lbl">Sweep undocumented rows</div>
+            <div class="c1-row">
+              <input id="c1-cov-limit" class="c1-inp" type="number" min="1" max="2000" value="25"
+                style="width:90px" title="How many undocumented rows to attempt" />
+              <button class="c1-btn ghost" id="c1-cov-sweep-btn" onclick="c1BlocklistBackfill()">Run sweep</button>
+              <button class="c1-btn ghost" onclick="c1BlocklistReload()"
+                title="Re-read the CSV from disk to pick up writes made by the offline sweep script">Reload sheet</button>
+              <span class="c1-hint" style="flex:1;min-width:220px">
+                Static stack only. Delisted extensions can't be downloaded; those rows are left untouched
+                rather than filled with guesses.
+              </span>
+            </div>
+            <div class="c1-cov-log" id="c1-cov-log"></div>
+          </div>
+        </div>
+
+      </div><!-- /c1-content -->
+    </section>
   </div><!-- /c1-body -->
 </div><!-- /panel-c1 -->
 
@@ -4375,7 +4860,7 @@ async function checkBackend() {
       setOnline(true);
       if (!_autoStarted) {
         _autoStarted = true;
-        startPwSession(); loadSettings(); refreshC3(); c1LoadIsolation();
+        startPwSession(); loadSettings(); refreshC3(); c1LoadIsolation(); c1LoadHistory(); c1LoadBlocklistStats();
       }
       return true;
     }
@@ -4421,7 +4906,7 @@ function connectPwWs() {
   pwWs.onmessage = (evt) => {
     let msg; try { msg = JSON.parse(evt.data); } catch { return; }
     // Route C1 events to the extension analyzer handler
-    if (['c1_install_intercepted','c1_install_approved','c1_install_blocked'].includes(msg.type)) {
+    if (['c1_install_intercepted','c1_install_approved','c1_install_blocked','c1_install_error'].includes(msg.type)) {
       c1HandleWsMsg(msg); return;
     }
     if (msg.type === 'c1_extension_installed') {
@@ -8546,13 +9031,60 @@ function dismissBeaconOverlay() {
 }
 
 // ══ C1 Extension Analyzer JS ══════════════════════════════
-// ── C1 tab switching ───────────────────────────────────────────────────────
+// ── C1 navigation ──────────────────────────────────────────────────────────
+// Touches only the elements that change (outgoing and incoming pane and tab)
+// instead of re-querying and rewriting every one per click.
 function c1Tab(name, btn) {
-  document.querySelectorAll('.c1-pane').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.c1-tab').forEach(b => b.classList.remove('active'));
-  document.getElementById('c1-pane-' + name).classList.add('active');
-  btn.classList.add('active');
+  const pane = document.getElementById('c1-pane-' + name);
+  if (!pane) return;
+  btn = btn || document.getElementById('c1-tab-' + name);
+  const prevPane = document.querySelector('#panel-c1 .c1-pane.active');
+  if (prevPane && prevPane !== pane) prevPane.classList.remove('active');
+  pane.classList.add('active');
+  const prevTab = document.querySelector('#panel-c1 .c1-tab.active');
+  if (prevTab && prevTab !== btn) {
+    prevTab.classList.remove('active');
+    prevTab.setAttribute('aria-selected', 'false');
+  }
+  if (btn) { btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); }
 }
+
+// Left/Right move through the tabs and Home/End jump to its ends (WAI-ARIA tabs,
+// horizontal orientation). Up/Down are accepted too.
+function c1TabKey(e) {
+  const k = e.key;
+  const next = k === 'ArrowDown' || k === 'ArrowRight';
+  const prev = k === 'ArrowUp'   || k === 'ArrowLeft';
+  if (!next && !prev && k !== 'Home' && k !== 'End') return;
+  const tabs = Array.from(document.querySelectorAll('#panel-c1 .c1-tab'));
+  const i = tabs.indexOf(document.activeElement);
+  if (i < 0) return;
+  e.preventDefault();
+  const j = k === 'Home' ? 0
+          : k === 'End'  ? tabs.length - 1
+          : (i + (next ? 1 : -1) + tabs.length) % tabs.length;
+  tabs[j].focus();
+  tabs[j].click();
+}
+
+// A spinner that says how long it has been going. A VM analysis takes ~35 s and a
+// bare "Analyzing..." for that long reads as a hang. The interval exists only
+// while the work does; the returned function stops it and hides the spinner.
+function _c1Busy(spinEl, labelEl, base) {
+  if (!spinEl) return () => {};
+  spinEl.style.display = 'flex';
+  const t0 = performance.now();
+  if (labelEl) labelEl.textContent = base;
+  const id = setInterval(() => {
+    if (labelEl) labelEl.textContent = base + ' ' + Math.round((performance.now() - t0) / 1000) + 's';
+  }, 1000);
+  return () => { clearInterval(id); spinEl.style.display = 'none'; };
+}
+
+// DOM ids and inline handlers are built from the extension ID, which arrives in a
+// WebSocket message the monitored browser can influence. Real IDs are 32
+// lowercase letters; anything else is stripped rather than trusted.
+function _c1Id(s) { return String(s || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); }
 
 // ── Score / color helpers ─────────────────────────────────────────────────
 function c1Color(score) {
@@ -8625,7 +9157,7 @@ function c1IsolationTiming(timing) {
   const bar = rows.map(r =>
     '<span class="c1-iso-tl-seg" style="width:' + pct(r.secs).toFixed(2) + '%;' +
     'background:' + r.color + '" title="' +
-    _c1Esc(r.label + ' — ' + r.secs.toFixed(2) + 's') + '"></span>').join('');
+    _c1Esc(r.label + ': ' + r.secs.toFixed(2) + 's') + '"></span>').join('');
   const keys = rows.map(r =>
     '<span class="c1-iso-tl-key' + (r.key === 'observe_s' ? ' is-main' : '') + '">' +
       '<span class="c1-iso-tl-dot" style="background:' + r.color + '"></span>' +
@@ -8851,7 +9383,7 @@ function c1StoreHtml(store) {
   const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const key = String(store || '').trim().toLowerCase();
   const icon = _c1_STORE_ICONS[key] || '';
-  return '<span class="c1-bl-store">' + icon + '<span>' + esc(store || '—') + '</span></span>';
+  return '<span class="c1-bl-store">' + icon + '<span>' + esc(store || 'Unknown') + '</span></span>';
 }
 
 // Reason -> chip class. Match is case-insensitive substring so new sheet
@@ -8876,7 +9408,7 @@ const _c1Esc = (s) => String(s === 0 ? '0' : (s || ''))
 function c1BlUnknown(what) {
   return '<span class="c1-bl-unknown">' +
     '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
-    'Not established' + (what ? ' — ' + _c1Esc(what) : '') + '</span>';
+    'Not established' + (what ? ': ' + _c1Esc(what) : '') + '</span>';
 }
 
 // Fields this run filled in from the intercepted CRX get a "live" tag, so the
@@ -8987,12 +9519,12 @@ function c1BuildBlocklistEvidence(details) {
     html += details.sheet_synced
       ? '<div class="c1-bl-sync ok">' +
           '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
-          '<span>Blocklist record completed and written back to the finalized CSV &mdash; <b>' +
+          '<span>Blocklist record completed and written back to the finalized CSV: <b>' +
           esc(fields) + '</b></span></div>'
       : '<div class="c1-bl-sync pending">' +
           '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
           '<span>Evidence established for <b>' + esc(fields) +
-          '</b> &mdash; not written to the sheet (row missing or write failed)</span></div>';
+          '</b>, but not written to the sheet (row missing or write failed)</span></div>';
   }
 
   if ((details.gaps || []).length) {
@@ -9130,14 +9662,33 @@ function _c1VerdictKind(v) {
   return u === 'MALICIOUS' ? 'mal' : u === 'SAFE' ? 'safe' : 'sus';
 }
 
-function _c1VerdictIcon(kind) {
-  if (kind === 'safe') {
-    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><polyline points="9 12 11 14 15 10"/></svg>';
-  }
-  if (kind === 'mal') {
-    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-  }
-  return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+// "SUSPICIOUS" -> "Suspicious": badge text is sentence case.
+function _c1Word(v) {
+  const s = String(v || 'Unknown').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Analyses are stored with the wording of the backend that produced them. Older
+// versions joined clauses with a dash and used a few hyphenated compounds. This reads
+// them the way the current backend writes them: a comma before a connective
+// ("including ..."), a colon otherwise, and the compounds as plain words.
+// Only for generated prose; extension names are data and are never touched.
+const _C1_COMPOUND = {
+  'known-malicious': 'known malicious', 'known-benign': 'known benign', 'known-bad': 'known bad',
+  'zero-day': 'zero day', 'command-and-control': 'command and control', 'sign-in': 'login',
+  'signed-in': 'signed in', 'right-click': 'context', 'text-to-speech': 'speech synthesis',
+  'privacy-related': 'privacy related', 'well-known': 'widely known', 'high-risk': 'high risk',
+  'wide-reaching': 'broad', 'read-only': 'read only',
+};
+const _C1_COMPOUND_RX = new RegExp('\\b(' + Object.keys(_C1_COMPOUND).join('|') + ')\\b', 'gi');
+function _c1Prose(s) {
+  return String(s == null ? '' : s)
+    .replace(/\s*[\u2014\u2013]\s*(\S+)?/g, (m, w) =>
+      (/^(including|such|which|because|especially|while|without|so|and|or|but)$/i.test(w || '') ? ', ' : ': ') + (w || ''))
+    .replace(_C1_COMPOUND_RX, m => {
+      const r = _C1_COMPOUND[m.toLowerCase()];
+      return m.charAt(0) === m.charAt(0).toUpperCase() ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+    });
 }
 
 // Semicircular confidence gauge. Hand-drawn arc rather than a chart library:
@@ -9171,21 +9722,42 @@ function c1GaugeHtml(score, colour) {
 
 // Numbers resolve rather than appear. Runs once per render, after the markup
 // is in the DOM so the transition has a start value to move from.
+//
+// One shared requestAnimationFrame driver serves EVERY counter. A report starts
+// up to nine at once (gauge, four stat cards, three score values, the big score);
+// nine independent rAF chains each writing textContent meant up to nine style
+// recalculations per frame. Batched, it is one pass per frame regardless of how
+// many are running — and the DOM is only touched when a displayed value changes.
+const _c1Counters = [];
+let _c1CounterRaf = null;
+
+function _c1CounterTick(now) {
+  for (let i = _c1Counters.length - 1; i >= 0; i--) {
+    const c = _c1Counters[i];
+    const p = Math.min(1, (now - c.t0) / c.ms);
+    // easeOutCubic — fast start, settles onto the real figure
+    const v = Math.round(c.target * (1 - Math.pow(1 - p, 3)));
+    if (v !== c.last) { c.el.textContent = v + c.suffix; c.last = v; }
+    if (p >= 1) {
+      c.el.textContent = c.target + c.suffix;
+      _c1Counters.splice(i, 1);
+    }
+  }
+  _c1CounterRaf = _c1Counters.length ? requestAnimationFrame(_c1CounterTick) : null;
+}
+
 function _c1CountUp(el, target, ms) {
+  if (!el) return;
   const reduce = window.matchMedia &&
                  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const suffix = el.dataset.suffix || '';
   if (reduce || !target) { el.textContent = target + suffix; return; }
-  const t0 = performance.now();
-  const step = (now) => {
-    const p = Math.min(1, (now - t0) / ms);
-    // easeOutCubic — fast start, settles onto the real figure
-    const v = Math.round(target * (1 - Math.pow(1 - p, 3)));
-    el.textContent = v + suffix;
-    if (p < 1) requestAnimationFrame(step);
-    else el.textContent = target + suffix;
-  };
-  requestAnimationFrame(step);
+  // Drop any in-flight counter for this same element (re-render mid-animation).
+  for (let i = _c1Counters.length - 1; i >= 0; i--) {
+    if (_c1Counters[i].el === el) _c1Counters.splice(i, 1);
+  }
+  _c1Counters.push({ el, target, ms, suffix, t0: performance.now(), last: -1 });
+  if (_c1CounterRaf === null) _c1CounterRaf = requestAnimationFrame(_c1CounterTick);
 }
 
 function c1AnimateReport() {
@@ -9239,7 +9811,7 @@ function c1StatCardsHtml(data) {
       <div class="c1r-stat-lbl">Permissions</div>
       <div class="c1r-stat-num" data-target="${perms.length}"
            style="color:${highRisk ? 'var(--danger)' : 'var(--safe)'}">0</div>
-      <div class="c1r-stat-sub">${highRisk ? `${highRisk} high-risk` : 'none high-risk'}</div>
+      <div class="c1r-stat-sub">${highRisk ? `${highRisk} high risk` : 'no high risk'}</div>
     </div>`;
 
   return `<div class="c1r-stats">
@@ -9264,7 +9836,7 @@ function c1RenderSimple(data) {
   const clr   = c1Color(score);
   const ident = data.identity || rpt.identity || {};
 
-  const plain = rpt.plain_summary || rpt.summary || data.detail || '';
+  const plain = _c1Prose(rpt.plain_summary || rpt.summary || data.detail || '');
   // Given its own chip rather than a dim one-liner: on a tinted hero the
   // faintest text token was effectively unreadable, and the extension ID is
   // the thing a reader copies out of the report.
@@ -9277,9 +9849,8 @@ function c1RenderSimple(data) {
   host.innerHTML = `
     <div class="c1r-hero ${kind} c1r-anim">
       <div class="c1r-hero-main">
-        <div class="c1r-hero-verdict" style="color:${clr}">
-          ${_c1VerdictIcon(kind)}
-          <span class="c1r-hero-word">${_c1Esc(data.verdict || 'UNKNOWN')}</span>
+        <div class="c1r-hero-verdict">
+          <span class="c1-vb lg k-${kind} c1r-hero-word">${_c1Esc(_c1Word(data.verdict))}</span>
         </div>
         <div class="c1r-hero-plain">${_c1Esc(plain)}</div>
         ${idLine ? `<div class="c1r-hero-id">${idLine}</div>` : ''}
@@ -9316,12 +9887,12 @@ function c1PermPanelHtml(data, compact) {
   const show  = (_c1PermsExpanded && !compact) ? perms : perms.slice(0, LIMIT);
   const rest  = perms.length - show.length;
 
-  const rows = show.map((p, i) => `
-    <div class="c1r-perm" style="animation-delay:${(0.05 * i).toFixed(2)}s">
+  const rows = show.map((p) => `
+    <div class="c1r-perm">
       <span class="c1r-perm-sev c1r-sev-${_c1Esc(p.severity)}">${_c1Esc(p.severity)}</span>
       <div class="c1r-perm-body">
         <div class="c1r-perm-name">${_c1Esc(p.name)}</div>
-        <div class="c1r-perm-desc">${_c1Esc(p.description)}</div>
+        <div class="c1r-perm-desc">${_c1Esc(_c1Prose(p.description))}</div>
       </div>
     </div>`).join('');
 
@@ -9338,7 +9909,7 @@ function c1PermPanelHtml(data, compact) {
         <span class="c1r-accent static"></span>
         <div>
           <div class="c1r-ptitle">What this extension is allowed to do</div>
-          <div class="c1r-psub">Declared in its manifest and granted at install &mdash; whether or not it is ever used</div>
+          <div class="c1r-psub">Declared in its manifest and granted at install, whether or not it is ever used</div>
         </div>
       </div>
       ${rows}${more}
@@ -9390,7 +9961,7 @@ function c1RenderGraphPanel(data) {
       <span class="c1r-accent"></span>
       <div>
         <div class="c1r-ptitle">Where it sent data</div>
-        <div class="c1r-psub">Grouped by which part of the extension made the request${obs.truncated ? ' &mdash; busiest 40 hosts shown' : ''}</div>
+        <div class="c1r-psub">Grouped by which part of the extension made the request${obs.truncated ? '. Busiest 40 hosts shown' : ''}</div>
       </div>
     </div>`;
 
@@ -9447,9 +10018,9 @@ function c1RenderGraphPanel(data) {
 
       edges += `<line x1="${CX}" y1="${CY}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"
                  stroke="${c}" stroke-opacity=".3" stroke-width="1.2"/>`;
-      const tip = `${h.host} — ${h.requests} request${h.requests !== 1 ? 's' : ''}` +
+      const tip = `${h.host}: ${h.requests} request${h.requests !== 1 ? 's' : ''}` +
                   (h.methods && h.methods.length ? ` (${h.methods.join(', ')})` : '') +
-                  ` — ${_C1R_SRC[key].label}` + (h.suspicious ? ' — flagged' : '');
+                  ` · ${_C1R_SRC[key].label}` + (h.suspicious ? ' · flagged' : '');
       // Label each node. Hover tooltips alone are not enough — a static
       // screenshot of the report (or its printed PDF) has to be readable.
       const right = Math.cos(ang) > -0.05;
@@ -9527,7 +10098,7 @@ function c1SummaryText(data) {
   const cnt   = obs.counts || {};
   const dy    = data.dynamic || {};
   const L = [];
-  L.push('WEBSENTINEL — EXTENSION ANALYSIS REPORT');
+  L.push('WEBSENTINEL EXTENSION ANALYSIS REPORT');
   L.push('='.repeat(52));
   if (ident.name)    L.push(`Extension : ${ident.name}`);
   if (ident.version) L.push(`Version   : ${ident.version}`);
@@ -9537,17 +10108,17 @@ function c1SummaryText(data) {
   L.push(`VERDICT   : ${data.verdict}  (threat score ${Math.round((data.score || 0) * 100)}/100)`);
   L.push('');
   L.push('SUMMARY');
-  L.push('-'.repeat(52));
-  L.push(rpt.plain_summary || rpt.summary || data.detail || '');
-  if (rpt.recommendation) { L.push(''); L.push(`RECOMMENDATION: ${rpt.recommendation}`); }
+  L.push('─'.repeat(52));
+  L.push(_c1Prose(rpt.plain_summary || rpt.summary || data.detail || ''));
+  if (rpt.recommendation) { L.push(''); L.push(`RECOMMENDATION: ${_c1Prose(rpt.recommendation)}`); }
 
   const perms = data.permissions || rpt.permissions || [];
   if (perms.length) {
-    L.push(''); L.push('DECLARED PERMISSIONS'); L.push('-'.repeat(52));
-    perms.forEach(p => L.push(`[${p.severity}] ${p.name}\n    ${p.description}`));
+    L.push(''); L.push('DECLARED PERMISSIONS'); L.push('─'.repeat(52));
+    perms.forEach(p => L.push(`[${p.severity}] ${p.name}\n    ${_c1Prose(p.description)}`));
   }
 
-  L.push(''); L.push('RUNTIME OBSERVATION'); L.push('-'.repeat(52));
+  L.push(''); L.push('RUNTIME OBSERVATION'); L.push('─'.repeat(52));
   if (dy.executed) {
     L.push(`Requests: ${cnt.requests || 0}   Hosts: ${cnt.hosts || 0}   Signals: ${cnt.signals || 0}`);
     (obs.hosts || []).forEach(h =>
@@ -9556,13 +10127,13 @@ function c1SummaryText(data) {
              (h.suspicious ? ', FLAGGED' : '') + ')'));
   } else {
     L.push(dy.extension_loaded === false
-      ? 'Sandbox started but the extension failed to load — no behaviour observed.'
-      : 'Sandbox did not run — verdict is based on static analysis only.');
+      ? 'Sandbox started but the extension failed to load, so no behaviour was observed.'
+      : 'Sandbox did not run, so the verdict is based on static analysis only.');
   }
 
   if ((rpt.flags || []).length) {
-    L.push(''); L.push('DETECTION FLAGS'); L.push('-'.repeat(52));
-    rpt.flags.forEach(f => L.push(`[${f.severity}] ${f.flag}\n    ${f.description}`));
+    L.push(''); L.push('DETECTION FLAGS'); L.push('─'.repeat(52));
+    rpt.flags.forEach(f => L.push(`[${f.severity}] ${f.flag}\n    ${_c1Prose(f.description)}`));
   }
   const iso = rpt.isolation || dy.isolation;
   if (iso) { L.push(''); L.push(`CONTAINMENT: ${iso.backend} (${iso.level})`); }
@@ -9604,7 +10175,7 @@ async function c1ExportPdf(stem) {
 
   const api = window.electronAPI;
   if (!api || typeof api.savePdf !== 'function') {
-    showToast('Opening print dialog — choose "Save as PDF"');
+    showToast('Opening the print dialog. Choose "Save as PDF".');
     setTimeout(() => { window.print(); restore(); }, 120);
     return;
   }
@@ -9650,18 +10221,20 @@ function c1Render(data) {
     data.timestamp                  ? new Date(data.timestamp).toLocaleTimeString() : '',
   ].filter(Boolean).join(' · ');
   document.getElementById('c1-verdict-meta').textContent   = meta;
-  document.getElementById('c1-verdict-detail').textContent = data.detail || '';
+  document.getElementById('c1-verdict-detail').textContent = _c1Prose(data.detail || '');
 
   // Bars fill rather than appear — same reasoning as the gauge: a number that
   // resolves is read, a number that is simply present is skimmed past.
+  // scaleX rather than width: compositor-only, no layout pass per frame.
   const setBar = (id, val, clrOverride) => {
     const el = document.getElementById(id);
+    if (!el) return;
     el.style.background = clrOverride || c1Color(val);
     el.style.transition = 'none';
-    el.style.width = '0%';
+    el.style.transform  = 'scaleX(0)';
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      el.style.transition = 'width .85s cubic-bezier(.22,1,.36,1)';
-      el.style.width = val + '%';
+      el.style.transition = 'transform .85s cubic-bezier(.22,1,.36,1)';
+      el.style.transform  = 'scaleX(' + (Math.max(0, Math.min(100, val)) / 100) + ')';
     }));
   };
   setBar('c1-bar-final',   finalScore);
@@ -9674,15 +10247,9 @@ function c1Render(data) {
   if (bigScore) _c1CountUp(bigScore, finalScore, 900);
 
   const flagsEl = document.getElementById('c1-flags');
-  flagsEl.innerHTML = '';
-  (data.flags || []).forEach((f, i) => {
-    const chip = document.createElement('span');
-    chip.className = 'c1-flag' + (f.includes('SANDBOX') || f.includes('SKIP') ? ' info' : '');
-    chip.textContent = f;
-    chip.style.animation = 'c1rPop .32s cubic-bezier(.22,1,.36,1) both';
-    chip.style.animationDelay = (0.04 * i) + 's';
-    flagsEl.appendChild(chip);
-  });
+  flagsEl.innerHTML = (data.flags || []).map(f =>
+    '<span class="c1-flag' + (f.includes('SANDBOX') || f.includes('SKIP') ? ' info' : '') + '">' +
+    _c1Esc(f) + '</span>').join('');
 
   c1ShowBlocklistCard(data.static?.blocklist_details || null);
 
@@ -9748,13 +10315,13 @@ function c1Render(data) {
       `<b>Sandbox:</b> <span style="color:var(--warn)">Started, but the extension failed to load</span><br>` +
       `<div class="c1-sandbox-note" style="margin-top:6px;border-color:rgba(245,166,35,.35);color:var(--warn)">` +
         `<b>No dynamic coverage for this analysis.</b> Chromium rejected the extension, so nothing was observed. ` +
-        `The verdict rests on static analysis alone — this is <b>not</b> evidence the extension is safe.` +
+        `The verdict rests on static analysis alone. This is <b>not</b> evidence the extension is safe.` +
         (dy.load_error ? '<br><span style="color:var(--t3)">' + _c1Esc(dy.load_error) + '</span>' : '') +
       `</div>`;
   } else if (dy.executed) {
     dynHtml = `<b>Sandbox executed:</b> <span style="color:var(--safe)">Yes</span><br><b>Dynamic score:</b> ${dynPct}/100<br>`;
     if (dy.extension_loaded === null || dy.extension_loaded === undefined) {
-      dynHtml += `<span style="font-size:10px;color:var(--t3)">Extension load could not be confirmed — it declares no background context.</span><br>`;
+      dynHtml += `<span style="font-size:10px;color:var(--t3)">Extension load could not be confirmed because it declares no background context.</span><br>`;
     }
   } else {
     dynHtml = `<b>Sandbox:</b> <span style="color:var(--t3)">Not executed</span><br>
@@ -9764,7 +10331,7 @@ function c1Render(data) {
   }
   if (signals.length) {
     dynHtml += '<div class="c1-flags" style="margin-top:6px">';
-    signals.forEach(s => { dynHtml += `<span class="c1-signal">${s}</span>`; });
+    signals.forEach(s => { dynHtml += `<span class="c1-signal">${_c1Esc(s)}</span>`; });
     dynHtml += '</div>';
   }
   document.getElementById('c1-dynamic-detail').innerHTML = dynHtml;
@@ -9793,34 +10360,35 @@ function c1Render(data) {
     badge.style.color = rc;
     badge.style.border = '1px solid ' + rc + '55';
 
-    document.getElementById('c1-report-summary').textContent = rpt.summary || '';
+    document.getElementById('c1-report-summary').textContent = _c1Prose(rpt.summary || '');
 
     const sb = rpt.score_breakdown || {};
     document.getElementById('c1-report-formula').textContent =
       'Score formula: ' + (sb.formula || '');
 
     const flagsDiv = document.getElementById('c1-report-flags');
-    flagsDiv.innerHTML = '';
-    (rpt.flags || []).forEach(f => {
-      // Lightened to clear 4.5:1 on their own tinted chip backgrounds.
-      const sevClr = { CRITICAL: '#f05252', HIGH: '#f5a623', MEDIUM: '#4287f6', LOW: '#8fa3bd' };
+    // Built as one string and assigned once. `innerHTML +=` inside a loop
+    // re-parses and rebuilds every row already there on each pass.
+    // Lightened to clear 4.5:1 on their own tinted chip backgrounds.
+    const sevClr = { CRITICAL: '#f05252', HIGH: '#f5a623', MEDIUM: '#4287f6', LOW: '#8fa3bd' };
+    flagsDiv.innerHTML = (rpt.flags || []).map(f => {
       const clr = sevClr[f.severity] || '#6b7280';
-      flagsDiv.innerHTML +=
-        `<div class="c1r-anim" style="padding:9px 12px;border-radius:var(--radius);` +
+      return (
+        `<div style="padding:9px 12px;border-radius:var(--radius);` +
              `background:var(--bg1);border:1px solid var(--b1);border-left:3px solid ${clr}">` +
           `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;flex-wrap:wrap">` +
             `<span style="font-size:8px;font-weight:800;color:${clr};letter-spacing:.06em;` +
                   `padding:3px 6px;border-radius:4px;background:${clr}22;` +
-                  `border:1px solid ${clr}55">${f.severity}</span>` +
+                  `border:1px solid ${clr}55">${_c1Esc(f.severity)}</span>` +
             `<span style="font-size:10.5px;font-weight:700;color:var(--t0);` +
-                  `font-family:'Cascadia Code','Consolas',monospace">${f.flag}</span>` +
+                  `font-family:'Cascadia Code','Consolas',monospace">${_c1Esc(f.flag)}</span>` +
           `</div>` +
-          `<div style="font-size:10px;color:var(--t2);line-height:1.6">${f.description}</div>` +
-        `</div>`;
-    });
+          `<div style="font-size:10px;color:var(--t2);line-height:1.6">${_c1Esc(_c1Prose(f.description))}</div>` +
+        `</div>`);
+    }).join('');
 
     document.getElementById('c1-report-recommendation').textContent =
-      rpt.recommendation ? ('Recommendation: ' + rpt.recommendation) : '';
+      rpt.recommendation ? ('Recommendation: ' + _c1Prose(rpt.recommendation)) : '';
   } else {
     reportCard.style.display = 'none';
   }
@@ -9840,7 +10408,7 @@ function c1Render(data) {
   if (data.verdict === 'MALICIOUS') {
     btn.classList.add('is-danger');
     btn.style.background = '';
-    btn.title = 'Extension is MALICIOUS — click to force-install for research purposes';
+    btn.title = 'Extension is MALICIOUS. Click to force an install for research purposes.';
     btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Force Install (MALICIOUS)';
   } else {
     btn.classList.remove('is-danger');
@@ -9848,6 +10416,10 @@ function c1Render(data) {
     btn.title = '';
     btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Install into Browser';
   }
+  // The button is shared by every report. A previous install used to leave it disabled,
+  // so from the second report on it did nothing. Start each report from a clean state.
+  btn.dataset.idle = btn.innerHTML;
+  c1InstallUi(_c1Installed.has(String(data.extension_id || '').toLowerCase()) ? 'done' : 'idle');
 
   // ── Report v2 surface ─────────────────────────────────────────
   // Rendered from the same payload the cards above just used. Kept last so a
@@ -9868,112 +10440,467 @@ function c1Render(data) {
 }
 
 // ── Install extension into live Playwright session ────────────────────────
+// The backend answers at once and does the work in the background: the browser session
+// restarts with the extension loaded, which takes several seconds. It then confirms over
+// the WebSocket (c1_extension_installed) or says why it could not (c1_install_error). So
+// the button stays busy until one of those arrives, and always comes back to a usable
+// state. It used to stay disabled for every later report, and "registered" was all the
+// backend did: the extension was never loaded into the session.
+const _c1Installed = new Set();     // extension IDs loaded into the browser this session
+let _c1InstallTimer = 0;
+
+function c1InstallUi(state, text) {
+  const btn  = document.getElementById('c1-install-btn');
+  const spin = document.getElementById('c1-install-spinner');
+  const stat = document.getElementById('c1-install-status');
+  if (!btn || !spin || !stat) return;
+  clearTimeout(_c1InstallTimer);
+  if (state === 'busy') {
+    btn.disabled = true;
+    spin.style.display = 'flex';
+    stat.textContent = text || 'Installing...';
+    return;
+  }
+  spin.style.display = 'none';
+  if (state === 'done') {
+    btn.disabled = true;
+    btn.classList.add('is-done');
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Installed in the browser';
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('is-done');
+    if (btn.dataset.idle) btn.innerHTML = btn.dataset.idle;
+  }
+}
+
 async function c1InstallIntoBrowser() {
   const bar     = document.getElementById('c1-install-bar');
   const extId   = bar.dataset.extId;
   const wsUrl   = bar.dataset.wsUrl;
   const payload = extId || wsUrl;
-  if (!payload) { alert('No extension ID available for installation.'); return; }
+  if (!payload) { showToast('No extension ID available for installation.'); return; }
 
-  const btn  = document.getElementById('c1-install-btn');
-  const spin = document.getElementById('c1-install-spinner');
-  const stat = document.getElementById('c1-install-status');
-  btn.disabled = true;
-  spin.style.display = 'flex';
-  stat.textContent = 'Downloading from Chrome Web Store...';
+  const btn   = document.getElementById('c1-install-btn');
+  const isMal = btn.classList.contains('is-danger');
+  c1InstallUi('busy', 'Downloading from Chrome Web Store...');
 
   try {
-    const isMal = btn.textContent.includes('MALICIOUS');
     const res = await fetch(API + '/session/install_extension', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ url_or_id: payload, force: isMal }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
 
-    if (data.status === 'blocked') {
-      alert('Installation blocked: ' + data.reason +
-            '\n\nClick "Force Install" if you want to load it anyway for research.');
-      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Force Install (MALICIOUS)';
-      btn.style.background = 'var(--danger)';
-    } else if (data.status === 'installed') {
-      stat.textContent = 'Registered! Extension active on next session start.';
-      showToast('Extension registered — restart session to activate');
-      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Registered';
-      btn.style.background = 'var(--safe)';
+    if (!res.ok) {
+      showToast('Install failed: ' + (data.detail || ('the backend answered ' + res.status)), 7000);
+      c1InstallUi('idle');
+    } else if (data.status === 'installing') {
+      // Stays busy. c1HandleInstallMsg / c1InstallFailed end it; the timer only covers a
+      // WebSocket that never delivers either.
+      c1InstallUi('busy', 'Restarting the browser with the extension...');
+      _c1InstallTimer = setTimeout(() => {
+        c1InstallUi('idle');
+        showToast('The browser session did not confirm the install. Check that it is running, then try again.', 8000);
+      }, 90000);
+    } else if (data.status === 'blocked') {
+      showToast('Installation blocked: ' + data.reason +
+                ' Use "Force Install" to load it anyway for research.', 7000);
+      c1InstallUi('idle');
     } else if (data.status === 'ready') {
-      showToast('Extension ready — start the browser session to load it');
-      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Start session to load';
+      showToast('Extension downloaded. Start the browser session to load it.', 6000);
+      c1InstallUi('idle');
     } else {
-      alert('Unexpected response: ' + JSON.stringify(data));
+      showToast('Unexpected response: ' + JSON.stringify(data), 6000);
+      c1InstallUi('idle');
     }
   } catch (err) {
-    alert('Install failed: ' + err.message);
-    btn.disabled = false;
-  } finally {
-    spin.style.display = 'none';
+    showToast('Install failed: ' + err.message, 6000);
+    c1InstallUi('idle');
   }
 }
 
-// ── WebSocket: extension installed notification ───────────────────────────
+// ── WebSocket: install outcome ────────────────────────────────────────────
 function c1HandleInstallMsg(msg) {
   if (msg.type === 'c1_extension_installed') {
-    showToast('Extension loaded into browser: ' + msg.extension_id);
+    const id = String(msg.extension_id || '').toLowerCase();
+    if (id) _c1Installed.add(id);
+    const bar = document.getElementById('c1-install-bar');
+    if (bar && id && String(bar.dataset.extId || '').toLowerCase() === id) c1InstallUi('done');
+    showToast('Extension loaded into the browser: ' + msg.extension_id);
   }
 }
 
-// ── History list ──────────────────────────────────────────────────────────
-function c1AddHistory(data) {
-  const card = document.getElementById('c1-history-card');
-  const list = document.getElementById('c1-history-list');
-  card.style.display = 'block';
-  const score   = Math.round(data.score * 100);
-  const verdict = (data.verdict || '').toUpperCase();
-  // Prefer the display name a blocklist match resolved (from the manifest or
-  // its _locales bundle) over the Web Store URL slug — "FastSave" reads better
-  // in the history list than "fastsave".
-  const name    = (data.filename
-    || data.static?.blocklist_details?.extension_name
-    || (data.webstore_url
-        ? data.webstore_url.replace(/.*detail\//,'').split('/')[0]
-        : (data.extension_id || ('score/' + score)))).slice(0, 45);
-  const src     = {'upload':'CRX','webstore':'Store','webstore_intercept':'Live',
-                   'webstore_auto':'Auto','manual':'Manual',
-                   'simulated_click':'Sim'}[data.source] || data.source || '?';
-  const ts      = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : '';
-  const summary = data.report?.summary ? data.report.summary.slice(0, 90) + '…' : '';
+// The browser could not load the extension. The gate card gets its Approve button back
+// (the backend kept the approval) and the report gets its Install button back.
+function c1InstallFailed(msg) {
+  const id = String(msg.ext_id || '').toLowerCase();
+  showToast('Install failed: ' + String(msg.error || 'the browser gave no reason'), 8000);
+  if (msg.source === 'report') {
+    const bar = document.getElementById('c1-install-bar');
+    if (bar && String(bar.dataset.extId || '').toLowerCase() === id) c1InstallUi('idle');
+    return;
+  }
+  clearTimeout(_c1ApproveTimers[_c1Id(msg.ext_id)]);
+  const btn = document.getElementById('c1-lc-approve-' + _c1Id(msg.ext_id));
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.innerHTML = _C1_APPROVE_ICON + 'Retry install';
+  }
+}
+
+// ── History + session statistics ──────────────────────────────────────────
+// Every analysis is filed as a CASE: a row in the ledger and a point in the
+// session posture. The backend persists each one (SQLite), so the dashboard
+// restores them on start instead of beginning every session empty.
+const _c1Hist     = [];            // chronological, oldest first: { score, kind, name }
+const _c1HistKeys = new Set();     // stops a live result duplicating its restored copy
+let   _c1Filter   = 'all';         // all | mal | sus | safe
+let   _c1Query    = '';
+const _C1_SRC_LABEL = {
+  upload: 'CRX', webstore: 'Store', webstore_intercept: 'Live', webstore_auto: 'Auto',
+  webstore_install: 'Install', manual: 'Manual', simulated_click: 'Sim',
+};
+const _C1_KIND_WORD = { mal: 'Malicious', sus: 'Suspicious', safe: 'Safe' };
+// Built once: Date.toLocaleTimeString() constructs a formatter on every call,
+// which adds up when a restored ledger is dozens of rows.
+const _c1TimeFmt = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const _c1DateFmt = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric' });
+
+function c1HistKey(d) {
+  return (d.timestamp || '') + '|' + (d.extension_id || d.ext_id || '') + '|' + (d.filename || '');
+}
+
+function c1CaseName(data) {
+  const ident = data.identity || (data.report || {}).identity || {};
+  const bl    = (data.static || {}).blocklist_details || {};
+  const extId = data.extension_id || data.ext_id || ident.ext_id || '';
+  const slug  = data.webstore_url
+    ? data.webstore_url.replace(/.*detail\//, '').split('/')[0].split('?')[0] : '';
+  // Prefer the human name the manifest gave over a URL slug or a bare ID.
+  return ident.name || data.filename || bl.extension_name || slug || extId || 'Unnamed extension';
+}
+
+// A score ring. The arc is the threat score out of 100, the colour is the verdict.
+function c1RingHtml(score, kind, big) {
+  const s = Math.max(0, Math.min(100, Math.round(Number(score) || 0)));
+  return '<div class="c1-rs k-' + kind + (big ? ' lg' : '') + '" role="img" aria-label="Threat score ' + s + ' out of 100">' +
+    '<svg viewBox="0 0 48 48" aria-hidden="true"><circle class="t" cx="24" cy="24" r="21"/>' +
+    (s ? '<circle class="a" cx="24" cy="24" r="21" pathLength="100" stroke-dasharray="' + s + ' 100"/>' : '') +
+    '</svg><b>' + s + '</b>' + (big ? '<i>risk</i>' : '') + '</div>';
+}
+
+// One case file. Everything on it is a measured fact about that analysis.
+function c1HistRowEl(data, isNew) {
+  const score = Math.round((data.score || 0) * 100);
+  const kind  = _c1VerdictKind(data.verdict);
+  const name  = c1CaseName(data);
+  const extId = data.extension_id || data.ext_id || (data.identity || {}).ext_id || '';
+  const src   = _C1_SRC_LABEL[data.source] || data.source || '?';
+  const when  = data.timestamp ? new Date(data.timestamp) : null;
+  const valid = when && !isNaN(when);
+
+  const perms = data.permissions || (data.report || {}).permissions || [];
+  const hiRisk = perms.filter(p => p.severity === 'CRITICAL' || p.severity === 'HIGH').length;
+  const obs   = (data.report || {}).observed || (data.dynamic || {}).observed || {};
+  const hosts = (obs.counts || {}).hosts || 0;
+  const ran   = !!(data.dynamic || {}).executed;
+  const fromBlocklist = data.score_source === 'blocklist' || !!(data.static || {}).hash_match;
+
+  const tags = [];
+  if (fromBlocklist) tags.push('<span class="c1-tag bl">blocklist</span>');
+  if (hiRisk)        tags.push('<span class="c1-tag hot">' + hiRisk + ' high risk</span>');
+  if (perms.length)  tags.push('<span class="c1-tag">' + perms.length + ' permission' + (perms.length === 1 ? '' : 's') + '</span>');
+  tags.push('<span class="c1-tag">' + (ran ? 'sandbox' + (hosts ? ' · ' + hosts + ' host' + (hosts === 1 ? '' : 's') : '') : 'static only') + '</span>');
 
   const row = document.createElement('div');
-  row.className = 'c1-hist-row';
-  row.title = summary;
-  row.innerHTML =
-    `<div class="c1-hist-badge ${c1BadgeClass(score)}">${score}</div>` +
-    `<div style="flex:1;min-width:0">` +
-      `<div class="c1-hist-name">${name}</div>` +
-      `<div style="font-size:9px;color:var(--t3);margin-top:1px">${ts}</div>` +
-    `</div>` +
-    `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">` +
-      `<div class="c1-hist-src">${src}</div>` +
-      `<div style="font-size:9px;font-weight:700;color:${c1Color(score)}">${verdict}</div>` +
-    `</div>` +
-    `<span class="c1-hist-open" title="Open report">` +
-      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
-      `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
-      `<polyline points="9 18 15 12 9 6"/></svg></span>`;
-  // Opens the report as an overlay rather than rendering it inline, so the
-  // input controls and this list stay where the operator left them.
+  row.className = 'c1-case k-' + kind + (isNew ? ' is-new' : '');
+  row.dataset.q = (name + ' ' + extId).toLowerCase();
   row.tabIndex = 0;
   row.setAttribute('role', 'button');
+  row.title = (data.report && data.report.summary)
+    ? _c1Prose(String(data.report.summary)).slice(0, 140) : 'Open report';
+  row.innerHTML =
+    c1RingHtml(score, kind) +
+    '<div class="c1-case-main"><div class="c1-hname">' + _c1Esc(name) + '</div>' +
+      '<div class="c1-hid">' + (extId ? _c1Esc(extId) : 'no extension ID') + '</div>' +
+      '<div class="c1-tags">' + tags.join('') + '</div></div>' +
+    '<span class="c1-vb k-' + kind + '">' + _C1_KIND_WORD[kind] + '</span>' +
+    '<div class="c1-case-when"><b>' + (valid ? _c1TimeFmt.format(when) : 'Unknown') + '</b>' +
+      '<span>' + (valid ? _c1DateFmt.format(when) + ' · ' : '') + _c1Esc(src) + '</span></div>' +
+    '<span class="c1-hgo" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" ' +
+      'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+      'stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>';
+  // Opens the report as an overlay rather than rendering it inline, so the section
+  // the operator was in stays exactly as they left it.
   row.onclick = () => c1OpenReport(data);
   row.onkeydown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); c1OpenReport(data); }
   };
-  list.insertBefore(row, list.firstChild);
-  // No cap. The list previously dropped everything past the eighth row, which
-  // silently discarded the earliest analyses of a session — the ones an
-  // operator is most likely to scroll back for. The container scrolls instead.
-  const count = document.getElementById('c1-hist-count');
-  if (count) count.textContent = list.children.length;
+  return row;
+}
+
+function c1HistChrome() {
+  const n = _c1Hist.length;
+  const badge = document.getElementById('c1-hist-count');
+  if (badge) { badge.textContent = n; badge.classList.toggle('on', n > 0); }
+  const empty = document.getElementById('c1-history-empty');
+  const card  = document.getElementById('c1-history-card');
+  if (empty) empty.style.display = n ? 'none' : '';
+  if (card)  card.style.display  = n ? ''     : 'none';
+}
+
+function c1AddHistory(data) {
+  const key = c1HistKey(data);
+  if (_c1HistKeys.has(key)) return;
+  const list = document.getElementById('c1-history-list');
+  if (!list) return;
+  _c1HistKeys.add(key);
+  _c1Hist.push({ score: Math.round((data.score || 0) * 100), kind: _c1VerdictKind(data.verdict), name: c1CaseName(data) });
+  // Newest first, with a brief highlight so the eye finds the case that just landed.
+  list.insertBefore(c1HistRowEl(data, true), list.firstChild);
+  c1HistChrome();
+  c1ScheduleStats();
+  if (_c1Query || _c1Filter !== 'all') c1ApplyFilters();
+}
+
+// Restores the persisted analyses once, when the backend first comes online.
+// Rows are built into a fragment and attached in a single operation.
+async function c1LoadHistory() {
+  const list = document.getElementById('c1-history-list');
+  if (!list) return;
+  try {
+    const res = await fetch(API + '/extension/history?limit=50');
+    if (!res.ok) return;
+    const rows = await res.json();                    // newest first
+    if (!Array.isArray(rows)) return;
+    const frag = document.createDocumentFragment();
+    const older = [];
+    rows.forEach(r => {
+      // Persisted rows carry ext_id; live results carry extension_id. The report
+      // code reads the latter.
+      r.extension_id = r.extension_id || r.ext_id || '';
+      const key = c1HistKey(r);
+      if (_c1HistKeys.has(key)) return;
+      _c1HistKeys.add(key);
+      frag.appendChild(c1HistRowEl(r, false));
+      older.unshift({ score: Math.round((r.score || 0) * 100), kind: _c1VerdictKind(r.verdict), name: c1CaseName(r) });
+    });
+    if (!older.length) return;
+    list.appendChild(frag);                           // restored cases are older than this session's
+    _c1Hist.unshift.apply(_c1Hist, older);
+    c1HistChrome();
+    c1ScheduleStats();
+    if (_c1Query || _c1Filter !== 'all') c1ApplyFilters();
+  } catch (_) { /* backend offline: the ledger simply stays empty */ }
+}
+
+// ── Ledger filter + search ──────────────────────────────────────────────────
+// The verdict filter is pure CSS (data-f on the list), so changing it costs one
+// attribute write however many cases there are. Only the text search touches rows.
+function c1SetFilter(f) {
+  _c1Filter = f;
+  const list = document.getElementById('c1-history-list');
+  if (list) list.dataset.f = f;
+  document.querySelectorAll('#c1-pane-history .c1-chip').forEach(b =>
+    b.classList.toggle('active', b.dataset.f === f));
+  c1ApplyFilters();
+}
+
+let _c1SearchTimer = 0;
+function c1SearchCases(v) {
+  _c1Query = String(v || '').trim().toLowerCase();
+  clearTimeout(_c1SearchTimer);
+  _c1SearchTimer = setTimeout(c1ApplyFilters, 90);     // typing should not re-scan per keystroke
+}
+
+function c1ApplyFilters() {
+  const rows = document.querySelectorAll('#c1-history-list .c1-case');
+  let shown = 0;
+  rows.forEach(r => {
+    const hit = !_c1Query || (r.dataset.q || '').indexOf(_c1Query) !== -1;
+    if (r.hidden === hit) r.hidden = !hit;
+    if (hit && (_c1Filter === 'all' || r.classList.contains('k-' + _c1Filter))) shown++;
+  });
+  const none = document.getElementById('c1-hist-none');
+  if (none) none.style.display = (rows.length && !shown) ? '' : 'none';
+}
+
+// ── Session posture, threat skyline, gate facts ─────────────────────────────
+// Re-rendered only when something actually changed, and every change in one frame
+// collapses into a single pass.
+let _c1StatSig = '';
+function c1SetText(id, v) {
+  const el = document.getElementById(id);
+  if (el && el.textContent !== String(v)) el.textContent = v;
+}
+
+function c1RenderStats() {
+  const n = _c1Hist.length;
+  let mal = 0, sus = 0, safe = 0;
+  for (let i = 0; i < n; i++) {
+    const k = _c1Hist[i].kind;
+    if (k === 'mal') mal++; else if (k === 'sus') sus++; else safe++;
+  }
+  const last = n ? _c1Hist[n - 1] : null;
+  const sig = [n, mal, sus, safe, last ? last.name + last.score : ''].join('|');
+  if (sig === _c1StatSig) return;
+  _c1StatSig = sig;
+
+  c1SetText('c1-n-mal', mal); c1SetText('c1-n-sus', sus); c1SetText('c1-n-safe', safe);
+  c1SetText('c1-pos-total', n);
+  c1SetText('c1-fc-all', n); c1SetText('c1-fc-mal', mal); c1SetText('c1-fc-sus', sus); c1SetText('c1-fc-safe', safe);
+  c1SetText('c1-sky-n', n);
+  // Segment widths are the real counts, as flex-grow: no layout maths, no animation.
+  [['c1-r-mal', mal], ['c1-r-sus', sus], ['c1-r-safe', safe]].forEach(p => {
+    const el = document.getElementById(p[0]);
+    if (el) { el.style.flexGrow = p[1]; el.style.display = p[1] ? '' : 'none'; }
+  });
+
+  // Threat skyline: one bar per analysis, oldest to newest, the height IS the score.
+  const tape = document.getElementById('c1-tape');
+  if (tape) {
+    tape.innerHTML = _c1Hist.slice(-60).map(h =>
+      '<i class="k-' + h.kind + '" style="height:' + (4 + Math.round(h.score * 0.24)) + 'px" title="' +
+      _c1Esc(h.name + ' · ' + h.score) + '"></i>').join('');
+  }
+  c1RenderPipeline();
+}
+
+let _c1StatsRaf = 0;
+function c1ScheduleStats() {
+  if (_c1StatsRaf) return;
+  _c1StatsRaf = requestAnimationFrame(() => { _c1StatsRaf = 0; c1RenderStats(); });
+}
+
+// ── Install gate facts + detection pipeline (Live tab) ──────────────────────
+// Only two things have a standing status the dashboard can read: the blocklist
+// (how many IDs are loaded) and the sandbox (what contains it). Everything else on
+// the pipeline reflects the most recent intercept, taken from the WebSocket
+// messages and the finished result, so no stage is marked done on a guess.
+let _c1Cov = null;          // last /extension/blocklist/stats payload
+let _c1IsoInfo = null;      // { vmAvailable, short } from /extension/sandbox/isolation
+
+// 6656 -> "around 7K". The exact size changes with every sheet update and is not
+// what this panel is for; the Blocklist tab keeps the precise coverage figures.
+function c1ApproxCount(n) {
+  n = Number(n) || 0;
+  if (n >= 1000) return 'around ' + Math.max(1, Math.round(n / 1000)) + 'K';
+  if (n >= 100)  return 'around ' + Math.round(n / 50) * 50;
+  return 'fewer than 100';
+}
+
+const _C1_PIPE_ICO = (p) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
+const _C1_PIPE = [
+  { name: 'Intercept',       note: 'The Add to Chrome click is held before anything installs.',
+    ico: _C1_PIPE_ICO('<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/>') },
+  { name: 'Blocklist',       note: 'A known bad extension ID gets an instant verdict.',
+    ico: _C1_PIPE_ICO('<circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/>') },
+  { name: 'Static analysis', note: '33 features scored by XGBoost and an Isolation Forest.',
+    ico: _C1_PIPE_ICO('<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>') },
+  { name: 'Sandbox',         note: 'Runs the extension when the static score is 50 or more.',
+    ico: _C1_PIPE_ICO('<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>') },
+  { name: 'Decision',        note: 'Only a Safe verdict can be approved. The rest stay held.',
+    ico: _C1_PIPE_ICO('<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><polyline points="9 12 11 14 15 10"/>') },
+];
+
+// How far the latest intercept has got. at: 0 none yet, 1 blocklist and static
+// analysis running, 2 sandbox running, 3 finished.
+let _c1Pipe = { at: 0, kind: '', hit: false, ml: null, sbx: '', err: false };
+
+function c1PipeSet(p) { Object.assign(_c1Pipe, p); c1RenderPipeline(); }
+
+// The finished result, read the same way the live card reads it.
+function c1PipeResult(state, r) {
+  if (state === 'error' || !r) return { err: true };
+  const hit = r.score_source === 'blocklist';
+  const modelsRan = r.static?.measured_static_score !== undefined;
+  return {
+    at: 3, err: false, hit, kind: _c1VerdictKind(r.verdict),
+    ml: (!hit || modelsRan) ? Math.round((r.static?.ml_score || 0) * 100) : null,
+    sbx: r.dynamic?.executed ? 'run' : 'skip',
+  };
+}
+
+function c1RenderPipeline() {
+  const blText = _c1Cov ? c1ApproxCount(_c1Cov.total) : null;
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  const bl = document.getElementById('c1-g-bl');
+  if (bl) bl.textContent = blText ? cap(blText) + ' IDs' : 'Loading…';
+  const iso = document.getElementById('c1-g-iso');
+  if (iso) iso.textContent = _c1IsoInfo ? _c1IsoInfo.short : 'Loading…';
+  const n = _c1Hist.length, last = n ? _c1Hist[n - 1] : null;
+  c1SetText('c1-g-n', n + ' analysed');
+  const lastEl = document.getElementById('c1-g-last');
+  if (lastEl) {
+    lastEl.innerHTML = last
+      ? '<span style="color:var(--' + { mal: 'danger', sus: 'warn', safe: 'safe' }[last.kind] + ')">' +
+        _C1_KIND_WORD[last.kind] + '</span> <small>' + _c1Esc(last.name) + '</small>'
+      : 'None yet';
+  }
+
+  const host = document.getElementById('c1-pipeline');
+  if (!host) return;
+  // Built once. After that only classes and text change, so the entrance motion
+  // is not replayed by every update.
+  if (!host.firstChild) {
+    host.innerHTML = '<i class="c1-pipe-line" aria-hidden="true"><b></b></i>' + _C1_PIPE.map((s, i) =>
+      '<div class="c1-pstep" style="--i:' + i + '"><div class="c1-pnode">' + s.ico + '</div>' +
+      '<div class="c1-pname">' + s.name + '</div><div class="c1-pnote">' + s.note + '</div>' +
+      '<span class="c1-pchip"></span></div>').join('');
+  }
+
+  const P = _c1Pipe;
+  let st;
+  if (P.at === 0)      st = ['armed', 'armed', 'armed', 'armed', 'armed'];
+  else if (P.at === 1) st = ['done', P.hit ? 'hit' : 'now', 'now', 'todo', 'todo'];
+  else if (P.at === 2) st = ['done', P.hit ? 'hit' : 'done', 'done', 'now', 'todo'];
+  else                 st = ['done', P.hit ? 'hit' : 'done', 'done', P.sbx === 'skip' ? 'skip' : 'done', 'done'];
+  if (P.err) st = st.map(s => s === 'now' ? 'err' : s);
+
+  const word = P.kind ? _C1_KIND_WORD[P.kind] : '';
+  const vmOk = _c1IsoInfo && _c1IsoInfo.vmAvailable;
+  const chips = [
+    ['', ''],
+    P.at === 0 ? (blText ? [blText + ' IDs', 'on'] : ['Loading', ''])
+      : P.hit ? ['Match found', 'bad'] : P.at === 1 ? ['Checking', 'warn'] : ['No match', 'on'],
+    P.at === 0 ? ['2 models', '']
+      : P.at === 1 ? ['Scoring', 'warn'] : P.ml != null ? ['ML ' + P.ml + '%', ''] : ['2 models', ''],
+    P.at === 0 ? (_c1IsoInfo ? [_c1IsoInfo.short, vmOk ? 'on' : 'warn'] : ['Loading', ''])
+      : P.at === 1 ? ['Waiting', ''] : P.at === 2 ? ['Running', 'warn']
+      : P.sbx === 'skip' ? ['Not run', ''] : ['Observed', 'on'],
+    P.at === 3 && word ? [word, P.kind === 'mal' ? 'bad' : P.kind === 'sus' ? 'warn' : 'on'] : ['', ''],
+  ];
+  if (P.err) st.forEach((s, i) => { if (s === 'err') chips[i] = ['Failed', 'bad']; });
+
+  const steps = host.children;                  // [0] is the connecting line
+  for (let i = 0; i < 5; i++) {
+    const el = steps[i + 1];
+    if (!el) continue;
+    const cls = 'c1-pstep is-' + st[i] + (i === 4 && P.at === 3 && P.kind ? ' k-' + P.kind : '');
+    if (el.className !== cls) el.className = cls;
+    const chip = el.lastChild;
+    const cc = 'c1-pchip' + (chips[i][1] ? ' ' + chips[i][1] : '');
+    if (chip.className !== cc) chip.className = cc;
+    if (chip.textContent !== chips[i][0]) chip.textContent = chips[i][0];
+  }
+  const pf = P.at === 0 || P.at === 3 ? 1 : P.at === 1 ? 0.25 : 0.75;
+  host.style.setProperty('--pf', pf);
+
+  const status = document.getElementById('c1-pipe-status');
+  if (status) {
+    const s = P.err ? ['err', 'Analysis failed']
+      : P.at === 0 ? ['idle', 'Waiting for an install']
+      : P.at === 1 ? ['run', 'Checking the latest install']
+      : P.at === 2 ? ['run', 'Sandbox running']
+      : [P.kind, 'Last case: ' + word];
+    if (status.dataset.s !== s[0]) status.dataset.s = s[0];
+    const label = status.lastChild;
+    if (label.textContent !== s[1]) label.textContent = s[1];
+  }
 }
 
 // ── CRX file upload (drag-and-drop) ──────────────────────────────────────
@@ -9993,7 +10920,7 @@ function c1OnFileSelect(e) {
 
 function c1SetFile(f) {
   if (!f.name.toLowerCase().endsWith('.crx')) {
-    alert('Please select a .crx file.'); return;
+    showToast('Please select a .crx file.'); return;
   }
   _c1UploadFile = f;
   document.getElementById('c1-fname').textContent = f.name + '  (' + (f.size/1024).toFixed(1) + ' KB)';
@@ -10004,9 +10931,9 @@ function c1SetFile(f) {
 async function c1UploadAnalyze() {
   if (!_c1UploadFile) return;
   const btn  = document.getElementById('c1-upload-btn');
-  const spin = document.getElementById('c1-spinner');
   btn.disabled = true;
-  spin.style.display = 'flex';
+  const done = _c1Busy(document.getElementById('c1-spinner'),
+                       document.getElementById('c1-spin-label'), 'Analyzing...');
   const fd = new FormData();
   fd.append('file', _c1UploadFile);
   try {
@@ -10016,20 +10943,22 @@ async function c1UploadAnalyze() {
     c1OpenReport(data);
     c1AddHistory(data);
   } catch (err) {
-    alert('Upload failed: ' + err.message);
+    showToast('Upload failed: ' + err.message, 6000);
   } finally {
     btn.disabled = (_c1UploadFile === null);
-    spin.style.display = 'none';
+    done();
   }
 }
 
 // ── Web Store URL lookup ──────────────────────────────────────────────────
 async function c1WebstoreAnalyze() {
-  const raw = document.getElementById('c1-ws-input').value.trim();
-  if (!raw) { alert('Enter a Chrome Web Store URL or extension ID.'); return; }
+  const input = document.getElementById('c1-ws-input');
+  const raw = input.value.trim();
+  if (!raw) { showToast('Enter a Chrome Web Store URL or extension ID.'); input.focus(); return; }
   const btn  = document.getElementById('c1-ws-btn');
-  const spin = document.getElementById('c1-ws-spinner');
-  btn.disabled = true; spin.style.display = 'flex';
+  btn.disabled = true;
+  const done = _c1Busy(document.getElementById('c1-ws-spinner'),
+                       document.getElementById('c1-ws-label'), 'Downloading from Chrome Web Store...');
   try {
     const res = await fetch(API + '/extension/webstore', {
       method: 'POST',
@@ -10041,9 +10970,10 @@ async function c1WebstoreAnalyze() {
     c1OpenReport(data);
     c1AddHistory(data);
   } catch (err) {
-    alert('Lookup failed: ' + err.message);
+    showToast('Lookup failed: ' + err.message, 6000);
   } finally {
-    btn.disabled = false; spin.style.display = 'none';
+    btn.disabled = false;
+    done();
   }
 }
 
@@ -10065,7 +10995,9 @@ const C1_MAL_SOURCE = `(function(){var _k='';
 })();`;
 
 function c1FillMalicious() {
-  c1Tab('manual', document.querySelectorAll('.c1-tab')[2]);
+  // By id. This used to pass querySelectorAll('.c1-tab')[2], which is the Web
+  // Store button, so the Manual pane opened with the wrong tab highlighted.
+  c1Tab('manual');
   document.getElementById('c1-manifest').value = C1_MAL_MANIFEST;
   document.getElementById('c1-source').value   = C1_MAL_SOURCE;
 }
@@ -10076,10 +11008,13 @@ function c1ClearManual() {
 }
 
 async function c1Analyze() {
-  const manifest = document.getElementById('c1-manifest').value.trim();
-  if (!manifest) { alert('Paste manifest.json first.'); return; }
+  const manifestEl = document.getElementById('c1-manifest');
+  const manifest = manifestEl.value.trim();
+  if (!manifest) { showToast('Paste manifest.json first.'); manifestEl.focus(); return; }
   const btn = document.getElementById('c1-submit-btn');
   btn.disabled = true;
+  const done = _c1Busy(document.getElementById('c1-manual-spinner'),
+                       document.getElementById('c1-manual-label'), 'Analyzing...');
   try {
     const res = await fetch(API + '/extension/analyze', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -10095,9 +11030,10 @@ async function c1Analyze() {
     c1OpenReport(data);
     c1AddHistory(data);
   } catch (err) {
-    alert('Analysis failed: ' + err.message);
+    showToast('Analysis failed: ' + err.message, 6000);
   } finally {
     btn.disabled = false;
+    done();
   }
 }
 
@@ -10109,12 +11045,16 @@ function c1HandleWsMsg(msg) {
 
     if (state === 'analyzing') {
       c1LiveCreateCard(extId, msg.url || '');
+      c1PipeSet({ at: 1, kind: '', hit: false, ml: null, sbx: '', err: false });
     } else if (state === 'sandbox_running') {
       c1LiveSetSandboxRunning(extId, msg.static_score);
+      c1PipeSet({ at: 2 });
     } else if (state === 'blocklist_evidence') {
       c1LiveSetBlocklistEvidence(extId, msg.gaps || []);
+      c1PipeSet({ at: 1, hit: true });
     } else {
       c1LiveUpdateCard(extId, state, msg.result, msg.error);
+      c1PipeSet(c1PipeResult(state, msg.result));
     }
 
     // Switch to C1 → Live tab, show badge
@@ -10124,10 +11064,16 @@ function c1HandleWsMsg(msg) {
     c1LiveBadge(true);
 
   } else if (msg.type === 'c1_install_approved') {
+    _c1Installed.add(String(msg.ext_id || '').toLowerCase());
+    clearTimeout(_c1ApproveTimers[_c1Id(msg.ext_id)]);
     c1LiveMarkDone(msg.ext_id, 'installed');
-    showToast('Browser restarted with extension loaded — returning to extension page');
+    showToast('Browser restarted with the extension loaded. Returning to the extension page.');
+
+  } else if (msg.type === 'c1_install_error') {
+    c1InstallFailed(msg);
 
   } else if (msg.type === 'c1_install_blocked') {
+    clearTimeout(_c1ApproveTimers[_c1Id(msg.ext_id)]);
     c1LiveMarkDone(msg.ext_id, 'blocked');
     showToast('Extension blocked by WebSentinel');
 
@@ -10145,36 +11091,43 @@ function c1HandleWsMsg(msg) {
 // ── Live tab card management ───────────────────────────────────────────────
 function c1LiveBadge(show) {
   const b = document.getElementById('c1-live-badge');
+  if (!b) return;
   const count = document.querySelectorAll('.c1-live-card:not(.done)').length;
-  if (show && count > 0) { b.style.display = 'inline'; b.textContent = count; }
-  else { b.style.display = 'none'; }
+  if (show && count > 0) { b.textContent = count; b.classList.add('on'); }
+  else { b.classList.remove('on'); }
 }
 
 function c1LiveCreateCard(extId, url) {
-  document.getElementById('c1-live-empty').style.display = 'none';
-  if (document.getElementById('c1-live-' + extId)) return; // already exists
+  const id = _c1Id(extId);
+  const empty = document.getElementById('c1-live-empty');
+  if (empty) empty.style.display = 'none';
+  // A second Add to Chrome click on this extension starts a new analysis, so it gets a
+  // new card. Reusing the old one kept its old actions (no Approve after a Block).
+  const stale = document.getElementById('c1-live-' + id);
+  if (stale) stale.remove();
 
   const card = document.createElement('div');
-  card.className = 'c1-live-card';
-  card.id = 'c1-live-' + extId;
+  card.className = 'c1-live-card c1-brk';
+  card.id = 'c1-live-' + id;
   card.innerHTML =
     '<div class="c1-lc-hdr">' +
-      '<div class="c1-lc-dot analyzing" id="c1-lc-dot-' + extId + '"></div>' +
+      '<div class="c1-lc-dot" id="c1-lc-dot-' + id + '"></div>' +
       '<div class="c1-lc-info">' +
         '<div class="c1-lc-title">Extension Install Intercepted</div>' +
-        '<div class="c1-lc-extid">' + extId + '</div>' +
+        '<div class="c1-lc-extid">' + _c1Esc(extId) + '</div>' +
       '</div>' +
-      '<button class="c1-lc-dismiss" title="Dismiss" onclick="c1LiveDismiss(\'' + extId + '\')">&#10005;</button>' +
+      '<button class="c1-lc-dismiss" title="Dismiss" aria-label="Dismiss" onclick="c1LiveDismiss(\'' + id + '\')">&#10005;</button>' +
     '</div>' +
-    '<div id="c1-lc-body-' + extId + '" style="font-size:11px;color:var(--t2);display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px">' +
-      '<div class="c1-ring" style="width:13px;height:13px;flex-shrink:0"></div>Analyzing extension…' +
+    '<div class="c1-lc-body" id="c1-lc-body-' + id + '">' +
+      '<div class="c1-ring" style="width:13px;height:13px"></div>Analyzing extension…' +
     '</div>' +
-    '<div class="c1-lc-actions" id="c1-lc-actions-' + extId + '">' +
-      '<button class="c1-btn ghost" style="padding:5px 12px;font-size:11px;display:inline-flex;align-items:center;gap:5px" onclick="c1LiveBlock(\'' + extId + '\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Block</button>' +
-      '<button class="c1-btn primary" id="c1-lc-approve-' + extId + '" disabled style="padding:5px 12px;font-size:11px;opacity:.35;display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Analyzing…</button>' +
+    '<div class="c1-lc-actions" id="c1-lc-actions-' + id + '">' +
+      '<button class="c1-btn ghost" style="display:inline-flex;align-items:center;gap:5px" onclick="c1LiveBlock(\'' + id + '\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Block</button>' +
+      '<button class="c1-btn primary" id="c1-lc-approve-' + id + '" disabled style="opacity:.4;display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Analyzing…</button>' +
     '</div>';
 
-  document.getElementById('c1-live-cards').insertBefore(card, document.getElementById('c1-live-cards').firstChild);
+  const host = document.getElementById('c1-live-cards');
+  host.insertBefore(card, host.firstChild);
   c1LiveBadge(true);
 }
 
@@ -10186,45 +11139,45 @@ function c1SimulateClick() {
 }
 
 function c1LiveSetSandboxRunning(extId, staticScore) {
-  const body = document.getElementById('c1-lc-body-' + extId);
+  const body = document.getElementById('c1-lc-body-' + _c1Id(extId));
   if (!body) return;
   body.innerHTML =
-    '<div class="c1-ring" style="width:13px;height:13px;flex-shrink:0"></div>' +
-    'Static score: <b>' + Math.round(staticScore || 0) + '</b> — Running sandbox analysis…';
+    '<div class="c1-ring" style="width:13px;height:13px"></div>' +
+    'Static score: <b>' + Math.round(staticScore || 0) + '</b>. Running sandbox analysis…';
 }
 
 // The ID is on the blocklist but its row carries no evidence — C1 is running
 // the full ML + sandbox stack to establish what the sheet never recorded.
 function c1LiveSetBlocklistEvidence(extId, gaps) {
-  const body = document.getElementById('c1-lc-body-' + extId);
+  const body = document.getElementById('c1-lc-body-' + _c1Id(extId));
   if (!body) return;
   body.innerHTML =
-    '<div class="c1-ring" style="width:13px;height:13px;flex-shrink:0;align-self:flex-start;margin-top:2px"></div>' +
-    '<span><b style="color:var(--danger)">Blocklisted</b> — record is undocumented (' +
+    '<div class="c1-ring" style="width:13px;height:13px;align-self:flex-start;margin-top:2px"></div>' +
+    '<span><b style="color:var(--danger)">Blocklisted</b>. The record is undocumented (' +
     _c1Esc((gaps || []).join(', ') || 'no evidence on file') + ').<br>' +
     '<span style="color:var(--t3)">Running XGBoost, Isolation Forest and the dynamic sandbox to establish it…</span></span>';
 }
 
+const _C1_LIVE_ICON = {
+  malicious:  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+  error:      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+};
+const _C1_APPROVE_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>';
+
 function c1LiveUpdateCard(extId, state, result, error) {
-  const card = document.getElementById('c1-live-' + extId);
+  const id   = _c1Id(extId);
+  const card = document.getElementById('c1-live-' + id);
   if (!card) return;
 
-  const dot  = document.getElementById('c1-lc-dot-' + extId);
-  const body = document.getElementById('c1-lc-body-' + extId);
-  const btn  = document.getElementById('c1-lc-approve-' + extId);
+  const dot  = document.getElementById('c1-lc-dot-' + id);
+  const body = document.getElementById('c1-lc-body-' + id);
+  const btn  = document.getElementById('c1-lc-approve-' + id);
 
-  dot.className = 'c1-lc-dot ' + state;
-
-  const clrMap = { safe:'var(--safe)', suspicious:'var(--warn)', malicious:'var(--danger)', error:'var(--t3)' };
-  const iconMap = {
-    safe:       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-    suspicious: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-    malicious:  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
-    error:      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-  };
+  if (dot) dot.className = 'c1-lc-dot ' + state;
 
   if (state === 'error') {
-    body.innerHTML = '<span style="color:var(--danger)">' + (iconMap.error) + ' Analysis failed: ' + (error || 'Unknown') + '</span>';
+    body.innerHTML = '<span style="color:var(--danger)">' + _C1_LIVE_ICON.error +
+      ' Analysis failed: ' + _c1Esc(error || 'Unknown') + '</span>';
     card.classList.add('verdict-' + state);
     if (btn) { btn.textContent = 'Cannot approve'; btn.disabled = true; }
     return;
@@ -10233,7 +11186,6 @@ function c1LiveUpdateCard(extId, state, result, error) {
   if (result) {
     const score   = Math.round((result.score || 0) * 100);
     const verdict = (result.verdict || 'UNKNOWN').toUpperCase();
-    const clr     = clrMap[state] || 'var(--t2)';
     const isSafe  = result.verdict === 'SAFE';
 
     // A blocklist hit scores 100 by authority, not by model output — say so,
@@ -10244,33 +11196,36 @@ function c1LiveUpdateCard(extId, state, result, error) {
     // On the instant path they were not, so reporting the placeholder 1.0 as
     // "ML: 100%" would assert a classifier result that never happened.
     const modelsRan = result.static?.measured_static_score !== undefined;
+    const bit = (label, value) => '<span class="c1-lc-bit"><i>' + label + '</i>' + value + '</span>';
     const detailBits = [];
-    if (fromBlocklist) detailBits.push('<b style="color:var(--danger)">Blocklist authority</b>');
+    if (fromBlocklist) detailBits.push('<span class="c1-lc-bit hot">Blocklist authority</span>');
     if (!fromBlocklist || modelsRan)
-      detailBits.push('ML: ' + Math.round((result.static?.ml_score || 0) * 100) + '%');
+      detailBits.push(bit('ML', Math.round((result.static?.ml_score || 0) * 100) + '%'));
     if (result.dynamic?.executed)
-      detailBits.push('Sandbox: ' + Math.round((result.dynamic.score || 0) * 100));
+      detailBits.push(bit('Sandbox', Math.round((result.dynamic.score || 0) * 100)));
     if (fromBlocklist && !modelsRan)
-      detailBits.push('<span style="color:var(--t3)">record already documented — no further analysis needed</span>');
+      detailBits.push('<span class="c1-lc-note">The record is already documented, so no further analysis was needed.</span>');
     if (!fromBlocklist)
-      detailBits.push('Hash: ' + (result.static?.hash_match ? '<b style="color:var(--danger)">YES</b>' : 'No'));
+      detailBits.push(bit('Hash', result.static?.hash_match ? '<b style="color:var(--danger)">Match</b>' : 'No match'));
 
-    body.innerHTML =
-      '<div class="c1-lc-score" style="color:' + clr + '">' + score + '</div>' +
+    // One assignment for the whole card body. The previous version appended to
+    // innerHTML up to three times, re-parsing and re-laying-out the card each time.
+    let html =
+      c1RingHtml(score, _c1VerdictKind(verdict), true) +
       '<div>' +
-        '<div class="c1-lc-vlabel" style="color:' + clr + '">' + (iconMap[state] || '') + ' ' + verdict + '</div>' +
-        '<div class="c1-lc-detail">' + detailBits.join(' &nbsp;|&nbsp; ') + '</div>' +
+        '<span class="c1-vb md k-' + _c1VerdictKind(verdict) + '">' + _c1Esc(_c1Word(verdict)) + '</span>' +
+        '<div class="c1-lc-detail">' + detailBits.join('') + '</div>' +
       '</div>';
 
     if (result.flags && result.flags.length) {
-      const flagHtml = result.flags.slice(0,4).map(f =>
-        '<span class="c1-flag" style="font-size:9px">' + f + '</span>').join('');
-      body.innerHTML += '<div class="c1-flags" style="margin-top:6px">' + flagHtml + '</div>';
+      html += '<div class="c1-flags" style="margin-top:6px;width:100%">' +
+        result.flags.slice(0, 4).map(f =>
+          '<span class="c1-flag" style="font-size:9px">' + _c1Esc(f) + '</span>').join('') + '</div>';
     }
 
     if (result.static?.blocklist_details) {
       const bl = result.static.blocklist_details;
-      body.innerHTML +=
+      html +=
         '<div class="c1-bl-card" style="width:100%;margin-top:8px;padding:10px 12px;border-radius:8px">' +
           '<div class="c1-bl-hdr" style="margin-bottom:8px">' +
             '<span class="c1-bl-badge">Blocklist Match</span>' +
@@ -10282,15 +11237,17 @@ function c1LiveUpdateCard(extId, state, result, error) {
           c1BuildBlocklistEvidence(bl) +
         '</div>';
     }
+    body.innerHTML = html;
+    _c1CountUp(body.querySelector('.c1-rs b'), score, 850);
 
     card.classList.add('verdict-' + state);
 
     if (btn) {
       btn.disabled = !isSafe;
-      btn.style.opacity = isSafe ? '1' : '0.35';
+      btn.style.opacity = isSafe ? '1' : '0.4';
       btn.innerHTML = isSafe
-        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Approve Install'
-        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>' + verdict;
+        ? _C1_APPROVE_ICON + 'Approve Install'
+        : _C1_LIVE_ICON.malicious.replace('<svg ', '<svg style="margin-right:5px" ') + _c1Esc(verdict);
       if (isSafe) btn.onclick = () => c1LiveApprove(extId);
     }
 
@@ -10299,55 +11256,92 @@ function c1LiveUpdateCard(extId, state, result, error) {
 }
 
 function c1LiveMarkDone(extId, outcome) {
-  const card = document.getElementById('c1-live-' + extId);
+  const id   = _c1Id(extId);
+  const card = document.getElementById('c1-live-' + id);
   if (!card) return;
   card.classList.add('done');
-  const actions = document.getElementById('c1-lc-actions-' + extId);
+  const actions = document.getElementById('c1-lc-actions-' + id);
   if (actions) {
     actions.innerHTML =
-      '<span style="font-size:11px;color:' + (outcome==='installed' ? 'var(--safe)' : 'var(--t3)') + '">' +
+      '<span style="font-size:11px;color:' + (outcome === 'installed' ? 'var(--safe)' : 'var(--t3)') + '">' +
       (outcome === 'installed'
         ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>Browser restarted with extension loaded'
         : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Blocked') +
       '</span>' +
-      '<button class="c1-btn ghost" style="padding:4px 10px;font-size:10px;margin-left:auto" onclick="c1LiveDismiss(\'' + extId + '\')">Dismiss</button>';
+      '<button class="c1-btn ghost" style="padding:4px 10px;font-size:10px;margin-left:auto" onclick="c1LiveDismiss(\'' + id + '\')">Dismiss</button>';
   }
   c1LiveBadge(false);
 }
 
 function c1LiveDismiss(extId) {
-  const card = document.getElementById('c1-live-' + extId);
+  const card = document.getElementById('c1-live-' + _c1Id(extId));
   if (card) card.remove();
   if (!document.querySelector('.c1-live-card')) {
-    document.getElementById('c1-live-empty').style.display = 'block';
+    const empty = document.getElementById('c1-live-empty');
+    if (empty) empty.style.display = '';        // back to the stylesheet's flex layout
   }
   c1LiveBadge(false);
 }
 
+// Approve starts a browser restart that takes several seconds and is confirmed over the
+// WebSocket. If neither confirmation nor error arrives, hand the button back rather than
+// leaving the card on "Installing..." for good.
+const _c1ApproveTimers = {};
+
 async function c1LiveApprove(extId) {
-  const btn = document.getElementById('c1-lc-approve-' + extId);
-  if (btn) { btn.disabled = true; btn.textContent = 'Installing…'; }
+  const id  = _c1Id(extId);
+  const btn = document.getElementById('c1-lc-approve-' + id);
+  const again = () => {
+    const b = document.getElementById('c1-lc-approve-' + id);
+    if (b) { b.disabled = false; b.style.opacity = '1'; b.innerHTML = _C1_APPROVE_ICON + 'Approve Install'; }
+  };
+  if (btn) { btn.disabled = true; btn.textContent = 'Installing...'; }
   try {
     const res = await fetch(API + '/session/approve_install', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ ext_id: extId }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert('Cannot approve: ' + (data.detail || JSON.stringify(data)));
-      if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Approve Install'; }
+      showToast('Cannot approve: ' + (data.detail || ('the backend answered ' + res.status)), 6000);
+      again();
+      return;
     }
+    clearTimeout(_c1ApproveTimers[id]);
+    _c1ApproveTimers[id] = setTimeout(() => {
+      const card = document.getElementById('c1-live-' + id);
+      if (card && !card.classList.contains('done')) {
+        again();
+        showToast('The browser session did not confirm the install. Check that it is running, then try again.', 8000);
+      }
+    }, 90000);
   } catch (err) {
-    alert('Approve failed: ' + err.message);
-    if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Approve Install'; }
+    showToast('Approve failed: ' + err.message, 6000);
+    again();
   }
 }
 
+// Block answers for itself instead of waiting for the WebSocket to echo it back, and
+// says so when the backend does not take it. The backend remembers the block, so an
+// analysis still running for this extension cannot make it approvable when it finishes.
 async function c1LiveBlock(extId) {
-  await fetch(API + '/session/block_install', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ ext_id: extId }),
-  }).catch(() => {});
+  const id      = _c1Id(extId);
+  const actions = document.getElementById('c1-lc-actions-' + id);
+  const buttons = actions ? Array.from(actions.querySelectorAll('button')) : [];
+  const before  = buttons.map(b => b.disabled);
+  buttons.forEach(b => { b.disabled = true; });
+  try {
+    const res = await fetch(API + '/session/block_install', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ext_id: extId }),
+    });
+    if (!res.ok) throw new Error('the backend answered ' + res.status);
+    clearTimeout(_c1ApproveTimers[id]);
+    c1LiveMarkDone(extId, 'blocked');
+  } catch (err) {
+    showToast('Could not block: ' + err.message, 6000);
+    buttons.forEach((b, i) => { b.disabled = before[i]; });
+  }
 }
 
 // ── C1 sandbox isolation controls ──────────────────────────────────────────
@@ -10362,6 +11356,12 @@ async function c1LoadIsolation() {
     const vm = (d.backends || []).find(b => b.name === 'windows_sandbox') || {};
     const active = (d.backends || []).find(b => b.name === d.active) || {};
     const meta = _C1_ISOLATION[active.level] || _C1_ISOLATION.none;
+    _c1IsoInfo = {
+      vmAvailable: !!vm.available,
+      short: { ephemeral_vm: 'Disposable VM', container: 'Container',
+               browser_profile: 'Host process', none: 'No containment' }[active.level] || 'Unknown',
+    };
+    c1RenderPipeline();
 
     if (vm.available) {
       // Status dot carries the state at a glance; the label explains it.
@@ -10372,12 +11372,12 @@ async function c1LoadIsolation() {
       // an analyst should never assume containment the machine cannot give.
       status.innerHTML =
         '<span class="c1-iso-dot warn"></span>Active: ' +
-        '<b style="color:var(--warn)">' + _c1Esc(meta.label) + '</b> &mdash; ' +
-        'disposable VM unavailable. <span title="' + _c1Esc(vm.reason || '') + '" ' +
+        '<b style="color:var(--warn)">' + _c1Esc(meta.label) + '</b>. ' +
+        'Disposable VM unavailable. <span title="' + _c1Esc(vm.reason || '') + '" ' +
         'style="text-decoration:underline dotted;cursor:help">why?</span>';
     }
   } catch {
-    status.textContent = 'Backend offline — cannot read sandbox isolation status';
+    status.textContent = 'Backend offline. Cannot read the sandbox isolation status.';
   }
 }
 
@@ -10421,14 +11421,17 @@ async function c1LoadBlocklistStats() {
   try {
     const d = await (await fetch(API + '/extension/blocklist/stats')).json();
     const tiles = [
-      [d.total,      'Blocklisted IDs'],
-      [d.documented, 'Fully documented'],
-      [d.incomplete, 'With gaps'],
+      [Number(d.total || 0).toLocaleString(),      'Blocklisted IDs'],
+      [Number(d.documented || 0).toLocaleString(), 'Fully documented'],
+      [Number(d.incomplete || 0).toLocaleString(), 'With gaps'],
       [d.coverage_pct + '%', 'Coverage'],
     ];
     document.getElementById('c1-cov-tiles').innerHTML = tiles.map(t =>
       '<div class="c1-cov-tile"><b>' + _c1Esc(t[0]) + '</b><span>' + t[1] + '</span></div>').join('');
-    document.getElementById('c1-cov-bar-fill').style.width = (d.coverage_pct || 0) + '%';
+    document.getElementById('c1-cov-bar-fill').style.transform =
+      'scaleX(' + (Math.max(0, Math.min(100, d.coverage_pct || 0)) / 100) + ')';
+    _c1Cov = d;
+    c1RenderPipeline();
     document.getElementById('c1-cov-caption').textContent =
       d.documented + ' of ' + d.total + ' rows carry complete evidence · sheet: ' + (d.sheet_path || '');
     document.getElementById('c1-cov-fields').innerHTML =
@@ -10436,7 +11439,7 @@ async function c1LoadBlocklistStats() {
         '<div class="c1-cov-field"><span>' + (_C1_FIELD_LABELS[k] || k) + '</span><b>' +
         d.missing_by_field[k] + ' missing</b></div>').join('') || '<div class="c1-cov-field">Nothing missing</div>';
   } catch (err) {
-    document.getElementById('c1-cov-caption').textContent = 'Could not load blocklist coverage — is the backend running?';
+    document.getElementById('c1-cov-caption').textContent = 'Could not load blocklist coverage. Is the backend running?';
   }
 }
 
@@ -10489,7 +11492,7 @@ async function c1BlocklistBackfill() {
 async function c1BlocklistReload() {
   try {
     const d = await (await fetch(API + '/extension/blocklist/reload', { method:'POST' })).json();
-    c1CovLog('ok', 'Sheet reloaded — ' + d.documented + '/' + d.total + ' rows documented (' + d.coverage_pct + '%)');
+    c1CovLog('ok', 'Sheet reloaded: ' + d.documented + '/' + d.total + ' rows documented (' + d.coverage_pct + '%)');
     c1LoadBlocklistStats();
   } catch (err) {
     showToast('Reload failed: ' + err.message);
@@ -10506,11 +11509,16 @@ function c1BacklogProgress(msg) {
   } else if (msg.state === 'done') {
     if (btn) { btn.disabled = false; btn.textContent = 'Run sweep'; }
     const t = msg.tally || {};
-    c1CovLog('ok', 'Sweep finished — ' +
+    c1CovLog('ok', 'Sweep finished: ' +
       Object.keys(t).map(k => k + ': ' + t[k]).join(', '));
     c1LoadBlocklistStats();
   }
 }
+
+// ── Initial paint of the data-driven pieces ───────────────────────────────
+c1RenderPipeline();
+c1HistChrome();
+c1ScheduleStats();
 
 // ══ C4 Forensic Engine JS ══════════════════════════════════
 async function loadC4Debug() {
@@ -12334,17 +13342,17 @@ function _testsUpdateItem(msg) {
         </div>
         <div class="c1-score-row">
           <div class="c1-score-name">Final score</div>
-          <div class="c1-bar-wrap"><div id="c1-bar-final" class="c1-bar" style="width:0%"></div></div>
+          <div class="c1-bar-wrap"><div id="c1-bar-final" class="c1-bar"></div></div>
           <div id="c1-val-final" class="c1-score-val">0</div>
         </div>
         <div class="c1-score-row">
           <div class="c1-score-name">Static (ML)</div>
-          <div class="c1-bar-wrap"><div id="c1-bar-static" class="c1-bar" style="width:0%;background:var(--c2)"></div></div>
+          <div class="c1-bar-wrap"><div id="c1-bar-static" class="c1-bar" style="background:var(--c2)"></div></div>
           <div id="c1-val-static" class="c1-score-val">0</div>
         </div>
         <div class="c1-score-row">
           <div class="c1-score-name">Dynamic sandbox</div>
-          <div class="c1-bar-wrap"><div id="c1-bar-dynamic" class="c1-bar" style="width:0%;background:var(--c1)"></div></div>
+          <div class="c1-bar-wrap"><div id="c1-bar-dynamic" class="c1-bar" style="background:var(--c1)"></div></div>
           <div id="c1-val-dynamic" class="c1-score-val">0</div>
         </div>
         <div id="c1-flags" class="c1-flags"></div>

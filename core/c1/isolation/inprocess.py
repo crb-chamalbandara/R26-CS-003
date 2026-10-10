@@ -47,7 +47,7 @@ class InProcessBackend(IsolationBackend):
 
     def describe(self) -> IsolationReport:
         warnings = [
-            "Extension code executes on the host OS as the host user — this is "
+            "Extension code executes on the host OS as the host user. This is "
             "not a virtual machine and not a container.",
             "Chromium's own renderer sandbox is disabled (--no-sandbox), which "
             "Playwright requires to load an unpacked extension here.",
