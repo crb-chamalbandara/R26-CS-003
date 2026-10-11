@@ -1030,11 +1030,24 @@ input,textarea,select{font-family:inherit}
 /* Tabs: folders in a case drawer. The open one is the same ink as the stage, so it
    reads as attached to it. The rule under the bar is an inset shadow (not a border)
    because a border would be clipped where the open tab overlaps it. */
-.c1-tabs{flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:6px 22px 0;overflow-x:auto;
+.c1-tabs{flex-shrink:0;display:flex;align-items:flex-end;gap:0;padding:10px 22px 0;overflow-x:auto;
   background:var(--c1-ink-0);box-shadow:inset 0 -1px 0 var(--c1-line)}
-.c1-tab-grp{align-self:center;font:700 9px/1 var(--c1-mono);letter-spacing:.2em;text-transform:uppercase;
-  color:var(--t3);padding:0 10px 2px 4px;white-space:nowrap}
-.c1-tab-grp:not(:first-child){margin-left:12px;padding-left:16px;border-left:1px solid var(--c1-line)}
+/* The menu has three sections (Gate, Analyze, Records). Each is a numbered header with a
+   bar running over its own tabs, so the grouping is visible at a glance, and the section
+   you are in lights up: its number fills with the accent and its bar takes the accent too.
+   The numbers match the "01 · Gate" eyebrows on the pages themselves. Colour and
+   background transitions only; nothing animates continuously. */
+.c1-grp{flex-shrink:0;display:flex;flex-direction:column;gap:7px}
+.c1-grp + .c1-grp{margin-left:26px}
+.c1-grp-hd{display:flex;align-items:center;gap:8px;padding:0 4px;font:700 9.5px/1 var(--c1-mono);
+  letter-spacing:.18em;text-transform:uppercase;color:var(--t3);white-space:nowrap;transition:color .2s}
+.c1-grp-hd b{padding:3px 5px 3px 6px;border:1px solid var(--c1-line);border-radius:3px;font-weight:700;
+  letter-spacing:.08em;color:var(--t3);transition:background-color .2s,border-color .2s,color .2s}
+.c1-grp-hd i{flex:1;min-width:14px;height:2px;border-radius:2px;background:var(--c1-line);transition:background .25s}
+.c1-grp.on .c1-grp-hd{color:var(--t0)}
+.c1-grp.on .c1-grp-hd b{background:var(--c1-acc);border-color:var(--c1-acc);color:#fff}
+.c1-grp.on .c1-grp-hd i{background:linear-gradient(90deg,var(--c1-acc),rgba(145,101,247,.25))}
+.c1-grp-tabs{display:flex;align-items:flex-end;gap:2px}
 .c1-tab{position:relative;display:inline-flex;align-items:center;gap:8px;padding:10px 16px 11px;
   background:transparent;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;
   color:var(--t2);font-size:12px;font-weight:600;line-height:1.2;font-family:inherit;cursor:pointer;white-space:nowrap;
@@ -1101,20 +1114,69 @@ input,textarea,select{font-family:inherit}
 .c1-btn.primary:disabled{background:var(--b2);color:var(--t3);cursor:not-allowed}
 .c1-btn.ghost{background:var(--bg3);color:var(--t2);border:1px solid var(--b2)}.c1-btn.ghost:hover{background:var(--b1);color:var(--t0)}
 
-/* A "key": flat fill with a hard bottom edge that presses in. */
-:is(#panel-c1,#c1r-modal) .c1-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;
-  border-radius:6px;border:1px solid transparent;font-size:11px;font-weight:700;letter-spacing:.02em;
-  font-family:inherit;cursor:pointer;
-  transition:transform .08s ease,box-shadow .08s ease,background-color .14s,border-color .14s,color .14s}
-:is(#panel-c1,#c1r-modal) .c1-btn.primary{color:#fff;background:#7c4df0;border-color:#9a74ff;
-  box-shadow:0 3px 0 var(--c1-slab)}
-:is(#panel-c1,#c1r-modal) .c1-btn.primary:hover:not(:disabled){background:#8a5cf6}
-:is(#panel-c1,#c1r-modal) .c1-btn.primary:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--c1-slab)}
-:is(#panel-c1,#c1r-modal) .c1-btn.primary:disabled{background:var(--c1-ink-3);color:var(--t3);
-  border-color:var(--c1-line);box-shadow:0 3px 0 rgba(var(--tint),.05);cursor:not-allowed}
-:is(#panel-c1,#c1r-modal) .c1-btn.ghost{background:transparent;color:var(--t1);border-color:var(--c1-line-hi)}
-:is(#panel-c1,#c1r-modal) .c1-btn.ghost:hover:not(:disabled){background:rgba(145,101,247,.12);color:var(--t0)}
+/* ── C1 button family ───────────────────────────────────────────────────────
+   Four roles and two sizes, so what a button does is readable before it is read:
+     primary  the one main action on a screen: a violet "key" with a hard bottom edge
+     ghost    a supporting action: outlined, tinted on hover, accent-coloured icon
+     success  approve (a green key, used on the live card)
+     danger   block or force install: outlined red that fills on hover (.solid = filled)
+   Sizes: 34px by default, .sm 28px. Every button has a hover lift, a pressed state,
+   a visible keyboard focus ring and a disabled state that stops reacting. A button
+   whose action takes time can carry .is-busy for an inline spinner (the one thing
+   here that loops, and only while the work does). Motion is transform and colour only
+   and is removed under prefers-reduced-motion. Scoped to C1's own panel and report
+   modal because `.c1-btn` is shared with C2 and the Live Test Runner, whose buttons
+   must not change. */
+:is(#panel-c1,#c1r-modal) .c1-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;
+  gap:8px;min-height:34px;padding:0 18px;border-radius:7px;border:1px solid transparent;
+  font-size:11.5px;font-weight:700;letter-spacing:.02em;line-height:1;font-family:inherit;cursor:pointer;white-space:nowrap;
+  transition:transform .12s ease,box-shadow .16s ease,background-color .16s,border-color .16s,color .16s,filter .16s}
+:is(#panel-c1,#c1r-modal) .c1-btn svg{flex-shrink:0;transition:transform .16s,color .16s}
+:is(#panel-c1,#c1r-modal) .c1-btn.sm{min-height:28px;padding:0 12px;font-size:10.5px;border-radius:6px;gap:6px}
 :is(#panel-c1,#c1r-modal) .c1-btn:focus-visible{outline:2px solid var(--c1-acc);outline-offset:2px}
+:is(#panel-c1,#c1r-modal) .c1-btn:disabled{cursor:not-allowed}
+
+/* primary, success and solid danger share one construction; each only sets its colours */
+:is(#panel-c1,#c1r-modal) .c1-btn.primary{--kb1:#8d62f4;--kb2:#7648ea;--kbd:#9a74ff;--kedge:var(--c1-slab);--kglow:rgba(145,101,247,.65)}
+:is(#panel-c1,#c1r-modal) .c1-btn.success{--kb1:#12936a;--kb2:#0b7a55;--kbd:#26b283;--kedge:#064d37;--kglow:rgba(16,185,129,.55)}
+:is(#panel-c1,#c1r-modal) .c1-btn.danger.solid,
+:is(#panel-c1,#c1r-modal) #c1-install-btn.is-danger{--kb1:#d8343f;--kb2:#c8232f;--kbd:#ef5a64;--kedge:#7a1119;--kglow:rgba(240,71,71,.55)}
+:is(#panel-c1,#c1r-modal) .c1-btn:is(.primary,.success,.danger.solid){color:#fff;
+  background:linear-gradient(180deg,var(--kb1),var(--kb2));border-color:var(--kbd);
+  box-shadow:0 3px 0 var(--kedge),inset 0 1px 0 rgba(255,255,255,.22)}
+:is(#panel-c1,#c1r-modal) .c1-btn:is(.primary,.success,.danger.solid):hover:not(:disabled){filter:brightness(1.08);
+  transform:translateY(-1px);
+  box-shadow:0 4px 0 var(--kedge),0 10px 22px -8px var(--kglow),inset 0 1px 0 rgba(255,255,255,.28)}
+:is(#panel-c1,#c1r-modal) .c1-btn:is(.primary,.success,.danger.solid):active:not(:disabled){filter:none;
+  transform:translateY(2px);box-shadow:0 1px 0 var(--kedge),inset 0 1px 0 rgba(255,255,255,.12)}
+:is(#panel-c1,#c1r-modal) .c1-btn:is(.primary,.success,.danger.solid):disabled{background:var(--c1-ink-3);color:var(--t3);
+  border-color:var(--c1-line);box-shadow:0 3px 0 rgba(var(--tint),.05)}
+
+/* ghost: outlined, tinted on hover, with the icon picking up the accent */
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost{color:var(--t1);background:rgba(var(--tint),.035);border-color:var(--c1-line-hi);
+  box-shadow:0 2px 0 rgba(var(--tint),.05)}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost svg{color:var(--c1-acc)}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost:hover:not(:disabled){color:var(--t0);background:rgba(145,101,247,.13);
+  border-color:var(--c1-acc);transform:translateY(-1px);
+  box-shadow:0 2px 0 rgba(145,101,247,.28),0 10px 20px -12px rgba(145,101,247,.7)}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost:hover:not(:disabled) svg{transform:scale(1.12)}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost:active:not(:disabled){transform:translateY(1px);box-shadow:none}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost:disabled{opacity:.45}
+
+/* danger (outlined): fills red on hover */
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost.danger{color:var(--danger);background:rgba(240,71,71,.07);
+  border-color:rgba(240,71,71,.5);box-shadow:0 2px 0 rgba(240,71,71,.16)}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost.danger svg{color:currentColor}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost.danger:hover:not(:disabled){color:#fff;background:#c8232f;border-color:#ef5a64;
+  box-shadow:0 2px 0 #7a1119,0 10px 20px -12px rgba(240,71,71,.8)}
+
+/* busy: a spinner in front of the label; keeps the button's own colours */
+:is(#panel-c1,#c1r-modal) .c1-btn.is-busy{pointer-events:none;cursor:progress}
+:is(#panel-c1,#c1r-modal) .c1-btn.is-busy::before{content:"";width:12px;height:12px;flex-shrink:0;border-radius:50%;
+  border:2px solid currentColor;border-right-color:transparent;opacity:.9;animation:c1-spin .7s linear infinite}
+:is(#panel-c1,#c1r-modal) .c1-btn.primary.is-busy:disabled{color:#fff;opacity:.92;
+  background:linear-gradient(180deg,var(--kb1),var(--kb2));border-color:var(--kbd);box-shadow:0 3px 0 var(--kedge)}
+:is(#panel-c1,#c1r-modal) .c1-btn.ghost.is-busy:disabled{opacity:1;border-color:var(--c1-acc)}
 
 /* -- Drop zone ------------------------------------------------------------------ */
 #c1-dropzone{border:1.5px dashed var(--c1-line-hi);border-radius:6px;padding:34px 20px;text-align:center;
@@ -1352,7 +1414,6 @@ input,textarea,select{font-family:inherit}
 .c1-lc-bit.hot{background:var(--danger-bg);border-color:transparent;color:var(--danger)}
 .c1-lc-note{font-size:10.5px;color:var(--t3);align-self:center}
 .c1-lc-actions{display:flex;gap:9px}
-.c1-lc-actions .c1-btn{padding:6px 13px;font-size:11px}
 /* Spinner: the only thing that loops, and only while an analysis is actually running. */
 @keyframes c1-spin{to{transform:rotate(360deg)}}
 .c1-ring{width:16px;height:16px;border:2.5px solid var(--c1-line-hi);border-top-color:var(--c1-acc);
@@ -1384,7 +1445,7 @@ input,textarea,select{font-family:inherit}
 
 /* -- Narrower window --------------------------------------------------------------------------- */
 @media (max-width:1280px){
-  .c1-tab-grp{display:none}
+  .c1-grp-hd span{display:none}
   .c1-deck-mod.contain{flex:1 1 100%;margin-left:0;padding-left:0;border-left:none}
 }
 @media (max-width:1100px){
@@ -1486,7 +1547,7 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
 
 /* White-on-fill needs a deeper shade to clear the same floor. */
 #panel-c1 .c1r-segbtn.active,#c1r-modal .c1r-segbtn.active{background:#8357e9}
-#c1r-modal #c1-install-btn{transition:background .18s}
+#c1r-modal #c1-install-btn{transition:background-color .18s,transform .12s,box-shadow .16s,filter .16s}
 /* White on --danger is 3.69:1. #c8232f clears 4.5:1 and still reads as the
    same warning red. */
 #c1r-modal #c1-install-btn.is-danger,
@@ -1608,23 +1669,7 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
   padding:5px 0;text-align:left}
 .c1r-more:hover{text-decoration:underline}
 
-/* ── Network graph ──────────────────────────────────────────── */
-.c1r-graph-wrap{position:relative;background:var(--bg0);border:1px solid var(--b1);
-  border-radius:var(--radius);overflow:hidden;height:300px}
-/* Fixed height rather than height:auto — at full panel width the viewBox
-   aspect ratio alone produced a 600px-tall box for a handful of nodes.
-   preserveAspectRatio keeps the layout centred inside whatever is left. */
-.c1r-graph-wrap svg{display:block;width:100%;height:100%}
-.c1r-glabel{font-size:8.5px;fill:var(--t2);pointer-events:none}
-.c1r-gnode{cursor:pointer;transition:opacity .15s}
-.c1r-gnode:hover{opacity:.75}
-.c1r-legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:9px}
-.c1r-lg{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--t2)}
-.c1r-lg i{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
-.c1r-tip{position:absolute;pointer-events:none;background:var(--bg3);
-  border:1px solid var(--b3);border-radius:6px;padding:6px 9px;font-size:9.5px;
-  color:var(--t0);box-shadow:var(--shadow-md);opacity:0;transition:opacity .12s;
-  white-space:nowrap;z-index:5}
+/* ── Network graph rows (list view); the graph itself is styled by _C1_GRAPH_CSS ── */
 .c1r-hostrow{display:flex;align-items:center;gap:10px;padding:9px 12px;
   border-radius:var(--radius);background:var(--bg1);border:1px solid var(--b1);
   margin-bottom:5px;transition:border-color .16s,transform .16s}
@@ -1637,6 +1682,32 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
 .c1r-pill.count{background:var(--bg3);color:var(--t2);border:1px solid var(--b2)}
 .c1r-pill.flag{background:rgba(240,71,71,.14);color:#f04747;border:1px solid rgba(240,71,71,.3)}
 
+/* ── Setup profile, calls and servers ───────────────────────── */
+#c1r-profile-panel:empty,#c1r-calls-panel:empty,#c1r-intel-panel:empty,#c1r-simple-notes:empty{display:none}
+.c1r-notes{margin:0 0 12px;padding:0;list-style:none;display:grid;gap:6px}
+.c1r-notes li{padding:8px 11px;border-radius:var(--radius);background:var(--bg1);border:1px solid var(--b1);
+  border-left:3px solid var(--c2);font-size:10.5px;color:var(--t1);line-height:1.6}
+.c1r-kv{display:grid;grid-template-columns:minmax(120px,190px) 1fr;font-size:10.5px}
+.c1r-kv>div{padding:8px 0;border-top:1px solid var(--b1);line-height:1.6;color:var(--t1);min-width:0;overflow-wrap:anywhere}
+.c1r-kv>div:nth-child(-n+2){border-top:0}
+.c1r-kv .k{color:var(--t3);font-weight:600}
+.c1r-kv code,.c1r-tbl code{font-family:'Cascadia Code','Consolas',monospace;font-size:10px;color:var(--t0)}
+.c1r-sub{margin:16px 0 7px;font-size:8.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.09em}
+.c1r-tblw{overflow-x:auto;border:1px solid var(--b1);border-radius:var(--radius)}
+.c1r-tbl{width:100%;border-collapse:collapse;font-size:10px}
+.c1r-tbl th{text-align:left;font-size:8.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;
+  padding:8px 10px;background:var(--bg1)}
+.c1r-tbl td{padding:8px 10px;border-top:1px solid var(--b1);vertical-align:top;color:var(--t1)}
+.c1r-url{font-family:'Cascadia Code','Consolas',monospace;word-break:break-all}
+.c1r-dim{color:var(--t3)}
+.c1r-chips{display:flex;flex-wrap:wrap;gap:5px}
+.c1r-chips span{padding:3px 9px;border-radius:20px;background:var(--bg1);border:1px solid var(--b1);font-size:9.5px;color:var(--t1)}
+.c1r-code{padding:6px 9px;margin-bottom:4px;border-radius:6px;background:var(--bg0);border:1px solid var(--b1);
+  font-family:'Cascadia Code','Consolas',monospace;font-size:9.5px;color:var(--t1);word-break:break-all}
+.c1r-note{font-size:10px;color:var(--t2);line-height:1.6}
+@media (max-width:600px){.c1r-kv{grid-template-columns:1fr}.c1r-kv .k{border-top:1px solid var(--b1);padding-bottom:0}
+  .c1r-kv>div:nth-child(2){border-top:0;padding-top:2px}}
+
 /* ── Export ─────────────────────────────────────────────────── */
 .c1r-export{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   padding:12px 16px;background:var(--bg2);border:1px solid var(--b1);
@@ -1647,6 +1718,7 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
   background:var(--bg3);border:1px solid var(--b2);border-radius:6px;
   color:var(--t1);font-size:10px;font-weight:600;transition:all .16s}
 .c1r-xbtn:hover{background:var(--c1b);border-color:var(--c1);color:var(--c1)}
+.c1r-xbtn[data-kind="html"]{background:var(--c1b);border-color:var(--c1);color:var(--c1)}
 .c1r-jump{display:block;width:100%;padding:9px;margin-bottom:10px;background:none;
   border:1px dashed var(--b2);border-radius:var(--radius);color:var(--t2);
   font-size:10.5px;font-weight:600;transition:all .16s}
@@ -1799,7 +1871,7 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
   .c1r-hero-plain,.c1r-perm-desc,.c1-verdict-detail{color:#333!important}
   .c1r-ptitle,.c1r-stat-num,.c1r-perm-name,.c1r-hero-word{color:#111!important}
   .c1r-perm{background:#fafafa!important;border-color:#ddd!important}
-  .c1r-anim,.c1r-stat,.c1r-perm,.c1r-gnode,.c1r-graph-wrap line{
+  .c1r-anim,.c1r-stat,.c1r-perm{
     animation:none!important;opacity:1!important;transform:none!important}
   .c1r-hero-id{background:#f4f4f4!important;border-color:#ddd!important;color:#222!important}
   .c1-vb{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -2010,6 +2082,381 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
 .c1r-engine.is-idle::after{display:none}
 .c1r-engine.is-idle{opacity:.75}
 .c1r-engine.is-idle .c1r-engine-mark svg{filter:grayscale(.85)}
+/* ── C1 button family, continued: chips, switches, icon buttons, links ─────────
+   The same hover, pressed and focus behaviour as .c1-btn for everything else in
+   C1 that is clicked. */
+#panel-c1 .c1-chip{min-height:30px;padding:0 12px;border-radius:7px;cursor:pointer;
+  transition:background-color .14s,border-color .14s,color .14s,transform .12s,box-shadow .14s}
+#panel-c1 .c1-chip:hover{background:rgba(145,101,247,.08);transform:translateY(-1px)}
+#panel-c1 .c1-chip:active{transform:translateY(1px)}
+#panel-c1 .c1-chip:focus-visible{outline:2px solid var(--c1-acc);outline-offset:2px}
+#panel-c1 .c1-chip.active{box-shadow:0 0 0 1px var(--c1-acc),0 8px 18px -12px rgba(145,101,247,.8)}
+
+:is(#panel-c1,#c1r-modal) .c1r-segbtn{min-height:28px;cursor:pointer;
+  transition:background-color .16s,color .16s,box-shadow .16s,transform .12s}
+:is(#panel-c1,#c1r-modal) .c1r-segbtn:active{transform:scale(.96)}
+:is(#panel-c1,#c1r-modal) .c1r-segbtn:focus-visible{outline:2px solid var(--c1-acc);outline-offset:1px}
+
+#panel-c1 .c1-tab:active{background:rgba(var(--tint),.09)}
+#c1-dropzone{transition:border-color .16s,background-color .16s,transform .12s}
+#c1-dropzone:active{transform:scale(.995)}
+
+#panel-c1 .c1-lc-dismiss{display:grid;place-items:center;width:26px;height:26px;padding:0;border-radius:6px;font-size:13px;
+  transition:background-color .14s,color .14s,transform .12s}
+#panel-c1 .c1-lc-dismiss:hover{background:rgba(var(--tint),.09);color:var(--t0)}
+#panel-c1 .c1-lc-dismiss:active{transform:scale(.9)}
+#panel-c1 .c1-lc-dismiss:focus-visible{outline:2px solid var(--c1-acc);outline-offset:1px}
+
+#c1r-modal .c1r-modal-x{cursor:pointer;transition:background-color .16s,border-color .16s,color .16s,transform .12s}
+#c1r-modal .c1r-modal-x svg{transition:transform .22s cubic-bezier(.22,1,.36,1)}
+#c1r-modal .c1r-modal-x:hover svg{transform:rotate(90deg)}
+#c1r-modal .c1r-modal-x:active{transform:scale(.92)}
+#c1r-modal .c1r-modal-x:focus-visible{outline:2px solid var(--c1-acc);outline-offset:2px}
+
+/* export buttons: the same ghost look, with the HTML report as the one primary export */
+#c1r-modal .c1r-xbtn{min-height:32px;padding:0 14px;gap:7px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;
+  color:var(--t1);background:rgba(var(--tint),.035);border:1px solid var(--c1-line-hi);box-shadow:0 2px 0 rgba(var(--tint),.05);
+  transition:transform .12s,box-shadow .16s,background-color .16s,border-color .16s,color .16s}
+#c1r-modal .c1r-xbtn svg{flex-shrink:0;color:var(--c1-acc);transition:transform .16s}
+#c1r-modal .c1r-xbtn:hover{color:var(--t0);background:rgba(145,101,247,.13);border-color:var(--c1-acc);transform:translateY(-1px);
+  box-shadow:0 2px 0 rgba(145,101,247,.28),0 10px 20px -12px rgba(145,101,247,.7)}
+#c1r-modal .c1r-xbtn:hover svg{transform:scale(1.12)}
+#c1r-modal .c1r-xbtn:active{transform:translateY(1px);box-shadow:none}
+#c1r-modal .c1r-xbtn:focus-visible{outline:2px solid var(--c1-acc);outline-offset:2px}
+#c1r-modal .c1r-xbtn[data-kind="html"]{color:#fff;background:linear-gradient(180deg,#8d62f4,#7648ea);border-color:#9a74ff;
+  box-shadow:0 3px 0 var(--c1-slab),inset 0 1px 0 rgba(255,255,255,.22)}
+#c1r-modal .c1r-xbtn[data-kind="html"] svg{color:#fff}
+#c1r-modal .c1r-xbtn[data-kind="html"]:hover{filter:brightness(1.08);color:#fff;
+  background:linear-gradient(180deg,#8d62f4,#7648ea);border-color:#9a74ff;
+  box-shadow:0 4px 0 var(--c1-slab),0 10px 22px -8px rgba(145,101,247,.65),inset 0 1px 0 rgba(255,255,255,.28)}
+#c1r-modal .c1r-xbtn[data-kind="html"]:active{filter:none;transform:translateY(2px);box-shadow:0 1px 0 var(--c1-slab)}
+
+/* "View full technical report" and "+ N more": links that behave like buttons */
+.c1r-arrow{display:inline-block;transition:transform .2s cubic-bezier(.22,1,.36,1)}
+#c1r-modal .c1r-jump{display:flex;align-items:center;justify-content:center;gap:9px;min-height:42px;
+  border:1px solid var(--c1-line-hi);border-radius:8px;background:rgba(145,101,247,.05);color:var(--t1);
+  font-size:11.5px;font-weight:700;cursor:pointer;
+  transition:transform .12s,background-color .16s,border-color .16s,color .16s}
+#c1r-modal .c1r-jump:hover{border-color:var(--c1-acc);background:rgba(145,101,247,.13);color:var(--t0)}
+#c1r-modal .c1r-jump:active{transform:translateY(1px)}
+#c1r-modal .c1r-more{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;margin-top:4px;border-radius:7px;
+  font-size:11px;font-weight:700;color:var(--c1-acc);background:rgba(145,101,247,.07);border:1px solid transparent;cursor:pointer;
+  transition:background-color .16s,border-color .16s,transform .12s}
+#c1r-modal .c1r-more:hover{background:rgba(145,101,247,.16);border-color:rgba(145,101,247,.4);text-decoration:none}
+#c1r-modal .c1r-more:active{transform:translateY(1px)}
+#c1r-modal :is(.c1r-jump,.c1r-more):hover .c1r-arrow{transform:translateX(4px)}
+#c1r-modal :is(.c1r-jump,.c1r-more):focus-visible{outline:2px solid var(--c1-acc);outline-offset:2px}
+
+@media (prefers-reduced-motion:reduce){
+  :is(#panel-c1,#c1r-modal) :is(.c1-btn,.c1-chip,.c1r-xbtn,.c1r-jump,.c1r-more,.c1r-segbtn,.c1-lc-dismiss,.c1r-modal-x,#c1-dropzone){
+    transition-duration:.01s}
+  :is(#panel-c1,#c1r-modal) :is(.c1-btn,.c1-chip,.c1r-xbtn,.c1r-jump,.c1r-more,.c1r-segbtn,.c1-lc-dismiss,.c1r-modal-x,#c1-dropzone):is(:hover,:active),
+  :is(#panel-c1,#c1r-modal) .c1-btn:hover svg,#c1r-modal .c1r-modal-x:hover svg,#c1r-modal :is(.c1r-jump,.c1r-more):hover .c1r-arrow{
+    transform:none!important}
+}
+
+/* ══ Report popup: orientation and polish ═════════════════════════════════════════
+   The popup opened from the case ledger is long (the Advanced view runs to several
+   screens), so it now says where you are and lets you move:
+     header     a score badge, the extension's name, and version / verdict / date chips
+     progress   a thin line under the header that fills as you read
+     jump bar   one chip per section, following your scroll; Collapse all / Expand all
+     panels     each long panel folds away from a chevron in its heading
+     back to top, and an export row at the end of the Advanced view
+   Everything is scoped to #c1r-modal. Motion is colour and transform only. */
+#c1r-modal .c1r-modal-bar{position:relative;gap:16px;padding:12px 16px 14px}
+#c1r-modal .c1r-modal-heading{gap:13px}
+#c1r-modal .c1r-modal-dot{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;
+  font:800 16px/1 var(--c1-mono);letter-spacing:-.03em;color:#fff;
+  border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 8px 18px -10px rgba(0,0,0,.7)}
+#c1r-modal .c1r-modal-title{font-size:15px;font-weight:800;letter-spacing:-.01em}
+#c1r-modal .c1r-modal-sub{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:6px;max-width:none;
+  white-space:normal;overflow:visible;font-size:10.5px}
+#c1r-modal .c1r-modal-sub .sep{display:none}
+.c1r-vchip{padding:2px 8px;border-radius:6px;background:rgba(var(--tint),.06);border:1px solid var(--c1-line);
+  font-size:10px;font-weight:600;color:var(--t2)}
+.c1r-vpill{display:inline-flex;align-items:center;padding:2px 9px;border-radius:99px;border:1px solid transparent;
+  font:800 9px/1.5 var(--c1-mono);letter-spacing:.14em;text-transform:uppercase}
+.c1r-vpill.k-mal{background:var(--danger-bg);color:var(--danger);border-color:rgba(240,71,71,.38)}
+.c1r-vpill.k-sus{background:rgba(245,166,35,.14);color:var(--warn);border-color:rgba(245,166,35,.4)}
+.c1r-vpill.k-safe{background:rgba(16,185,129,.14);color:var(--safe);border-color:rgba(16,185,129,.4)}
+#c1r-modal .c1r-progress{position:absolute;left:0;right:0;bottom:-1px;height:2px;pointer-events:none}
+#c1r-modal .c1r-progress i{display:block;height:100%;transform-origin:left center;transform:scaleX(0);
+  background:linear-gradient(90deg,var(--c1-acc),#6aa6ff);transition:transform .08s linear}
+
+/* jump bar */
+.c1r-jumpbar{display:flex;align-items:center;gap:4px;flex-shrink:0;padding:7px 16px;overflow-x:auto;scrollbar-width:none;
+  border-bottom:1px solid var(--b1);background:var(--bg1)}
+.c1r-jumpbar::-webkit-scrollbar{display:none}
+.c1r-jumpbar[hidden]{display:none}
+.c1r-jchip,.c1r-jtool{flex-shrink:0;min-height:28px;padding:0 12px;border-radius:7px;border:1px solid transparent;background:transparent;
+  color:var(--t2);font-family:inherit;font-size:11px;font-weight:700;line-height:1;cursor:pointer;white-space:nowrap;
+  transition:background-color .14s,color .14s,border-color .14s,transform .12s}
+.c1r-jchip:hover,.c1r-jtool:hover{color:var(--t0);background:rgba(var(--tint),.06)}
+.c1r-jchip.on{color:var(--t0);background:rgba(145,101,247,.16);border-color:var(--c1-acc)}
+.c1r-jchip:active,.c1r-jtool:active{transform:scale(.96)}
+.c1r-jchip:focus-visible,.c1r-jtool:focus-visible{outline:2px solid var(--c1-acc);outline-offset:1px}
+.c1r-jsp{flex:1;min-width:12px}
+.c1r-jtool{color:var(--c1-acc);border-color:var(--c1-line)}
+
+/* a section folds from its heading */
+.c1r-collapse{margin-left:auto;display:grid;place-items:center;width:26px;height:26px;flex-shrink:0;padding:0;
+  border:1px solid var(--c1-line);border-radius:7px;background:transparent;color:var(--t2);cursor:pointer;
+  transition:background-color .14s,color .14s,border-color .14s,transform .12s}
+.c1r-phead .c1r-seg ~ .c1r-collapse{margin-left:8px}
+.c1r-collapse svg{transition:transform .2s cubic-bezier(.22,1,.36,1)}
+.c1r-collapse:hover{color:var(--t0);border-color:var(--c1-acc);background:rgba(145,101,247,.12)}
+.c1r-collapse:active{transform:scale(.92)}
+.c1r-collapse:focus-visible{outline:2px solid var(--c1-acc);outline-offset:2px}
+.c1r-collapse[aria-expanded="false"] svg{transform:rotate(-90deg)}
+.c1r-panel.is-collapsed > :not(.c1r-phead){display:none}
+.c1r-panel.is-collapsed .c1r-phead{margin-bottom:0}
+
+/* back to top */
+.c1r-top{position:absolute;right:24px;bottom:22px;z-index:3;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  border:1px solid var(--c1-line-hi);background:var(--bg3);color:var(--t0);cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.4);
+  opacity:0;transform:translateY(8px);pointer-events:none;
+  transition:opacity .2s,transform .2s,border-color .15s,background-color .15s}
+.c1r-top.on{opacity:1;transform:none;pointer-events:auto}
+.c1r-top:hover{border-color:var(--c1-acc);background:rgba(145,101,247,.2)}
+.c1r-top:active{transform:scale(.92)}
+.c1r-top:focus-visible{outline:2px solid var(--c1-acc);outline-offset:2px}
+
+/* tables: banded rows, a hover row, a stronger first column */
+#c1r-modal .c1r-tbl tbody tr{transition:background-color .12s}
+#c1r-modal .c1r-tbl tbody tr:nth-child(even){background:rgba(var(--tint),.025)}
+#c1r-modal .c1r-tbl tbody tr:hover{background:rgba(145,101,247,.09)}
+#c1r-modal .c1r-tbl td:first-child{font-weight:600}
+#c1r-modal .c1r-tbl th{white-space:nowrap}
+#c1r-modal .c1r-modal-body{scroll-padding-top:14px}
+#c1r-adv-export{margin-top:0}
+
+@media (max-width:760px){
+  #c1r-modal .c1r-modal-dot{width:36px;height:36px;font-size:14px}
+  #c1r-modal .c1r-modal-title{font-size:13.5px}
+  .c1r-jumpbar{padding:6px 10px}
+}
+@media (max-width:560px){
+  /* the name gets the full row; the switch and the close button sit on the next one */
+  #c1r-modal .c1r-modal-heading{flex:1 1 100%}
+  #c1r-modal .c1r-seg{margin-left:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  #c1r-modal .c1r-progress i,.c1r-jchip,.c1r-jtool,.c1r-collapse,.c1r-collapse svg,.c1r-top{transition:none}
+}
+@media print{
+  .c1r-jumpbar,.c1r-top,.c1r-progress,.c1r-collapse{display:none!important}
+  .c1r-panel.is-collapsed > :not(.c1r-phead){display:revert!important}
+}
+
+/* ══ Report popup: type scale and layout ══════════════════════════════════════════
+   The popup's text used to run at 8 to 11px (314 of 339 text elements were under
+   12.5px), which is too small to read comfortably for the length of a report. A first
+   attempt at 13.5px body text was too large on a scaled 1080p display, so this is the
+   balanced middle. One scale governs it, all in #c1r-modal:
+     micro   10.5px  column heads, badges, small labels (uppercase, letter-spaced)
+     small   11.5px  secondary text, descriptions, notes, chips
+     body    12.5px  table cells, list items, key and value rows, permission text
+     lead    14px    the summary and the recommendation
+     h3      15.5px  panel titles                   h2   17.5px  the header
+   The layout breathes to match: a wider popup, roomier panels, an icon tile on every
+   section heading, a "What to do" callout in the Simple view and key-fact cards in the
+   Advanced view. Mobile gets its own, tighter values at the end. */
+#c1r-modal{--fs-micro:10.5px;--fs-small:11.5px;--fs-body:12.5px;--fs-lead:14px;--fs-h3:15.5px}
+#c1r-modal.c1r-modal{padding:24px 24px}
+#c1r-modal .c1r-modal-shell{max-width:1120px;border-radius:12px}
+#c1r-modal .c1r-modal-bar{padding:14px 20px 16px;gap:16px}
+#c1r-modal .c1r-modal-dot{width:44px;height:44px;border-radius:12px;font-size:16.5px}
+#c1r-modal .c1r-modal-title{font-size:17.5px}
+#c1r-modal .c1r-modal-sub{gap:7px;margin-top:7px;font-size:11.5px}
+#c1r-modal .c1r-vchip{font-size:11.5px;padding:3px 9px;border-radius:6px}
+#c1r-modal .c1r-vpill{font-size:10px;padding:3px 10px}
+#c1r-modal .c1r-seg{padding:3px}
+#c1r-modal .c1r-segbtn{font-size:12.5px;min-height:32px;padding:0 16px;border-radius:7px}
+#c1r-modal .c1r-modal-x{width:34px;height:34px;border-radius:9px}
+#c1r-modal .c1r-jumpbar{padding:8px 20px}
+#c1r-modal .c1r-jchip,#c1r-modal .c1r-jtool{min-height:32px;font-size:12.5px;padding:0 13px}
+#c1r-modal .c1r-collapse{width:30px;height:30px}
+#c1r-modal .c1r-modal-body{padding:18px 22px 32px;scrollbar-width:thin;scrollbar-color:var(--c1-line-hi) transparent}
+#c1r-modal .c1r-modal-body::-webkit-scrollbar{width:10px}
+#c1r-modal .c1r-modal-body::-webkit-scrollbar-thumb{background:var(--c1-line-hi);border-radius:8px;border:2px solid transparent;background-clip:content-box}
+#c1r-modal #c1r-simple,#c1r-modal #c1r-advanced{gap:14px}
+#c1r-modal .c1-btn{font-size:12px;min-height:36px}
+#c1r-modal .c1-btn.sm{min-height:28px;font-size:11px}
+
+/* panels and their headings */
+#c1r-modal .c1r-panel{padding:20px 24px;border-radius:9px}
+#c1r-modal .c1r-phead{gap:12px;margin-bottom:16px}
+#c1r-modal .c1r-accent{width:4px;min-height:32px}
+#c1r-modal .c1r-ptitle{font-size:var(--fs-h3);font-weight:800;letter-spacing:-.01em;line-height:1.25}
+#c1r-modal .c1r-psub{font-size:var(--fs-small);line-height:1.5;margin-top:4px;color:var(--t2)}
+.c1r-ico{width:36px;height:36px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;
+  color:var(--ic,var(--c1-acc));background:var(--ic-bg,rgba(145,101,247,.14));border:1px solid var(--ic-bd,rgba(145,101,247,.32))}
+.c1r-ico.blue{--ic:#4d8ef8;--ic-bg:rgba(77,142,248,.14);--ic-bd:rgba(77,142,248,.34)}
+.c1r-ico.amber{--ic:#f5a623;--ic-bg:rgba(245,166,35,.14);--ic-bd:rgba(245,166,35,.36)}
+.c1r-phead.has-ico > .c1r-accent{display:none}
+
+/* the summary and the numbers */
+#c1r-modal .c1r-hero{padding:26px 30px;gap:32px;border-radius:9px}
+#c1r-modal .c1r-hero-plain{font-size:14.5px;line-height:1.7;max-width:72ch}
+#c1r-modal .c1r-hero-id{font-size:var(--fs-small);padding:7px 12px}
+#c1r-modal .c1-vb.lg{font-size:20px}
+#c1r-modal .c1r-gauge{width:150px;height:96px}
+#c1r-modal .c1r-gauge svg{width:150px;height:84px}
+#c1r-modal .c1r-gauge-val{top:43px;font-size:26px}
+#c1r-modal .c1r-gauge-cap{top:75px;font-size:10px;letter-spacing:.14em}
+#c1r-modal .c1r-stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+#c1r-modal .c1r-stat{padding:16px 18px;border-radius:9px}
+#c1r-modal .c1r-stat-lbl{font-size:var(--fs-micro);letter-spacing:.1em;margin-bottom:10px}
+#c1r-modal .c1r-stat-num{font-size:28px}
+#c1r-modal .c1r-stat-sub{font-size:var(--fs-small);margin-top:6px}
+#c1-adv-stats:empty,#c1r-adv-stats:empty{display:none}
+
+/* "What to do": the recommendation, said plainly under the summary */
+.c1r-reco{display:flex;align-items:flex-start;gap:14px;padding:16px 20px;border-radius:9px;border:1px solid var(--rc-bd);
+  background:var(--rc-bg);--rc:var(--c1-acc);--rc-bg:rgba(145,101,247,.08);--rc-bd:rgba(145,101,247,.3)}
+.c1r-reco.mal{--rc:var(--danger);--rc-bg:rgba(240,71,71,.08);--rc-bd:rgba(240,71,71,.38)}
+.c1r-reco.sus{--rc:var(--warn);--rc-bg:rgba(245,166,35,.08);--rc-bd:rgba(245,166,35,.4)}
+.c1r-reco.safe{--rc:var(--safe);--rc-bg:rgba(16,185,129,.08);--rc-bd:rgba(16,185,129,.4)}
+.c1r-reco-ico{width:36px;height:36px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;color:var(--rc);
+  background:var(--rc-bg);border:1px solid var(--rc-bd)}
+.c1r-reco-lbl{font:800 10.5px/1 var(--c1-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--rc);margin:2px 0 6px}
+.c1r-reco-txt{font-size:var(--fs-lead);line-height:1.6;color:var(--t0)}
+
+/* permissions, notes, key and value rows, tables, chips */
+#c1r-modal .c1r-perm{padding:13px 16px;gap:14px;border-radius:9px;margin-bottom:8px}
+#c1r-modal .c1r-perm-sev{font-size:10px;padding:4px 8px;min-width:72px;border-radius:6px;letter-spacing:.08em}
+#c1r-modal .c1r-perm-name{font-size:13px;margin-bottom:4px}
+#c1r-modal .c1r-perm-desc{font-size:var(--fs-body);line-height:1.58}
+#c1r-modal .c1r-notes{gap:8px;margin-bottom:16px}
+#c1r-modal .c1r-notes li{font-size:var(--fs-body);line-height:1.58;padding:11px 16px;border-radius:8px;border-left-width:4px;color:var(--t0)}
+#c1r-modal .c1r-kv{font-size:var(--fs-body);grid-template-columns:minmax(140px,210px) 1fr}
+#c1r-modal .c1r-kv>div{padding:10px 0;line-height:1.55}
+#c1r-modal .c1r-kv .k{font-size:var(--fs-small);font-weight:700}
+#c1r-modal .c1r-kv code,#c1r-modal .c1r-tbl code{font-size:12px}
+#c1r-modal .c1r-sub{font-size:var(--fs-micro);letter-spacing:.11em;margin:22px 0 10px;color:var(--t2)}
+#c1r-modal .c1r-tbl{font-size:12.5px}
+#c1r-modal .c1r-tbl th{font-size:var(--fs-micro);padding:10px 14px;letter-spacing:.09em}
+#c1r-modal .c1r-tbl td{padding:11px 14px;line-height:1.5}
+#c1r-modal .c1r-url{font-size:12px}
+#c1r-modal .c1r-chips{gap:7px}
+#c1r-modal .c1r-chips span{font-size:var(--fs-small);padding:5px 11px}
+#c1r-modal .c1r-code{font-size:12px;padding:9px 12px;margin-bottom:5px}
+#c1r-modal .c1r-note,#c1r-modal .c1r-small{font-size:var(--fs-small);line-height:1.65;color:var(--t2)}
+#c1r-modal .c1r-body{font-size:var(--fs-body)}
+#c1r-modal .c1r-pill{font-size:10.5px;padding:3px 9px}
+#c1r-modal .c1r-more{font-size:12px;padding:7px 12px}
+#c1r-modal .c1r-jump{font-size:12.5px;min-height:44px}
+#c1r-modal .c1r-export{padding:13px 18px;border-radius:9px;gap:8px}
+#c1r-modal .c1r-export-lbl{font-size:var(--fs-small);font-weight:700}
+#c1r-modal .c1r-xbtn{min-height:34px;font-size:12px;padding:0 14px}
+
+/* static and dynamic analysis */
+#c1r-modal .c1r-split{gap:14px}
+#c1r-modal .c1r-meter{margin-bottom:16px}
+#c1r-modal .c1r-meter-name{font-size:var(--fs-body)}
+#c1r-modal .c1r-meter-val{font-size:14px}
+#c1r-modal .c1r-meter-track{height:7px}
+#c1r-modal .c1r-meter-note{font-size:var(--fs-small);margin-top:6px;line-height:1.55}
+#c1r-modal .c1r-facts{gap:7px;margin-top:14px}
+#c1r-modal .c1r-fact{font-size:var(--fs-small);padding:7px 12px;border-radius:7px}
+#c1r-modal .c1r-fact b{font-size:var(--fs-body)}
+#c1r-modal .c1r-engine{padding:14px 16px;gap:14px}
+#c1r-modal .c1r-engine-mark,#c1r-modal .c1r-engine-mark svg{width:50px;height:50px}
+#c1r-modal .c1r-engine-eyebrow{font-size:var(--fs-micro)}
+#c1r-modal .c1r-engine-name{font-size:14px;margin:3px 0 4px}
+#c1r-modal .c1r-engine-tag{font-size:var(--fs-small);line-height:1.58}
+#c1r-modal .c1r-engine-specs{gap:6px;margin-top:10px}
+#c1r-modal .c1r-engine-spec{font-size:var(--fs-micro);padding:4px 9px}
+
+/* the verdict card at the top of the Advanced view */
+#c1r-modal .c1-card{padding:22px 26px;border-radius:9px}
+#c1r-modal .c1-verdict-block{gap:20px;margin-bottom:18px}
+#c1r-modal .c1-big-score{font-size:56px}
+#c1r-modal .c1-verdict-label{font-size:22px;letter-spacing:.03em}
+#c1r-modal .c1-verdict-meta{font-size:var(--fs-small);margin-top:6px}
+#c1r-modal .c1-verdict-detail{font-size:12px;line-height:1.6;margin-top:7px;font-family:var(--c1-mono)}
+#c1r-modal .c1-score-row{gap:14px;margin-bottom:10px}
+#c1r-modal .c1-score-name{font-size:var(--fs-body);width:130px;font-weight:600;color:var(--t1)}
+#c1r-modal .c1-bar-wrap{height:7px;border-radius:5px}
+#c1r-modal .c1-bar{border-radius:5px}
+#c1r-modal .c1-score-val{font-size:var(--fs-body);width:44px;font-weight:800;font-family:var(--c1-mono)}
+#c1r-modal .c1-flags{gap:7px;margin-top:14px}
+#c1r-modal .c1-flag,#c1r-modal .c1-signal{font-size:11.5px;padding:4px 11px;border-radius:7px}
+#c1r-modal .c1-sandbox-note{font-size:var(--fs-small);padding:11px 15px;line-height:1.58}
+#c1r-modal #c1-install-bar{margin-top:18px!important;padding-top:18px!important;gap:14px!important}
+.c1r-install-hint{font-size:var(--fs-small);color:var(--t2);line-height:1.5}
+.c1r-install-spin{align-items:center;gap:8px;font-size:var(--fs-small);color:var(--t2)}
+
+/* containment */
+#c1r-modal .c1-iso{padding:18px 22px;margin-top:0;border-radius:9px}
+#c1r-modal .c1-iso-eyebrow{font-size:var(--fs-micro);margin-bottom:7px}
+#c1r-modal .c1-iso-hdr{font-size:var(--fs-body);gap:9px;margin-bottom:10px}
+#c1r-modal .c1-iso-hdr b{font-size:15.5px}
+#c1r-modal .c1-iso-backend{font-size:11px;padding:2px 9px}
+#c1r-modal .c1-iso-facts{font-size:var(--fs-small);gap:6px 16px;margin-bottom:10px}
+#c1r-modal .c1-iso-warn li{font-size:var(--fs-small);line-height:1.58;margin-bottom:4px}
+#c1r-modal .c1-iso-timing{font-size:11.5px}
+#c1r-modal .c1-iso-tl{margin-top:14px;padding-top:13px}
+#c1r-modal .c1-iso-tl-lbl{font-size:var(--fs-micro)}
+#c1r-modal .c1-iso-tl-total{font-size:13px}
+#c1r-modal .c1-iso-tl-note{font-size:11px}
+#c1r-modal .c1-iso-tl-bar{height:9px}
+#c1r-modal .c1-iso-tl-keys{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:5px 16px;margin-top:11px}
+#c1r-modal .c1-iso-tl-key{font-size:var(--fs-small)}
+#c1r-modal .c1-iso-tl-key .p{font-size:11px}
+
+/* a blocklist match */
+#c1r-modal .c1-bl-badge{font-size:10.5px;padding:3px 10px}
+#c1r-modal .c1-bl-name{font-size:15.5px}
+#c1r-modal .c1-bl-grid{gap:14px 24px}
+#c1r-modal .c1-bl-label{font-size:10.5px}
+#c1r-modal .c1-bl-value,#c1r-modal .c1-bl-store,#c1r-modal .c1-bl-unknown{font-size:var(--fs-body)}
+#c1r-modal .c1-bl-why{padding:12px 14px}
+#c1r-modal .c1-bl-why-hdr{font-size:10.5px}
+#c1r-modal .c1-bl-why li{font-size:12.5px;line-height:1.6}
+#c1r-modal .c1-bl-why-foot{font-size:11.5px}
+#c1r-modal .c1-bl-metric b{font-size:15px}
+#c1r-modal .c1-bl-metric span{font-size:10.5px}
+#c1r-modal .c1-bl-tag{font-size:10.5px;padding:3px 8px}
+#c1r-modal .c1-bl-sync{font-size:var(--fs-small);padding:9px 12px}
+#c1r-modal .c1-bl-hash-cta{font-size:11.5px}
+
+/* the verdict report */
+#c1r-modal .c1r-vsummary{font-size:var(--fs-lead);line-height:1.65;color:var(--t0);margin:0 0 14px}
+#c1r-modal .c1r-formula{font:600 12px/1.5 var(--c1-mono);color:var(--t1);margin-bottom:14px;padding:10px 14px;
+  background:var(--bg0);border:1px solid var(--b2);border-radius:8px;letter-spacing:.01em}
+#c1r-modal .c1r-flaglist{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+#c1r-modal .c1r-flagrow{padding:13px 16px;border-radius:9px;background:var(--bg1);border:1px solid var(--b1);border-left:4px solid var(--fc)}
+#c1r-modal .c1r-flagrow-top{display:flex;align-items:center;gap:9px;margin-bottom:6px;flex-wrap:wrap}
+#c1r-modal .c1r-flagrow-sev{font-size:10px;font-weight:800;letter-spacing:.08em;padding:4px 9px;border-radius:6px;color:var(--fc);
+  background:color-mix(in srgb,var(--fc) 14%,transparent);border:1px solid color-mix(in srgb,var(--fc) 42%,transparent)}
+#c1r-modal .c1r-flagrow-name{font:700 12.5px var(--c1-mono);color:var(--t0)}
+#c1r-modal .c1r-flagrow-desc{font-size:var(--fs-body);color:var(--t2);line-height:1.6}
+#c1r-modal .c1r-vreco{font-size:var(--fs-body);line-height:1.65;color:var(--t1);padding:13px 16px;border-radius:9px;
+  background:rgba(145,101,247,.08);border:1px solid rgba(145,101,247,.3)}
+#c1r-modal .c1r-vreco:empty{display:none}
+#c1r-modal .c1r-riskbadge{font-size:10.5px;padding:4px 11px;letter-spacing:.1em}
+
+/* the graph's own controls and card */
+#c1r-modal .c1g-lg{font-size:11.5px}
+
+@media (max-width:760px){
+  #c1r-modal .c1r-modal-body{padding:14px 12px 30px}
+  #c1r-modal .c1r-panel{padding:18px 16px}
+  #c1r-modal .c1r-hero{padding:22px 20px;gap:22px}
+  #c1r-modal .c1r-hero-plain{font-size:14px}
+  #c1r-modal .c1-card,#c1r-modal .c1-iso{padding:20px 18px}
+  #c1r-modal .c1r-ico{width:34px;height:34px}
+  #c1r-modal .c1r-ptitle{font-size:14.5px}
+  #c1r-modal .c1r-reco{padding:16px 16px;gap:12px}
+  #c1r-modal .c1r-gauge{width:132px;height:84px}
+  #c1r-modal .c1r-gauge svg{width:132px;height:74px}
+  #c1r-modal .c1r-gauge-val{top:38px;font-size:23px}
+  #c1r-modal .c1r-gauge-cap{top:64px}
+  #c1r-modal .c1-big-score{font-size:52px}
+}
+
 /* ── C4 Forensic Engine ─────────────────────────────────── */
 .c4-atabs{display:flex;gap:2px;border-bottom:1px solid var(--b1);background:var(--bg1);flex-shrink:0;overflow-x:auto;padding:0 14px}
 .c4-atab{padding:9px 14px;background:none;border:none;border-bottom:2px solid transparent;
@@ -3912,11 +4359,16 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
 
     <nav class="c1-tabs" role="tablist" aria-orientation="horizontal"
          aria-label="Extension analyzer sections" onkeydown="c1TabKey(event)">
-      <span class="c1-tab-grp" aria-hidden="true">Gate</span>
+      <div class="c1-grp on" data-sec="gate" role="presentation">
+      <div class="c1-grp-hd" aria-hidden="true"><b>01</b><span>Gate</span><i></i></div>
+      <div class="c1-grp-tabs" role="presentation">
       <button class="c1-tab active" id="c1-tab-live" role="tab" aria-selected="true" aria-controls="c1-pane-live" onclick="c1Tab('live',this)">
         <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>Install gate<span class="c1-tab-badge alert" id="c1-live-badge"></span>
       </button>
-      <span class="c1-tab-grp" aria-hidden="true">Analyze</span>
+      </div></div>
+      <div class="c1-grp" data-sec="analyze" role="presentation">
+      <div class="c1-grp-hd" aria-hidden="true"><b>02</b><span>Analyze</span><i></i></div>
+      <div class="c1-grp-tabs" role="presentation">
       <button class="c1-tab" id="c1-tab-upload" role="tab" aria-selected="false" aria-controls="c1-pane-upload" onclick="c1Tab('upload',this)">
         <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>Upload CRX
       </button>
@@ -3926,13 +4378,17 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
       <button class="c1-tab" id="c1-tab-manual" role="tab" aria-selected="false" aria-controls="c1-pane-manual" onclick="c1Tab('manual',this)">
         <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>Manual
       </button>
-      <span class="c1-tab-grp" aria-hidden="true">Records</span>
+      </div></div>
+      <div class="c1-grp" data-sec="records" role="presentation">
+      <div class="c1-grp-hd" aria-hidden="true"><b>03</b><span>Records</span><i></i></div>
+      <div class="c1-grp-tabs" role="presentation">
       <button class="c1-tab" id="c1-tab-history" role="tab" aria-selected="false" aria-controls="c1-pane-history" onclick="c1Tab('history',this)">
         <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg></span>Case ledger<span class="c1-tab-badge" id="c1-hist-count">0</span>
       </button>
       <button class="c1-tab" id="c1-tab-blocklist" role="tab" aria-selected="false" aria-controls="c1-pane-blocklist" onclick="c1Tab('blocklist',this);c1LoadBlocklistStats()">
         <span class="c1-tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg></span>Blocklist
       </button>
+      </div></div>
     </nav>
 
     <!-- ── Stage ───────────────────────────────────────────────────────────── -->
@@ -4061,8 +4517,8 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
             </div>
             <div class="c1-row">
               <button class="c1-btn primary" id="c1-submit-btn" onclick="c1Analyze()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze</button>
-              <button class="c1-btn ghost" onclick="c1FillMalicious()">Try malicious example</button>
-              <button class="c1-btn ghost" onclick="c1ClearManual()">Clear</button>
+              <button class="c1-btn ghost" onclick="c1FillMalicious()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.5L4.6 18.4A2 2 0 0 0 6.3 21.5h11.4a2 2 0 0 0 1.7-3.1L14 9.5V2"/><line x1="8.5" y1="2" x2="15.5" y2="2"/></svg> Try malicious example</button>
+              <button class="c1-btn ghost" onclick="c1ClearManual()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Clear</button>
               <div id="c1-manual-spinner" class="c1-busy"><div class="c1-ring"></div><span id="c1-manual-label">Analyzing...</span></div>
             </div>
           </div>
@@ -4139,7 +4595,7 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
                 style="width:90px" title="How many undocumented rows to attempt" />
               <button class="c1-btn ghost" id="c1-cov-sweep-btn" onclick="c1BlocklistBackfill()">Run sweep</button>
               <button class="c1-btn ghost" onclick="c1BlocklistReload()"
-                title="Re-read the CSV from disk to pick up writes made by the offline sweep script">Reload sheet</button>
+                title="Re-read the CSV from disk to pick up writes made by the offline sweep script"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg> Reload sheet</button>
               <span class="c1-hint" style="flex:1;min-width:220px">
                 Static stack only. Delisted extensions can't be downloaded; those rows are left untouched
                 rather than filled with guesses.
@@ -9047,6 +9503,10 @@ function c1Tab(name, btn) {
     prevTab.setAttribute('aria-selected', 'false');
   }
   if (btn) { btn.classList.add('active'); btn.setAttribute('aria-selected', 'true'); }
+  // Light up the menu section the open tab belongs to.
+  const sec = btn && btn.closest('.c1-grp');
+  document.querySelectorAll('#panel-c1 .c1-grp.on').forEach(g => { if (g !== sec) g.classList.remove('on'); });
+  if (sec) sec.classList.add('on');
 }
 
 // Left/Right move through the tabs and Home/End jump to its ends (WAI-ARIA tabs,
@@ -9070,6 +9530,13 @@ function c1TabKey(e) {
 // A spinner that says how long it has been going. A VM analysis takes ~35 s and a
 // bare "Analyzing..." for that long reads as a hang. The interval exists only
 // while the work does; the returned function stops it and hides the spinner.
+// A button whose action takes time shows an inline spinner while it runs (CSS: .c1-btn.is-busy).
+function _c1BtnBusy(btn, on) {
+  if (!btn) return;
+  btn.classList.toggle('is-busy', !!on);
+  if (on) btn.setAttribute('aria-busy', 'true'); else btn.removeAttribute('aria-busy');
+}
+
 function _c1Busy(spinEl, labelEl, base) {
   if (!spinEl) return () => {};
   spinEl.style.display = 'flex';
@@ -9601,16 +10068,21 @@ function c1OpenReport(data) {
   const dot   = document.getElementById('c1r-modal-dot');
   if (title) title.textContent = ident.name || d.filename || d.extension_id || 'Analysis report';
   if (sub) {
-    sub.textContent = [
-      ident.version ? 'v' + ident.version : '',
-      d.verdict || '',
-      d.timestamp ? new Date(d.timestamp).toLocaleString() : '',
-    ].filter(Boolean).join('  \u00b7  ');
+    // Chips for version, verdict and date. The separators stay in the text (hidden by CSS),
+    // so the sentence still reads "v2.4 / MALICIOUS / date" to anything that copies it.
+    const when = d.timestamp ? new Date(d.timestamp).toLocaleString() : '';
+    const bits = [];
+    if (ident.version) bits.push('<span class="c1r-vchip">v' + _c1Esc(ident.version) + '</span>');
+    if (d.verdict)     bits.push('<span class="c1r-vpill k-' + _c1VerdictKind(d.verdict) + '">' + _c1Esc(d.verdict) + '</span>');
+    if (when)          bits.push('<span class="c1r-vchip">' + _c1Esc(when) + '</span>');
+    sub.innerHTML = bits.join('<span class="sep">  \u00b7  </span>');
   }
   if (dot) {
-    const c = c1Color(score);
-    dot.style.background = c;
-    dot.style.boxShadow = '0 0 0 3px ' + c + '2e';
+    // A score badge in the verdict colour; dark ink on the amber and green fills for contrast.
+    dot.textContent = String(score);
+    dot.title = 'Threat score ' + score + ' out of 100';
+    dot.style.background = c1Color(score);
+    dot.style.color = score >= 70 ? '#fff' : '#101426';
   }
   const shell = m.querySelector('.c1r-modal-shell');
   if (shell) shell.scrollTop = 0;
@@ -9618,6 +10090,7 @@ function c1OpenReport(data) {
   if (body) body.scrollTop = 0;
   const x = m.querySelector('.c1r-modal-x');
   if (x) x.focus();
+  c1ReportScroll();
 }
 
 function c1CloseReport() {
@@ -9654,6 +10127,9 @@ function c1SetReportMode(mode) {
   if (sb) sb.classList.toggle('active',  simple);
   if (ab) ab.classList.toggle('active', !simple);
   try { localStorage.setItem('c1ReportMode', simple ? 'simple' : 'advanced'); } catch (_) {}
+  const jb = document.getElementById('c1r-jumpbar');
+  if (jb) jb.hidden = simple || !jb.childElementCount;
+  c1ReportScroll();
 }
 
 // ── Verdict styling ─────────────────────────────────────────────────────────
@@ -9800,7 +10276,8 @@ function c1StatCardsHtml(data) {
       <div class="c1r-stat-sub">${sub}</div>
     </div>`;
 
-  const reqs  = Number(cnt.requests || 0);
+  // `attributed` is the extension's own traffic; older analyses only have the raw total.
+  const reqs  = Number((cnt.attributed != null ? cnt.attributed : cnt.requests) || 0);
   const hosts = Number(cnt.hosts || 0);
   const sigs  = Number(cnt.signals || 0);
 
@@ -9815,7 +10292,7 @@ function c1StatCardsHtml(data) {
     </div>`;
 
   return `<div class="c1r-stats">
-    ${cell('Network Requests', reqs,  ran ? 'HTTP calls made'         : why,
+    ${cell('Network Requests', reqs,  ran ? (cnt.attributed != null ? 'made by the extension' : 'HTTP calls made') : why,
            reqs  > 40 ? 'var(--warn)' : 'var(--t0)')}
     ${cell('External Servers', hosts, ran ? 'distinct hosts contacted' : why,
            hosts > 5  ? 'var(--warn)' : 'var(--t0)')}
@@ -9826,6 +10303,32 @@ function c1StatCardsHtml(data) {
 }
 
 // ── Simple view ─────────────────────────────────────────────────────────────
+// "What to do": the recommendation as a callout under the summary, in the verdict's colour.
+const _C1R_RECO_ICO = {
+  mal:  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>',
+  sus:  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  safe: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><polyline points="22 4 12 14 9 11"/></svg>',
+};
+function _c1RecoHtml(rpt, kind) {
+  const text = _c1Prose((rpt || {}).recommendation || '');
+  if (!text) return '';
+  return '<div class="c1r-reco ' + kind + ' c1r-anim c1r-d2"><span class="c1r-reco-ico">' + (_C1R_RECO_ICO[kind] || _C1R_RECO_ICO.sus) +
+         '</span><div><div class="c1r-reco-lbl">What to do</div><div class="c1r-reco-txt">' + _c1Esc(text) + '</div></div></div>';
+}
+
+// The export row, shared by the Simple view and the end of the Advanced view.
+function _c1ExportInner() {
+  return `
+      <span class="c1r-export-lbl">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export report
+      </span>
+      <button class="c1r-xbtn" data-kind="html" onclick="c1Export('html')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="10 13 8 15 10 17"/><polyline points="14 13 16 15 14 17"/></svg>HTML report</button>
+      <button class="c1r-xbtn" onclick="c1Export('json')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/></svg>JSON</button>
+      <button class="c1r-xbtn" onclick="c1Export('summary')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>Summary</button>
+    `;
+}
+
 function c1RenderSimple(data) {
   const host = document.getElementById('c1r-simple');
   if (!host) return;
@@ -9857,20 +10360,14 @@ function c1RenderSimple(data) {
       </div>
       ${c1GaugeHtml(score, clr)}
     </div>
+    ${_c1RecoHtml(rpt, kind)}
     ${c1StatCardsHtml(data)}
     <div id="c1r-simple-perms"></div>
+    <div id="c1r-simple-notes"></div>
     <button class="c1r-jump c1r-anim c1r-d3" onclick="c1SetReportMode('advanced')">
-      View full technical report &rarr;
+      View full technical report <span class="c1r-arrow" aria-hidden="true">&rarr;</span>
     </button>
-    <div class="c1r-export c1r-anim c1r-d4">
-      <span class="c1r-export-lbl">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Export report
-      </span>
-      <button class="c1r-xbtn" data-kind="pdf" onclick="c1Export('pdf')">PDF</button>
-      <button class="c1r-xbtn" onclick="c1Export('json')">JSON</button>
-      <button class="c1r-xbtn" onclick="c1Export('summary')">Summary</button>
-    </div>`;
+    <div class="c1r-export c1r-anim c1r-d4">${_c1ExportInner()}</div>`;
 
   // Compact capability list under the stats — the "what can it do" question is
   // the one a non-specialist can actually act on, so it belongs in Simple too.
@@ -9898,7 +10395,7 @@ function c1PermPanelHtml(data, compact) {
 
   const more = rest > 0
     ? (compact
-        ? `<button class="c1r-more" onclick="c1SetReportMode('advanced')">+ ${rest} more permission${rest !== 1 ? 's' : ''} &rarr;</button>`
+        ? `<button class="c1r-more" onclick="c1SetReportMode('advanced')">+ ${rest} more permission${rest !== 1 ? 's' : ''} <span class="c1r-arrow" aria-hidden="true">&rarr;</span></button>`
         : `<button class="c1r-more" onclick="c1TogglePerms()">Show all ${perms.length} permissions</button>`)
     : (!compact && _c1PermsExpanded && perms.length > LIMIT
         ? `<button class="c1r-more" onclick="c1TogglePerms()">Show fewer</button>` : '');
@@ -9924,20 +10421,35 @@ function c1TogglePerms() {
 function c1RenderPermPanel(data) {
   const el = document.getElementById('c1r-perm-panel');
   if (el) el.innerHTML = c1PermPanelHtml(data, false);
+  c1AddHeadIcons();           // this panel is rebuilt by "Show all", which drops its icon and fold button
+  c1AddCollapsers();
 }
 
 // ── Network behaviour graph ─────────────────────────────────────────────────
 // Deliberately NOT a physics simulation. The interesting axis in this data is
-// WHERE a request was issued from — the background service worker keeps running
+// WHERE a request was issued from: the background service worker keeps running
 // with no page open, so C2 traffic living there looks different from ordinary
 // page traffic. A force layout would scatter that distinction; a radial layout
 // grouped by realm makes it the first thing you see.
+//
+// One builder serves the app and the exported HTML report (c1GraphHtml), and one
+// self-contained function wires the interaction (c1GraphInit), so the report can
+// embed its source and behave the same offline. Zoom, pan, hover and pinned
+// detail cards live in that function. Animation is one-shot (nodes pop in, edges
+// grow out of the hub, one ripple), transform only, and off under
+// prefers-reduced-motion; nothing loops.
 const _C1R_SRC = {
   background:     { label: 'Background worker', colour: '#f5a623' },
   content_script: { label: 'Content script',    colour: '#9165f7' },
   page:           { label: 'Page context',      colour: '#4d8ef8' },
   unknown:        { label: 'Network layer only', colour: '#5e7a9a' },
 };
+// Traffic of the real sites the sandbox visited, and of tabs the extension opened.
+// Shown for context only (hidden until switched on): it is not the extension's own.
+const _C1_GRP = Object.assign({}, _C1R_SRC, {
+  site: { label: 'Visited sites (not the extension)', colour: '#8795ad' },
+});
+const _C1_GRP_ORDER = ['background', 'content_script', 'page', 'unknown', 'site'];
 
 function _c1PrimarySource(host) {
   const s = host.sources || [];
@@ -9946,6 +10458,449 @@ function _c1PrimarySource(host) {
   if (s.indexOf('page') !== -1)           return 'page';
   return 'unknown';
 }
+
+let _c1gSeq = 0;
+const _C1G_ICO = {
+  in:  '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  out: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>',
+  fit: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+  big: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
+};
+
+// Everything the graph draws, from one analysis. Attributed hosts first (grouped by
+// who made the request), then the visited sites' busiest servers as a hidden group.
+function c1GraphModel(data) {
+  const ev = _c1Evidence(data);
+  const intel = {};
+  (ev.intel.domains || []).forEach(d => { intel[d.host] = d; });
+  const mk = (h, grp) => {
+    const d = intel[h.host] || {};
+    return {
+      host: String(h.host || ''), requests: Number(h.requests) || 0, methods: h.methods || [], grp: grp,
+      flagged: !!h.suspicious,
+      kind: _C1_KIND[d.kind] || '', role: _C1_ROLE[d.role] || '', ips: (d.ips || []).slice(0, 3),
+    };
+  };
+  const nodes = (ev.obs.hosts || []).map(h => mk(h, _c1PrimarySource(h)));
+  (ev.obs.page_hosts || []).forEach(h => {
+    if (!nodes.some(n => n.host === h.host)) nodes.push(mk(h, 'site'));
+  });
+  nodes.sort((a, b) => _C1_GRP_ORDER.indexOf(a.grp) - _C1_GRP_ORDER.indexOf(b.grp) ||
+                       b.requests - a.requests || a.host.localeCompare(b.host));
+  return nodes;
+}
+
+function c1GraphHtml(data) {
+  const nodes = c1GraphModel(data);
+  if (!nodes.length) return '';
+  const E = _c1Esc, uid = 'c1gbg' + (++_c1gSeq);
+  // The canvas is about twice as wide as it is tall, like the panel it sits in, so the
+  // picture fills the box and the labels render at a readable size.
+  const W = 1300, H = 620, CX = W / 2, CY = H / 2, N = nodes.length;
+  const own = nodes.filter(n => n.grp !== 'site').length, nSite = N - own;
+  // A crowded graph gets smaller labels (and so tighter spacing); a normal one keeps the reading size.
+  const dense = own > 26, cw = dense ? 6.9 : 8.3;
+
+  // The extension's own servers fill the full circle, on one or two concentric rings
+  // so a long list still has room for its labels. The visited sites' servers get an
+  // outer ring of their own, so switching that group off leaves no gap in the circle.
+  const rings = own <= 10 ? 1 : own <= 26 ? 2 : 3;
+  const RX = [own <= 2 ? 250 : 300, 430, 540], RY = [own <= 2 ? 140 : 165, 225, 275];
+
+  // Keeps a node, and the label beside it, inside the canvas.
+  const fit = p => {
+    const w = p.short.length * cw;
+    const left  = p.anchor === 'end'   ? w + p.r + 16 : p.anchor === 'middle' ? w / 2 + 10 : p.r + 10;
+    const right = p.anchor === 'start' ? w + p.r + 16 : p.anchor === 'middle' ? w / 2 + 10 : p.r + 10;
+    p.x = Math.max(left, Math.min(W - right, p.x));
+    p.y = Math.max(p.r + 28, Math.min(H - p.r - 28, p.y));
+    return p;
+  };
+
+  // First pass: where every node goes, and the box its label will occupy.
+  let oi = 0, si = 0;
+  const pts = nodes.map(n => {
+    let ring, a;
+    if (n.grp === 'site') {
+      ring = 2;
+      a = -Math.PI / 2 + (si++ + 0.5) * (Math.PI * 2 / nSite) + Math.PI / nSite;
+    } else {
+      ring = own <= 2 ? 0 : oi % rings;
+      a = own === 1 ? 0 : own === 2 ? oi * Math.PI : -Math.PI / 2 + (oi + 0.5) * (Math.PI * 2 / own);
+      oi++;
+    }
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const r = n.grp === 'site' ? 5 + Math.min(7, Math.sqrt(n.requests) * 1.2) : 7 + Math.min(11, Math.sqrt(n.requests) * 2);
+    const max = n.grp === 'site' ? 22 : N > 45 ? 18 : N > 26 ? 24 : 30;      // crowded graphs get shorter labels
+    const short = n.host.length > max ? n.host.slice(0, max - 2) + '\u2026' : n.host;
+    // Near the top or bottom the label goes above or below; elsewhere to the side.
+    let anchor, lx, ly;
+    if (Math.abs(cos) < 0.22) { anchor = 'middle'; lx = 0; ly = sin < 0 ? -(r + 9) : r + 22; }
+    else { anchor = cos > 0 ? 'start' : 'end'; lx = cos > 0 ? r + 9 : -(r + 9); ly = 5; }
+    const pt = { n, cos, sin, r, short, anchor, lx, ly, x: CX + cos * RX[ring], y: CY + sin * RY[ring] };
+    return fit(pt);
+  });
+
+  // Second pass: nudge a node outward when its label would sit on another label or dot.
+  // Cheap and deterministic, and it only ever moves things away from the hub.
+  const lab = p => {
+    const w = p.short.length * cw, x0 = p.anchor === 'start' ? p.x + p.lx : p.anchor === 'end' ? p.x + p.lx - w : p.x - w / 2;
+    return [x0, p.y + p.ly - 13, x0 + w, p.y + p.ly + 5];
+  };
+  const dot = p => [p.x - p.r - 2, p.y - p.r - 2, p.x + p.r + 2, p.y + p.r + 2];
+  const hit = (u, v) => u[0] < v[2] + 3 && v[0] < u[2] + 3 && u[1] < v[3] + 1 && v[1] < u[3] + 1;
+  for (let pass = 0; pass < 90; pass++) {
+    let moved = false;
+    for (let j = 1; j < pts.length; j++) {
+      for (let i = 0; i < j; i++) {
+        const a = pts[i], b = pts[j];
+        if (hit(lab(a), lab(b)) || hit(lab(a), dot(b)) || hit(dot(a), lab(b))) {
+          b.x += b.cos * 18; b.y += b.sin * 18; fit(b);
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  let guides = '', edges = '', dots = '';
+  for (let r = 0; r < rings; r++) {
+    guides += `<ellipse class="c1g-ring" cx="${CX}" cy="${CY}" rx="${RX[r]}" ry="${RY[r]}"/>`;
+  }
+  if (nSite) guides += `<ellipse class="c1g-ring" cx="${CX}" cy="${CY}" rx="${RX[2]}" ry="${RY[2]}"/>`;
+  pts.forEach((p, i) => {
+    const n = p.n, x = p.x, y = p.y, r = p.r;
+    const colour = _C1_GRP[n.grp].colour;
+    const off = n.grp === 'site' ? ' off' : '';
+
+    // A slight bend makes the spokes read as flow rather than as a wheel.
+    const dx = x - CX, dy = y - CY, k = 0.07;
+    const qx = (CX + x) / 2 - dy * k, qy = (CY + y) / 2 + dx * k;
+    edges += `<path class="c1g-edge${off}" data-i="${i}" data-grp="${n.grp}" stroke="${colour}" style="--i:${i}" ` +
+             `d="M${CX} ${CY} Q${qx.toFixed(1)} ${qy.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)}"/>`;
+
+    const info = {
+      host: n.host, requests: n.requests, methods: n.methods, group: _C1_GRP[n.grp].label,
+      kind: n.kind, role: n.role, ips: n.ips, flagged: n.flagged,
+    };
+    dots += `<g class="c1g-node c1g-${n.grp}${off}" data-i="${i}" data-grp="${n.grp}" style="--i:${i};--c:${colour}" ` +
+            `transform="translate(${x.toFixed(1)} ${y.toFixed(1)})" tabindex="0" role="button" ` +
+            `aria-label="${E(n.host + ', ' + n.requests + ' request' + (n.requests === 1 ? '' : 's') + ', ' + _C1_GRP[n.grp].label)}" ` +
+            `data-info="${E(JSON.stringify(info))}">` +
+              `<g class="c1g-pop">` +
+                (n.flagged ? `<circle class="c1g-flag" r="${(r + 6).toFixed(1)}"/>` : '') +
+                `<circle class="c1g-dot" r="${r.toFixed(1)}" fill="${colour}"/>` +
+              `</g>` +
+              `<text class="c1g-lbl" x="${p.lx.toFixed(1)}" y="${p.ly}" text-anchor="${p.anchor}">${E(p.short)}</text>` +
+            `</g>`;
+  });
+
+  const present = _C1_GRP_ORDER.filter(g => nodes.some(n => n.grp === g));
+  const legend = present.map(g => {
+    const off = g === 'site';
+    return `<button type="button" class="c1g-lg${off ? ' off' : ''}" data-grp="${g}" aria-pressed="${!off}" style="--c:${_C1_GRP[g].colour}">` +
+           `<i></i>${E(_C1_GRP[g].label)} (${nodes.filter(n => n.grp === g).length})</button>`;
+  }).join('') + (nodes.some(n => n.flagged)
+    ? '<span class="c1g-lg flag"><i></i>Flagged: raw IP or WebSocket</span>' : '');
+
+  const tools = [['out', 'Zoom out'], ['in', 'Zoom in'], ['fit', 'Fit to view'], ['big', 'Expand or shrink']]
+    .map(t => `<button type="button" data-act="${t[0]}" title="${t[1]}" aria-label="${t[1]}">${_C1G_ICO[t[0]]}</button>`);
+  tools.splice(2, 0, '<span class="c1g-zoomval" aria-live="off">100%</span>');
+
+  return `<div class="c1g${dense ? ' dense' : ''}">
+    <div class="c1g-legend">${legend}</div>
+    <div class="c1g-stage" tabindex="0" aria-label="Network graph of the servers contacted. Plus and minus zoom, arrow keys move, zero resets.">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
+           aria-label="${own} server${own === 1 ? '' : 's'} contacted by the extension">
+        <defs><radialGradient id="${uid}" cx="50%" cy="50%" r="60%">
+          <stop offset="0" style="stop-color:var(--g-acc);stop-opacity:.13"/>
+          <stop offset="1" style="stop-color:var(--g-acc);stop-opacity:0"/></radialGradient></defs>
+        <rect x="0" y="0" width="${W}" height="${H}" fill="url(#${uid})"/>
+        <g class="c1g-view">
+          ${guides}${edges}
+          <g class="c1g-hubpop">
+            <circle class="c1g-ripple" cx="${CX}" cy="${CY}" r="36"/>
+            <circle class="c1g-hub" cx="${CX}" cy="${CY}" r="36"/>
+            <text class="c1g-hub-t" x="${CX}" y="${CY - 1}">EXT</text>
+            <text class="c1g-hub-s" x="${CX}" y="${CY + 14}">${own} host${own === 1 ? '' : 's'}</text>
+          </g>
+          ${dots}
+        </g>
+      </svg>
+      <div class="c1g-tools">${tools.join('')}</div>
+      <div class="c1g-card" role="status"><div class="c1g-ch"></div><div class="c1g-cb"></div></div>
+      <div class="c1g-hint">Scroll to zoom, drag to move, double click to reset. Click a server to keep its details.</div>
+    </div>
+  </div>`;
+}
+
+// Wires one .c1g. Self-contained on purpose: the HTML report embeds this function's
+// source, so it must not refer to anything outside itself.
+function c1GraphInit(root) {
+  if (!root || root.__c1g) return;
+  root.__c1g = true;
+  root.classList.add('js');
+  var stage = root.querySelector('.c1g-stage'), svg = stage.querySelector('svg'), view = svg.querySelector('.c1g-view');
+  var card = root.querySelector('.c1g-card'), ch = card.querySelector('.c1g-ch'), cb = card.querySelector('.c1g-cb');
+  var nodes = [].slice.call(svg.querySelectorAll('.c1g-node')), edges = [].slice.call(svg.querySelectorAll('.c1g-edge'));
+  var zv = root.querySelector('.c1g-zoomval'), vb = svg.viewBox.baseVal;
+  var MIN = 0.6, MAX = 7, s = 1, tx = 0, ty = 0, pinned = null, dragged = false;
+  var ptr = {}, pinch = 0, startX = 0, startY = 0, captured = false;
+
+  function apply() {
+    var lim = vb.width * 0.9 * Math.max(s, 1);
+    tx = Math.max(-lim, Math.min(lim, tx));
+    ty = Math.max(-lim * 0.6, Math.min(lim * 0.6, ty));
+    view.setAttribute('transform', 'translate(' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ') scale(' + s.toFixed(3) + ')');
+    if (zv) zv.textContent = Math.round(s * 100) + '%';
+  }
+  function toView(cx, cy) {
+    var p = svg.createSVGPoint(); p.x = cx; p.y = cy;
+    return p.matrixTransform(svg.getScreenCTM().inverse());
+  }
+  function zoomAt(f, cx, cy) {
+    var p = cx == null ? { x: vb.x + vb.width / 2, y: vb.y + vb.height / 2 } : toView(cx, cy);
+    var s2 = Math.max(MIN, Math.min(MAX, s * f));
+    tx = p.x - (p.x - tx) * (s2 / s);
+    ty = p.y - (p.y - ty) * (s2 / s);
+    s = s2; apply();
+  }
+  function reset() { s = 1; tx = 0; ty = 0; apply(); }
+
+  // Hover and keyboard focus show a detail card; a click keeps it.
+  function show(n) {
+    root.classList.add('hov');
+    var i = n.getAttribute('data-i');
+    nodes.forEach(function (x) { x.classList.toggle('hl', x === n); });
+    edges.forEach(function (x) { x.classList.toggle('hl', x.getAttribute('data-i') === i); });
+    var d = {};
+    try { d = JSON.parse(n.getAttribute('data-info')); } catch (e) {}
+    ch.textContent = d.host || '';
+    cb.textContent = '';
+    [['Requests', d.requests + (d.methods && d.methods.length ? ' (' + d.methods.join(', ') + ')' : '')],
+     ['Made by', d.group], ['What it is', d.kind], ['Seen as', d.role],
+     ['IP addresses', d.ips && d.ips.join(', ')], ['Flag', d.flagged ? 'Raw IP address or WebSocket' : '']]
+      .forEach(function (r) {
+        if (r[1] === undefined || r[1] === null || r[1] === '') return;
+        var row = document.createElement('div'), b = document.createElement('b');
+        b.textContent = r[0] + ': ';
+        row.appendChild(b); row.appendChild(document.createTextNode(String(r[1])));
+        cb.appendChild(row);
+      });
+    card.classList.add('on');
+  }
+  function clear() {
+    if (pinned) { show(pinned); return; }
+    root.classList.remove('hov');
+    nodes.forEach(function (x) { x.classList.remove('hl'); });
+    edges.forEach(function (x) { x.classList.remove('hl'); });
+    card.classList.remove('on');
+  }
+  function live(n) { return n && !n.classList.contains('off'); }
+  svg.addEventListener('mouseover', function (e) { var n = e.target.closest('.c1g-node'); if (live(n)) show(n); });
+  svg.addEventListener('mouseout',  function (e) { if (e.target.closest('.c1g-node')) clear(); });
+  svg.addEventListener('focusin',   function (e) { var n = e.target.closest('.c1g-node'); if (live(n)) show(n); });
+  svg.addEventListener('focusout',  function (e) { if (e.target.closest('.c1g-node')) clear(); });
+  svg.addEventListener('keydown', function (e) {
+    var n = e.target.closest && e.target.closest('.c1g-node');
+    if (n && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pinned = pinned === n ? null : n; clear(); if (pinned) show(pinned); }
+  });
+
+  // Zoom: wheel (and trackpad pinch, which arrives as ctrl+wheel), buttons, keys, double click.
+  stage.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY);
+  }, { passive: false });
+  stage.addEventListener('dblclick', function (e) { if (!e.target.closest('.c1g-tools')) reset(); });
+  stage.addEventListener('keydown', function (e) {
+    if (e.target !== stage) return;
+    var k = e.key;
+    if (k === '+' || k === '=') zoomAt(1.25); else if (k === '-' || k === '_') zoomAt(0.8); else if (k === '0') reset();
+    else if (k === 'ArrowLeft') { tx += 50; apply(); } else if (k === 'ArrowRight') { tx -= 50; apply(); }
+    else if (k === 'ArrowUp') { ty += 50; apply(); } else if (k === 'ArrowDown') { ty -= 50; apply(); }
+    else return;
+    e.preventDefault();
+  });
+  [].slice.call(root.querySelectorAll('.c1g-tools button')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      var a = b.getAttribute('data-act');
+      if (a === 'in') zoomAt(1.4); else if (a === 'out') zoomAt(1 / 1.4); else if (a === 'fit') reset();
+      else if (a === 'big') {
+        if (document.fullscreenElement === root) { document.exitFullscreen(); return; }
+        if (root.classList.contains('big')) { root.classList.remove('big'); sync(); return; }
+        var fallback = function () { root.classList.add('big'); sync(); };
+        if (document.fullscreenEnabled && root.requestFullscreen) {
+          try { root.requestFullscreen().catch(fallback); } catch (e) { fallback(); }
+        } else fallback();
+      }
+    });
+  });
+  // Keeps the Expand button's pressed state true however fullscreen was left (Esc too).
+  function sync() {
+    var on = document.fullscreenElement === root || root.classList.contains('big');
+    var bb = root.querySelector('[data-act="big"]');
+    if (bb) bb.setAttribute('aria-pressed', String(on));
+  }
+  document.addEventListener('fullscreenchange', sync);
+
+  // Drag to move, two fingers to pinch. Capture the pointer only once a drag has
+  // really started, so a plain click still reaches the node under it.
+  function dist() { var k = Object.keys(ptr); return Math.hypot(ptr[k[0]].x - ptr[k[1]].x, ptr[k[0]].y - ptr[k[1]].y); }
+  function mid()  { var k = Object.keys(ptr); return { x: (ptr[k[0]].x + ptr[k[1]].x) / 2, y: (ptr[k[0]].y + ptr[k[1]].y) / 2 }; }
+  stage.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('.c1g-tools')) return;
+    ptr[e.pointerId] = { x: e.clientX, y: e.clientY };
+    dragged = false; captured = false; startX = e.clientX; startY = e.clientY;
+    if (Object.keys(ptr).length === 2) pinch = dist();
+  });
+  stage.addEventListener('pointermove', function (e) {
+    var p = ptr[e.pointerId];
+    if (!p) return;
+    var dx = e.clientX - p.x, dy = e.clientY - p.y;
+    ptr[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (Object.keys(ptr).length === 2) {
+      var d = dist(), m = mid();
+      if (pinch) zoomAt(d / pinch, m.x, m.y);
+      pinch = d; dragged = true; return;
+    }
+    if (!captured && Math.hypot(e.clientX - startX, e.clientY - startY) > 4) {
+      captured = true; dragged = true;
+      try { stage.setPointerCapture(e.pointerId); } catch (x) {}
+      stage.classList.add('grab');
+    }
+    if (captured) {
+      var k = 1 / svg.getScreenCTM().a;
+      tx += dx * k; ty += dy * k; apply();
+    }
+  });
+  function lift(e) { delete ptr[e.pointerId]; pinch = 0; stage.classList.remove('grab'); }
+  stage.addEventListener('pointerup', lift);
+  stage.addEventListener('pointercancel', lift);
+  stage.addEventListener('click', function (e) {
+    if (dragged) { dragged = false; return; }
+    if (e.target.closest('.c1g-tools') || e.target.closest('.c1g-card')) return;
+    var n = e.target.closest('.c1g-node');
+    if (live(n)) { pinned = pinned === n ? null : n; clear(); if (pinned) show(pinned); }
+    else if (pinned) { pinned = null; clear(); }
+  });
+
+  // Legend chips switch a group on or off.
+  [].slice.call(root.querySelectorAll('.c1g-lg[data-grp]')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      var g = b.getAttribute('data-grp'), off = !b.classList.contains('off');
+      b.classList.toggle('off', off); b.setAttribute('aria-pressed', String(!off));
+      [].slice.call(svg.querySelectorAll('[data-grp="' + g + '"]')).forEach(function (x) { x.classList.toggle('off', off); });
+      if (pinned && pinned.classList.contains('off')) { pinned = null; clear(); }
+    });
+  });
+
+  // The entrance plays when the graph first scrolls into view (a panel far down a
+  // long report would otherwise have finished before anyone saw it).
+  function go() { root.classList.add('go'); }
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (en) { if (en[0].isIntersecting) { go(); io.disconnect(); } }, { threshold: 0.2 });
+    io.observe(root);
+  } else go();
+  window.addEventListener('beforeprint', go);
+  apply();
+}
+
+const _C1_GRAPH_CSS = `
+.c1g{position:relative}
+.c1g-legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.c1g-lg{display:inline-flex;align-items:center;gap:7px;padding:4px 12px;border-radius:99px;border:1px solid var(--g-line);
+  background:transparent;color:var(--g-mut);font-family:inherit;font-size:11.5px;font-weight:600;line-height:1.3;cursor:pointer;
+  transition:opacity .18s,background-color .18s,border-color .18s}
+span.c1g-lg{cursor:default}
+.c1g-lg:hover{border-color:var(--c,var(--g-acc));color:var(--g-ink)}
+.c1g-lg i{width:9px;height:9px;border-radius:50%;background:var(--c);flex-shrink:0;transition:background-color .18s}
+.c1g-lg.off{opacity:.5}.c1g-lg.off i{background:transparent;box-shadow:inset 0 0 0 1.6px var(--c)}
+.c1g-lg.flag{--c:var(--g-bad)}.c1g-lg.flag i{background:transparent;box-shadow:0 0 0 1.5px var(--g-bad)}
+.c1g-stage{position:relative;height:clamp(360px,52vh,520px);border:1px solid var(--g-line);border-radius:12px;background:var(--g-bg);
+  overflow:hidden;cursor:grab;touch-action:none;outline:none;transition:height .4s cubic-bezier(.22,1,.36,1)}
+.c1g.big .c1g-stage{height:min(80vh,840px)}
+.c1g-stage.grab{cursor:grabbing}
+.c1g:fullscreen{background:var(--g-panel);padding:16px 20px;box-sizing:border-box;display:flex;flex-direction:column}
+.c1g:fullscreen .c1g-stage{flex:1;height:auto;min-height:0;border-radius:10px}
+.c1g-stage:focus-visible{box-shadow:0 0 0 2px var(--g-acc)}
+.c1g svg{display:block;width:100%;height:100%;user-select:none;-webkit-user-select:none}
+.c1g-ring{fill:none;stroke:var(--g-line);stroke-width:1;stroke-dasharray:2 7;opacity:.8}
+.c1g-edge{fill:none;stroke-width:1.5;stroke-opacity:.4;transition:stroke-opacity .18s,stroke-width .18s,opacity .18s;
+  transform-box:view-box;transform-origin:50% 50%}
+.c1g-node{cursor:pointer;outline:none;transition:opacity .18s}
+.c1g-pop{transform-box:fill-box;transform-origin:center}
+.c1g-dot{transform-box:fill-box;transform-origin:center;transition:transform .2s cubic-bezier(.2,1.2,.4,1)}
+.c1g.dense .c1g-lbl{font-size:12.5px}
+.c1g-lbl{font-size:15px;fill:var(--g-mut);pointer-events:none;paint-order:stroke;stroke:var(--g-bg);stroke-width:4px;stroke-linejoin:round;
+  transition:fill .18s}
+.c1g-node:focus-visible .c1g-dot{stroke:var(--g-ink);stroke-width:2.5}
+.c1g-flag{fill:none;stroke:var(--g-bad);stroke-width:1.6;stroke-dasharray:3 3}
+.c1g-site .c1g-dot{fill-opacity:.3;stroke:var(--c);stroke-width:1.6;stroke-dasharray:3 2}
+.c1g.hov .c1g-node{opacity:.3}
+.c1g.hov .c1g-edge{stroke-opacity:.08}
+.c1g.hov .c1g-node.hl{opacity:1}
+.c1g.hov .c1g-edge.hl{stroke-opacity:.95;stroke-width:2.6}
+.c1g-node.hl .c1g-dot{transform:scale(1.35)}
+.c1g-node.hl .c1g-lbl{fill:var(--g-ink);font-weight:700}
+.c1g .c1g-node.off,.c1g .c1g-edge.off{opacity:0!important;pointer-events:none}
+.c1g-hub{fill:var(--g-panel);stroke:var(--g-acc);stroke-width:2.4}
+.c1g-hub-t{font-size:15px;font-weight:800;fill:var(--g-ink);text-anchor:middle}
+.c1g-hub-s{font-size:11px;fill:var(--g-faint);text-anchor:middle}
+.c1g-hubpop{transform-box:fill-box;transform-origin:center}
+.c1g-ripple{fill:none;stroke:var(--g-acc);stroke-width:2;opacity:0;transform-box:fill-box;transform-origin:center}
+/* Decoration must never catch the mouse: the ripple ends up nine times its size. */
+.c1g-ripple,.c1g-hubpop,.c1g-ring,.c1g-edge{pointer-events:none}
+.c1g-tools{position:absolute;top:10px;right:10px;display:flex;align-items:center;gap:2px;padding:3px;border-radius:10px;
+  background:var(--g-panel);border:1px solid var(--g-line);box-shadow:0 4px 14px rgba(0,0,0,.22)}
+.c1g-tools button{width:28px;height:28px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:var(--g-ink);
+  cursor:pointer;padding:0;transition:background-color .15s,color .15s}
+.c1g-tools button:hover{background:var(--g-bg);color:var(--g-acc)}
+.c1g-tools button:active{transform:scale(.9)}
+.c1g-lg:active{transform:translateY(1px)}
+.c1g-lg:focus-visible{outline:2px solid var(--g-acc);outline-offset:2px}
+.c1g-tools button:focus-visible{outline:2px solid var(--g-acc)}
+.c1g-zoomval{min-width:44px;text-align:center;font-size:11.5px;font-weight:700;color:var(--g-mut)}
+.c1g-hint{position:absolute;left:12px;bottom:10px;max-width:calc(100% - 24px);font-size:11.5px;color:var(--g-faint);pointer-events:none;
+  transition:opacity .25s}
+.c1g.hov .c1g-hint{opacity:0}
+.c1g-card{position:absolute;left:12px;bottom:12px;max-width:min(400px,calc(100% - 24px));padding:10px 13px;border-radius:10px;
+  background:var(--g-panel);border:1px solid var(--g-line);box-shadow:0 8px 24px rgba(0,0,0,.28);opacity:0;transform:translateY(6px);
+  transition:opacity .16s,transform .16s;pointer-events:none}
+.c1g-card.on{opacity:1;transform:none}
+.c1g-ch{font-weight:700;font-size:14px;color:var(--g-ink);word-break:break-all}
+.c1g-cb{margin-top:5px;display:grid;gap:3px;font-size:12.5px;color:var(--g-mut);line-height:1.5}
+.c1g-cb b{color:var(--g-ink);font-weight:600}
+@keyframes c1gPop{from{transform:scale(0)}to{transform:scale(1)}}
+@keyframes c1gGrow{from{transform:scale(0)}to{transform:scale(1)}}
+@keyframes c1gFade{from{opacity:0}to{opacity:1}}
+@keyframes c1gRipple{from{transform:scale(1);opacity:.6}to{transform:scale(9);opacity:0}}
+.c1g.js:not(.go) .c1g-pop,.c1g.js:not(.go) .c1g-hubpop,.c1g.js:not(.go) .c1g-edge{transform:scale(0)}
+.c1g.js:not(.go) .c1g-lbl{opacity:0}
+.c1g.go .c1g-edge{animation:c1gGrow .6s cubic-bezier(.22,1,.36,1) both;animation-delay:calc(var(--i,0) * 24ms + .15s)}
+.c1g.go .c1g-pop{animation:c1gPop .5s cubic-bezier(.2,1.25,.35,1) both;animation-delay:calc(var(--i,0) * 24ms + .35s)}
+.c1g.go .c1g-lbl{animation:c1gFade .4s ease both;animation-delay:calc(var(--i,0) * 24ms + .5s)}
+.c1g.go .c1g-hubpop{animation:c1gPop .5s cubic-bezier(.2,1.25,.35,1) both}
+.c1g.go .c1g-ripple{animation:c1gRipple 1.5s ease-out both;animation-delay:.15s}
+@media (prefers-reduced-motion:reduce){
+  .c1g .c1g-pop,.c1g .c1g-hubpop,.c1g .c1g-edge,.c1g .c1g-lbl,.c1g .c1g-ripple{animation:none!important;transform:none!important}
+  .c1g .c1g-lbl{opacity:1!important}.c1g .c1g-ripple{opacity:0!important}
+  .c1g-stage,.c1g-card{transition:none}
+}
+@media print{
+  .c1g-tools,.c1g-hint{display:none!important}
+  .c1g .c1g-pop,.c1g .c1g-hubpop,.c1g .c1g-edge,.c1g .c1g-lbl,.c1g .c1g-ripple{animation:none!important;transform:none!important}
+  .c1g .c1g-lbl{opacity:1!important}.c1g .c1g-ripple{opacity:0!important}
+  .c1g-stage{height:380px!important;box-shadow:none}
+}
+`;
+const _C1_GRAPH_APP_MAP = '.c1g{--g-bg:var(--bg0);--g-panel:var(--bg3);--g-line:var(--b2);--g-ink:var(--t0);--g-mut:var(--t2);--g-faint:var(--t3);--g-acc:var(--c1);--g-bad:#f04747}';
+const _C1_GRAPH_RPT_MAP = '.c1g{--g-bg:var(--soft);--g-panel:var(--card);--g-line:var(--line);--g-ink:var(--ink);--g-mut:var(--mut);--g-faint:var(--faint);--g-acc:var(--acc);--g-bad:var(--bad)}';
+(function () {
+  const st = document.createElement('style');
+  st.id = 'c1g-css';
+  st.textContent = _C1_GRAPH_APP_MAP + _C1_GRAPH_CSS;
+  document.head.appendChild(st);
+})();
 
 function c1RenderGraphPanel(data) {
   const el = document.getElementById('c1r-graph-panel');
@@ -9956,128 +10911,540 @@ function c1RenderGraphPanel(data) {
 
   if (!dy.executed || !hosts.length) { el.innerHTML = ''; return; }
 
-  const head = `
-    <div class="c1r-phead">
-      <span class="c1r-accent"></span>
-      <div>
-        <div class="c1r-ptitle">Where it sent data</div>
-        <div class="c1r-psub">Grouped by which part of the extension made the request${obs.truncated ? '. Busiest 40 hosts shown' : ''}</div>
-      </div>
-    </div>`;
-
-  // Under three hosts a graph is just decoration — a list carries it better.
-  if (hosts.length < 3) {
-    const rows = hosts.map(h => {
-      const src = _C1R_SRC[_c1PrimarySource(h)];
-      return `<div class="c1r-hostrow">
-          <span style="width:9px;height:9px;border-radius:50%;background:${src.colour};
-                       flex-shrink:0;box-shadow:0 0 0 3px ${src.colour}22"></span>
-          <span class="c1r-hostname">${_c1Esc(h.host)}</span>
-          <span class="c1r-hostmeta">
-            <span class="c1r-pill count">${h.requests} req</span>
-            <span class="c1r-pill count" style="color:${src.colour}">${src.label}</span>
-            ${h.suspicious ? '<span class="c1r-pill flag">flagged</span>' : ''}
-          </span>
-        </div>`;
-    }).join('');
-    el.innerHTML = `<div class="c1r-panel">${head}${rows}</div>`;
-    return;
-  }
-
-  // Group hosts by originating realm, then lay each group out on its own arc.
-  const groups = {};
-  hosts.forEach(h => {
-    const k = _c1PrimarySource(h);
-    (groups[k] = groups[k] || []).push(h);
-  });
-  const order = ['background', 'content_script', 'page', 'unknown']
-    .filter(k => groups[k] && groups[k].length);
-
-  // Elliptical rather than circular: the panel is far wider than it is tall,
-  // and a circular layout letterboxed into a narrow centre band, wasting most
-  // of the width and shrinking the nodes for no reason.
-  const W = 1000, H = 330, CX = W / 2, CY = H / 2;
-  const total = hosts.length;
-  const maxReq = Math.max.apply(null, hosts.map(h => h.requests || 0).concat([1]));
-
-  let edges = '', nodes = '', i = 0;
-  const span = (Math.PI * 2) / Math.max(total, 1);
-
-  order.forEach(key => {
-    groups[key].forEach(h => {
-      // Spread every node over the full circle in group order, so members of a
-      // group sit together without needing a per-group angular budget.
-      const ang = -Math.PI / 2 + (i + 0.5) * span;
-      // Busier hosts sit further out, giving volume a second visual channel.
-      const load = (h.requests || 0) / maxReq;
-      const rx = 250 + load * 105, ry = 82 + load * 44;
-      const x = CX + Math.cos(ang) * rx;
-      const y = CY + Math.sin(ang) * ry;
-      const c = _C1R_SRC[key].colour;
-      const r = 5 + Math.min(8, Math.sqrt(h.requests || 0) * 1.6);
-
-      edges += `<line x1="${CX}" y1="${CY}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"
-                 stroke="${c}" stroke-opacity=".3" stroke-width="1.2"/>`;
-      const tip = `${h.host}: ${h.requests} request${h.requests !== 1 ? 's' : ''}` +
-                  (h.methods && h.methods.length ? ` (${h.methods.join(', ')})` : '') +
-                  ` · ${_C1R_SRC[key].label}` + (h.suspicious ? ' · flagged' : '');
-      // Label each node. Hover tooltips alone are not enough — a static
-      // screenshot of the report (or its printed PDF) has to be readable.
-      const right = Math.cos(ang) > -0.05;
-      const lx = x + (right ? r + 6 : -(r + 6));
-      const short = h.host.length > 26 ? h.host.slice(0, 24) + '…' : h.host;
-
-      nodes += `<g class="c1r-gnode" data-tip="${_c1Esc(tip)}">
-          ${h.suspicious ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r + 4).toFixed(1)}"
-             fill="none" stroke="#f04747" stroke-width="1.4" stroke-dasharray="2 2"/>` : ''}
-          <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}"
-                  fill="${c}" fill-opacity=".85"/>
-          <text class="c1r-glabel" x="${lx.toFixed(1)}" y="${(y + 3).toFixed(1)}"
-                text-anchor="${right ? 'start' : 'end'}">${_c1Esc(short)}</text>
-        </g>`;
-      i++;
-    });
-  });
-
-  const legend = order.map(k =>
-    `<span class="c1r-lg"><i style="background:${_C1R_SRC[k].colour}"></i>${_C1R_SRC[k].label} (${groups[k].length})</span>`
-  ).join('') + (hosts.some(h => h.suspicious)
-      ? '<span class="c1r-lg"><i style="background:transparent;border:1.4px dashed #f04747"></i>Flagged (raw IP or WebSocket)</span>'
-      : '');
+  // The same hosts as plain rows, for anyone who prefers a list to a picture.
+  const rows = hosts.map(h => {
+    const src = _C1R_SRC[_c1PrimarySource(h)];
+    return `<div class="c1r-hostrow">
+        <span style="width:9px;height:9px;border-radius:50%;background:${src.colour};
+                     flex-shrink:0;box-shadow:0 0 0 3px ${src.colour}22"></span>
+        <span class="c1r-hostname">${_c1Esc(h.host)}</span>
+        <span class="c1r-hostmeta">
+          <span class="c1r-pill count">${h.requests} req</span>
+          <span class="c1r-pill count" style="color:${src.colour}">${src.label}</span>
+          ${h.suspicious ? '<span class="c1r-pill flag">flagged</span>' : ''}
+        </span>
+      </div>`;
+  }).join('');
 
   el.innerHTML = `
     <div class="c1r-panel">
-      ${head}
-      <div class="c1r-legend">${legend}</div>
-      <div class="c1r-graph-wrap" id="c1r-graph-wrap">
-        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-          ${edges}
-          <circle cx="${CX}" cy="${CY}" r="26" fill="var(--bg3)" stroke="var(--c1)" stroke-width="2"/>
-          <text x="${CX}" y="${CY - 1}" text-anchor="middle" font-size="9" font-weight="700"
-                fill="var(--t0)">EXT</text>
-          <text x="${CX}" y="${CY + 10}" text-anchor="middle" font-size="7"
-                fill="var(--t2)">${total} hosts</text>
-          ${nodes}
-        </svg>
-        <div class="c1r-tip" id="c1r-tip"></div>
+      <div class="c1r-phead">
+        <span class="c1r-accent"></span>
+        <div>
+          <div class="c1r-ptitle">Where it sent data</div>
+          <div class="c1r-psub">Grouped by which part of the extension made the request${obs.truncated ? '. Busiest 40 hosts shown' : ''}</div>
+        </div>
+        <div class="c1r-seg" style="margin-left:auto">
+          <button type="button" class="c1r-segbtn active" data-v="graph">Graph</button>
+          <button type="button" class="c1r-segbtn" data-v="list">List</button>
+        </div>
       </div>
+      <div data-pane="graph">${c1GraphHtml(data)}</div>
+      <div data-pane="list" hidden>${rows}</div>
     </div>`;
 
-  // Hover tooltips. Bound after injection because the nodes are built as an
-  // HTML string, so no listener survives the innerHTML assignment.
-  const wrap = document.getElementById('c1r-graph-wrap');
-  const tip  = document.getElementById('c1r-tip');
-  if (!wrap || !tip) return;
-  wrap.querySelectorAll('.c1r-gnode').forEach(g => {
-    g.addEventListener('mousemove', ev => {
-      const b = wrap.getBoundingClientRect();
-      tip.textContent = g.getAttribute('data-tip') || '';
-      tip.style.opacity = '1';
-      tip.style.left = Math.min(ev.clientX - b.left + 12, b.width - tip.offsetWidth - 6) + 'px';
-      tip.style.top  = (ev.clientY - b.top - 32) + 'px';
-    });
-    g.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
+  el.querySelectorAll('.c1g').forEach(c1GraphInit);
+  el.querySelectorAll('.c1r-segbtn[data-v]').forEach(b => b.addEventListener('click', () => {
+    el.querySelectorAll('.c1r-segbtn[data-v]').forEach(x => x.classList.toggle('active', x === b));
+    el.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.getAttribute('data-pane') !== b.getAttribute('data-v'); });
+  }));
+}
+
+
+// ── Setup profile and network intelligence ──────────────────────────────────
+// Evidence that sits beside the verdict and never changes it: how the extension is set up
+// (read from its manifest and code) and what the servers it talks to are. Analyses stored
+// before these existed simply lack them, so every builder below returns '' or an empty list
+// for missing data and the panels hide themselves.
+const _C1_ROLE = { contacted: 'Contacted', opened: 'Opened by it', declared: 'Named in its code' };
+const _C1_KIND = { declared: 'Its own server', known_service: 'Shared service', unexplained: 'Unexplained', ip_literal: 'Raw IP address' };
+
+function _c1Evidence(data) {
+  const rpt = data.report || {};
+  const dy  = data.dynamic || {};
+  const obs = rpt.observed || dy.observed || {};
+  return {
+    profile: rpt.profile || data.profile || {},
+    intel:   rpt.network_intel || data.network_intel || {},
+    obs:     obs,
+    beh:     obs.behaviour || {},
+    browse:  obs.browse || {},
+    ran:     !!dy.executed,
+  };
+}
+
+function _c1N(n) { return Number(n || 0).toLocaleString(); }
+
+// An alarm whose name is a variable is shown by that name, tagged as a variable: "(variable r.Foo)" reads as noise.
+function _c1AlarmName(name) {
+  const m = /^\(variable (.+)\)$/.exec(String(name || ''));
+  return m ? { text: m[1].split('.').pop(), variable: true } : { text: String(name || ''), variable: false };
+}
+
+function _c1Bytes(n) {
+  n = Number(n) || 0;
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n >= 1024)    return Math.round(n / 1024) + ' KB';
+  return n + ' B';
+}
+
+function _c1Every(m) {
+  if (m == null) return 'Set at run time';
+  m = Number(m);
+  if (m >= 1440 && m % 1440 === 0) return (m / 1440) + (m === 1440 ? ' day' : ' days');
+  if (m >= 60 && m % 60 === 0)     return (m / 60) + (m === 60 ? ' hour' : ' hours');
+  return (Number.isInteger(m) ? m : m.toFixed(1)) + ' min';
+}
+
+// A request URL for display: keep the path readable and cut a long query string, which is
+// usually an install identifier. The full value stays in the JSON export.
+function _c1ShortUrl(u) {
+  u = String(u || '');
+  const q = u.indexOf('?');
+  if (q === -1) return u;
+  return u.slice(0, q) + '?' + (u.length - q - 1 > 24 ? u.slice(q + 1, q + 19) + '…' : u.slice(q + 1));
+}
+
+// Label/value pairs describing the setup. Values are escaped HTML using only <code>.
+function _c1ProfileRows(p) {
+  if (!p || !p.background) return [];
+  const E = _c1Esc, code = s => '<code>' + E(s) + '</code>';
+  const rows = [];
+
+  const bg = p.background || {};
+  rows.push(['Background process',
+    bg.kind === 'service_worker' ? 'Service worker ' + (bg.files || []).map(code).join(', ')
+    : bg.kind === 'page'         ? 'Background page ' + (bg.files || []).map(code).join(', ')
+    : bg.kind === 'scripts'      ? 'Background scripts ' + (bg.files || []).slice(0, 3).map(code).join(', ')
+    : 'None declared']);
+
+  const sa = p.site_access || {};
+  rows.push(['Websites it can reach',
+    sa.scope === 'all_sites' ? 'Every website'
+    : sa.scope === 'limited' ? E(sa.count) + ' site pattern' + (sa.count === 1 ? '' : 's') + ': ' + (sa.patterns || []).slice(0, 3).map(code).join(', ')
+    : 'None']);
+
+  const cs = p.content_scripts || {}, rt = cs.runtime || {};
+  let csText = 'In the manifest: ' + (cs.declared || []).length + '.';
+  if (rt.registered_in_code) {
+    csText += ' Registered from code: yes' + (rt.all_sites ? ', on every website' : '') +
+      ((rt.worlds || []).indexOf('MAIN') !== -1 ? ', including the page’s own JavaScript world' : '') + '.';
+  }
+  rows.push(['Content scripts', csText]);
+
+  const us = (p.manifest || {}).update_source;
+  rows.push(['Updates come from', us === 'store' ? 'The Chrome Web Store' : us === 'custom' ? 'A custom update server' : 'No update address (loaded by hand)']);
+
+  const un = p.uninstall || {};
+  rows.push(['Page opened on uninstall', un.set ? 'Yes' + (un.hint ? ', likely ' + code(un.hint.split('?')[0]) : '') : 'No']);
+
+  const nr = p.network_rules;
+  if (nr && nr.total) {
+    const a = nr.by_action || {};
+    rows.push(['Network rules', _c1N(nr.total) + ' rules: ' + ['block', 'allow', 'redirect', 'modifyHeaders']
+      .filter(k => a[k]).map(k => _c1N(a[k]) + ' ' + (k === 'modifyHeaders' ? 'change headers' : k)).join(', ')]);
+  }
+
+  const c = p.code || {};
+  if (c.js_files) {
+    const bits = [c.js_files + ' JavaScript file' + (c.js_files === 1 ? '' : 's') + ', ' + _c1Bytes(c.js_bytes)];
+    if (c.minified_files) bits.push(c.minified_files + ' minified');
+    bits.push('eval ' + (c.eval_calls || 0) + ', base64 decode ' + (c.atob_calls || 0) + ', remote scripts ' + (c.remote_scripts || 0));
+    rows.push(['Code', bits.join('; ')]);
+  }
+
+  const pk = p.package;
+  if (pk && pk.files) {
+    rows.push(['Package', _c1N(pk.files) + ' files, ' + _c1Bytes(pk.bytes) +
+      (pk.binaries && pk.binaries.length ? '. Executable files: ' + pk.binaries.slice(0, 3).map(code).join(', ') : '. No executable files')]);
+  }
+
+  const wa = p.web_accessible || {};
+  if (wa.count) rows.push(['Files visible to websites', wa.count + (wa.any_site ? ', open to every website' : ', limited sites')]);
+  return rows;
+}
+
+// Label chips such as "storage 48" for the browser APIs and data primitives in use.
+function _c1ApiList(p) {
+  const u = (p && p.api_usage) || {};
+  const out = [];
+  [['browser', 'Browser API'], ['data', 'Data and network']].forEach(([k, label]) => {
+    const items = Object.keys(u[k] || {}).sort((a, b) => u[k][b] - u[k][a]);
+    if (items.length) out.push([label, items.map(n => n + ' ' + u[k][n])]);
   });
+  return out;
+}
+
+// What the sandbox counted, as short label/value pairs. Only scored, attributable signals
+// plus the bait page DOM count, so each number belongs to the extension.
+function _c1BehaviourFacts(b, ran) {
+  if (!ran || !b) return [];
+  const f = [
+    ['Page changes', b.dom_mutations],
+    ['Cookie reads', b.cookie_reads],
+    ['Code run with eval', b.eval_calls],
+    ['Keyboard listeners', b.key_listeners],
+    ['Form submits', b.form_submits],
+    ['WebSockets', b.websockets],
+    ['Console errors', b.console_errors],
+  ];
+  return f.filter(x => x[1] != null);
+}
+
+// The one-line description of each real-page visit, honest about what it is not.
+function _c1BrowseLine(br) {
+  if (!br || br.enabled === false) return 'The real-page visit was switched off for this run.';
+  const v = (br.visited || []).length, f = (br.failed || []).length;
+  if (!v && f) return 'The sandbox could not reach the real pages (' + f + ' failed), so only the test page was observed.';
+  if (!v) return '';
+  return 'Visited ' + v + ' real page' + (v === 1 ? '' : 's') + (f ? ' (' + f + ' could not be reached)' : '') + '. What those sites did is shown for context only and is never held against the extension.';
+}
+
+// ── Panels in the app ───────────────────────────────────────────────────────
+function _c1PanelHead(title, sub, accent) {
+  return '<div class="c1r-phead"><span class="c1r-accent' + (accent ? ' ' + accent : '') + '"></span><div>' +
+         '<div class="c1r-ptitle">' + _c1Esc(title) + '</div><div class="c1r-psub">' + _c1Esc(sub) + '</div></div></div>';
+}
+
+// Short, plain observations for the Simple view. A handful of lines, no tables.
+function c1NotesPanelHtml(data) {
+  const notes = (_c1Evidence(data).profile.notes || []).slice(0, 4);
+  if (!notes.length) return '';
+  return '<div class="c1r-panel">' +
+    _c1PanelHead('Worth knowing about how it works', 'Facts from its code and setup, not a verdict', 'static') +
+    '<ul class="c1r-notes">' + notes.map(n => '<li>' + _c1Esc(_c1Prose(n)) + '</li>').join('') + '</ul></div>';
+}
+
+function c1ProfilePanelHtml(data) {
+  const p = _c1Evidence(data).profile;
+  const rows = _c1ProfileRows(p);
+  if (!rows.length) return '';
+  const E = _c1Esc;
+  const notes = (p.notes || []).map(n => '<li>' + E(_c1Prose(n)) + '</li>').join('');
+  const alarms = p.alarms || [], eps = p.endpoints || [];
+  return '<div class="c1r-panel">' +
+    _c1PanelHead('How it is set up', 'Read from its manifest and code, without running it', 'static') +
+    (notes ? '<ul class="c1r-notes">' + notes + '</ul>' : '') +
+    '<div class="c1r-kv">' + rows.map(r => '<div class="k">' + E(r[0]) + '</div><div>' + r[1] + '</div>').join('') + '</div>' +
+    (alarms.length
+      ? '<div class="c1r-sub">Scheduled tasks</div><div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Name</th><th>First run</th><th>Repeats every</th></tr></thead><tbody>' +
+        alarms.map(a => { const n = _c1AlarmName(a.name); return '<tr><td><code>' + E(n.text) + '</code>' + (n.variable ? ' <span class="c1r-dim">variable</span>' : '') +
+          '</td><td>' + E(_c1Every(a.delay_minutes)) + '</td><td>' + E(_c1Every(a.period_minutes)) + '</td></tr>'; }).join('') +
+        '</tbody></table></div>' : '') +
+    (eps.length
+      ? '<div class="c1r-sub">Servers named in its code</div><div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Host</th><th>Mentions</th><th>Example</th></tr></thead><tbody>' +
+        eps.slice(0, 12).map(e => '<tr><td><code>' + E(e.host) + '</code>' + (e.cleartext ? ' <span class="c1r-pill flag">plain http</span>' : '') +
+          '</td><td>' + E(e.count) + '</td><td class="c1r-dim">' + E(_c1ShortUrl((e.samples || [])[0] || '')) + '</td></tr>').join('') +
+        '</tbody></table></div>' : '') +
+    _c1ApiList(p).map(g => '<div class="c1r-sub">' + E(g[0]) + ' use in its code</div><div class="c1r-chips">' +
+        g[1].map(i => '<span>' + E(i) + '</span>').join('') + '</div>').join('') +
+    '</div>';
+}
+
+function c1CallsPanelHtml(data) {
+  const ev = _c1Evidence(data);
+  if (!ev.ran) return '';
+  const E = _c1Esc, obs = ev.obs, reqs = obs.requests || [], br = ev.browse || {};
+  const facts = _c1BehaviourFacts(ev.beh, true);
+  const tabs = obs.opened_tabs || [], outside = obs.page_hosts || [];
+  const evals = (ev.beh.eval_samples || []);
+  if (!reqs.length && !facts.length && !tabs.length && !(br.visited || []).length) return '';
+  const srcLabel = s => (_C1R_SRC[s] || { label: s }).label;
+  const dataCell = r => r.has_body
+    ? E(_c1Bytes(r.body_size)) + ((r.body_keys || []).length ? ' <span class="c1r-dim">fields: ' + E(r.body_keys.join(', ')) + '</span>' : '')
+    : '<span class="c1r-dim">None</span>';
+  return '<div class="c1r-panel">' +
+    _c1PanelHead('What it did when run', 'Counted in the sandbox. Only the extension’s own activity is scored') +
+    (facts.length ? '<div class="c1r-facts" style="margin-top:0">' + facts.map(f => '<span class="c1r-fact">' + E(f[0]) + ' <b>' + E(_c1N(f[1])) + '</b></span>').join('') + '</div>' : '') +
+    (evals.length ? '<div class="c1r-sub">Code it ran with eval</div>' + evals.map(s => '<div class="c1r-code">' + E(s) + '</div>').join('') : '') +
+    (tabs.length ? '<div class="c1r-sub">Pages it opened by itself</div>' + tabs.map(t => '<div class="c1r-code">' + E(_c1ShortUrl(t)) + '</div>').join('') : '') +
+    (reqs.length
+      ? '<div class="c1r-sub">Requests it made' + (obs.requests_truncated ? ' (first ' + reqs.length + ')' : '') + '</div><div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Method</th><th>Address</th><th>Made by</th><th>Data sent</th><th>Times</th></tr></thead><tbody>' +
+        reqs.map(r => '<tr><td><b>' + E(r.method) + '</b></td><td class="c1r-url">' + E(_c1ShortUrl(r.url)) + '</td><td>' + E(srcLabel(r.source)) +
+          '</td><td>' + dataCell(r) + '</td><td>' + E(r.count) + '</td></tr>').join('') + '</tbody></table></div>' : '') +
+    (_c1BrowseLine(br)
+      ? '<div class="c1r-sub">Real pages visited</div><div class="c1r-note">' + E(_c1BrowseLine(br)) + '</div>' +
+        ((br.visited || []).length ? '<div class="c1r-chips" style="margin-top:8px">' + br.visited.map(u => '<span>' + E(u.replace(/^https?:\/\//, '')) + '</span>').join('') + '</div>' : '') +
+        ((br.visited || []).length ? '<div class="c1r-facts"><span class="c1r-fact">Page changes <b>' + E(_c1N(br.dom_mutations)) + '</b></span>' +
+           '<span class="c1r-fact">Cookie reads by the sites <b>' + E(_c1N(br.page_cookie_reads)) + '</b></span>' +
+           '<span class="c1r-fact">Content script requests <b>' + E(_c1N((br.content_script || {}).requests)) + '</b></span></div>' : '') +
+        (outside.length ? '<div class="c1r-note" style="margin-top:8px">Busiest servers those pages contacted, not attributed to the extension: ' +
+           outside.slice(0, 6).map(h => E(h.host) + ' (' + E(h.requests) + ')').join(', ') + '.</div>' : '')
+      : '') +
+    '</div>';
+}
+
+function c1IntelPanelHtml(data) {
+  const ev = _c1Evidence(data), ni = ev.intel, doms = ni.domains || [];
+  if (!doms.length) return '';
+  const E = _c1Esc, ioc = ni.iocs || {};
+  const group = (label, items) => items && items.length
+    ? '<div class="c1r-sub">' + E(label) + ' (' + items.length + ')</div><div class="c1r-chips mono">' + items.map(i => '<span>' + E(i) + '</span>').join('') + '</div>' : '';
+  return '<div class="c1r-panel">' +
+    _c1PanelHead('Servers and indicators', 'Who the extension talks to or names, and what to block if you decide to') +
+    '<div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Host</th><th>Role</th><th>What it is</th><th>IP addresses</th></tr></thead><tbody>' +
+    doms.map(d => '<tr><td><code>' + E(d.host) + '</code></td><td>' + E(_C1_ROLE[d.role] || d.role) + (d.requests ? ' <span class="c1r-dim">' + E(d.requests) + ' req</span>' : '') +
+      '</td><td>' + E(_C1_KIND[d.kind] || d.kind) + '</td><td class="c1r-dim">' + (E((d.ips || []).slice(0, 3).join(', ')) || 'Not resolved') +
+      '</td></tr>').join('') + '</tbody></table></div>' +
+    group('Domains', ioc.domains) + group('IP addresses', ioc.ips) + group('URLs', ioc.urls) +
+    ((ioc.domains || []).length || (ioc.ips || []).length
+      ? '<button class="c1r-xbtn" style="margin-top:12px" onclick="c1CopyIocs()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy indicators</button>' : '') +
+    '</div>';
+}
+
+// Indicators are defanged (hxxp, [.]) so a pasted copy cannot be clicked by accident.
+function c1CopyIocs() {
+  const ioc = _c1Evidence(_c1LastResult || {}).intel.iocs || {};
+  const text = [].concat(ioc.domains || [], ioc.ips || [], ioc.urls || []).join('\n');
+  if (!text) { showToast('No indicators to copy'); return; }
+  const done = () => showToast('Indicators copied');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => showToast('Copy was blocked by the browser'));
+  else showToast('Copy is not available here');
+}
+
+function c1RenderEvidencePanels(data) {
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  set('c1r-profile-panel', c1ProfilePanelHtml(data));
+  set('c1r-calls-panel',   c1CallsPanelHtml(data));
+  set('c1r-intel-panel',   c1IntelPanelHtml(data));
+  set('c1r-simple-notes',  c1NotesPanelHtml(data));
+}
+
+// ── The same evidence for the HTML report ───────────────────────────────────
+// Own markup and classes: the report is a separate file with its own stylesheet.
+function _c1RptSetup(data, num) {
+  const p = _c1Evidence(data).profile, rows = _c1ProfileRows(p);
+  if (!rows.length) return '';
+  const E = _c1Esc, notes = p.notes || [], alarms = p.alarms || [], eps = p.endpoints || [];
+  return '<section id="setup"><h2><small>' + num + '</small>How it is set up</h2>' +
+    '<p class="sub">Read from the manifest and the code, without running the extension.</p>' +
+    '<div class="card">' +
+    (notes.length ? '<ul class="notes">' + notes.map(n => '<li>' + E(_c1Prose(n)) + '</li>').join('') + '</ul>' : '') +
+    '<div class="kv">' + rows.map(r => '<div class="k">' + E(r[0]) + '</div><div>' + r[1] + '</div>').join('') + '</div>' +
+    (alarms.length ? '<div class="sub2">Scheduled tasks</div><div class="tbl"><table><thead><tr><th>Name</th><th>First run</th><th>Repeats every</th></tr></thead><tbody>' +
+      alarms.map(a => { const n = _c1AlarmName(a.name); return '<tr><td><code>' + E(n.text) + '</code>' + (n.variable ? ' <span class="na">variable</span>' : '') +
+        '</td><td>' + E(_c1Every(a.delay_minutes)) + '</td><td>' + E(_c1Every(a.period_minutes)) + '</td></tr>'; }).join('') +
+      '</tbody></table></div>' : '') +
+    (eps.length ? '<div class="sub2">Servers named in its code</div><div class="tbl"><table><thead><tr><th>Host</th><th>Mentions</th><th>Example</th></tr></thead><tbody>' +
+      eps.slice(0, 12).map(e => '<tr><td><code>' + E(e.host) + '</code>' + (e.cleartext ? ' <span class="flagged">plain http</span>' : '') +
+        '</td><td>' + E(e.count) + '</td><td class="na" style="word-break:break-all">' + E(_c1ShortUrl((e.samples || [])[0] || '')) + '</td></tr>').join('') +
+      '</tbody></table></div>' : '') +
+    _c1ApiList(p).map(g => '<div class="sub2">' + E(g[0]) + ' use in its code</div><div class="chips">' + g[1].map(i => '<span>' + E(i) + '</span>').join('') + '</div>').join('') +
+    '</div></section>';
+}
+
+// Goes inside the Network card, after the host table.
+function _c1RptCalls(data) {
+  const ev = _c1Evidence(data);
+  if (!ev.ran) return '';
+  const E = _c1Esc, obs = ev.obs, reqs = obs.requests || [], br = ev.browse || {}, tabs = obs.opened_tabs || [], outside = obs.page_hosts || [];
+  const facts = _c1BehaviourFacts(ev.beh, true), evals = ev.beh.eval_samples || [];
+  let h = '';
+  if (facts.length) h += '<div class="sub2">Behaviour counted</div><div class="mini">' +
+    facts.map(f => '<div><b>' + E(_c1N(f[1])) + '</b><span>' + E(f[0]) + '</span></div>').join('') + '</div>';
+  if (evals.length) h += '<div class="sub2">Code it ran with eval</div>' + evals.map(s => '<p style="margin:4px 0"><code>' + E(s) + '</code></p>').join('');
+  if (tabs.length) h += '<div class="sub2">Pages it opened by itself</div>' + tabs.map(t => '<p style="margin:4px 0"><code>' + E(_c1ShortUrl(t)) + '</code></p>').join('');
+  if (reqs.length) h += '<div class="sub2">Requests it made' + (obs.requests_truncated ? ' (first ' + reqs.length + ')' : '') +
+    '</div><div class="tbl"><table><thead><tr><th>Method</th><th>Address</th><th>Made by</th><th>Data sent</th><th>Times</th></tr></thead><tbody>' +
+    reqs.map(r => '<tr><td><b>' + E(r.method) + '</b></td><td class="mono" style="word-break:break-all">' + E(_c1ShortUrl(r.url)) + '</td><td>' +
+      E(_C1_RPT_SRC[r.source] || r.source) + '</td><td>' + (r.has_body ? E(_c1Bytes(r.body_size)) +
+        ((r.body_keys || []).length ? ' <span class="na">fields: ' + E(r.body_keys.join(', ')) + '</span>' : '') : '<span class="na">None</span>') +
+      '</td><td>' + E(r.count) + '</td></tr>').join('') + '</tbody></table></div>';
+  const line = _c1BrowseLine(br);
+  if (line) {
+    h += '<div class="sub2">Real pages visited</div><p style="margin:0 0 8px;color:var(--mut)">' + E(line) + '</p>';
+    if ((br.visited || []).length) h += '<div class="chips">' + br.visited.map(u => '<span>' + E(u.replace(/^https?:\/\//, '')) + '</span>').join('') + '</div>' +
+      '<div class="mini" style="margin-top:10px"><div><b>' + E(_c1N(br.dom_mutations)) + '</b><span>Page changes</span></div><div><b>' + E(_c1N(br.page_cookie_reads)) +
+      '</b><span>Cookie reads by the sites</span></div><div><b>' + E(_c1N((br.content_script || {}).requests)) + '</b><span>Content script requests</span></div></div>';
+    if (outside.length) h += '<p style="margin:10px 0 0;color:var(--mut);font-size:13.5px">Busiest servers those pages contacted, not attributed to the extension: ' +
+      outside.slice(0, 6).map(x => E(x.host) + ' (' + E(x.requests) + ')').join(', ') + '.</p>';
+  }
+  return h;
+}
+
+function _c1RptServers(data, num) {
+  const ni = _c1Evidence(data).intel, doms = ni.domains || [];
+  if (!doms.length) return '';
+  const E = _c1Esc, ioc = ni.iocs || {};
+  const group = (label, items) => items && items.length
+    ? '<div class="sub2">' + E(label) + ' (' + items.length + ')</div><div class="chips">' + items.map(i => '<span class="mono">' + E(i) + '</span>').join('') + '</div>' : '';
+  const all = [].concat(ioc.domains || [], ioc.ips || [], ioc.urls || []).join('\n');
+  return '<section id="servers"><h2><small>' + num + '</small>Servers and indicators</h2>' +
+    '<p class="sub">Who the extension talks to or names, and what to block if you decide to.</p><div class="card">' +
+    '<div class="tbl"><table><thead><tr><th>Host</th><th>Role</th><th>What it is</th><th>IP addresses</th></tr></thead><tbody>' +
+    doms.map(d => '<tr><td><code>' + E(d.host) + '</code></td><td>' + E(_C1_ROLE[d.role] || d.role) + (d.requests ? ' <span class="na">' + E(d.requests) + ' req</span>' : '') +
+      '</td><td>' + E(_C1_KIND[d.kind] || d.kind) + '</td><td class="na" style="word-break:break-all">' + (E((d.ips || []).slice(0, 3).join(', ')) || 'Not resolved') +
+      '</td></tr>').join('') + '</tbody></table></div>' +
+    group('Domains', ioc.domains) + group('IP addresses', ioc.ips) + group('URLs', ioc.urls) +
+    (all ? '<p style="margin:14px 0 0"><button class="btn" data-copy="' + E(all) + '">Copy all indicators</button> <span class="na" style="font-size:12.5px">Defanged so they cannot be clicked by accident. Replace [.] with . and hxxp with http to use them.</span></p>' : '') +
+    '</div></section>';
+}
+
+
+// ── Report popup: orientation and polish ────────────────────────────────────
+// The Advanced view is several screens long. These add a way to see where you are and move:
+// a jump bar that follows the scroll, folding panels, a progress line and a back to top button.
+const _C1R_JUMP = [
+  ['Overview',       '#c1r-advanced > .c1-card:first-child'],
+  ['Analysis',       '#c1r-advanced .c1r-split'],
+  ['Containment',    '#c1-isolation-card'],
+  ['Permissions',    '#c1r-perm-panel'],
+  ['Setup',          '#c1r-profile-panel'],
+  ['Network',        '#c1r-graph-panel'],
+  ['Activity',       '#c1r-calls-panel'],
+  ['Servers',        '#c1r-intel-panel'],
+  ['Verdict report', '#c1-report-card'],
+  ['Export',         '#c1r-adv-export'],
+];
+let _c1rSecs = [];
+let _c1rWired = false;
+const _C1R_CHEV = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+
+// Rendered content, not measured height: the modal is still closed when this runs.
+function _c1rPresent(el) {
+  return !!el && el.style.display !== 'none' && (el.children.length > 0 || el.textContent.trim().length > 0);
+}
+
+function _c1rReduced() {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) { return false; }
+}
+
+// A fold button in the heading of each long panel. Idempotent: panels that are rebuilt get theirs back.
+function c1AddCollapsers() {
+  document.querySelectorAll('#c1r-advanced .c1r-panel').forEach(p => {
+    if (p.closest('.c1r-split')) return;
+    const head = p.querySelector(':scope > .c1r-phead');
+    if (!head || head.querySelector('.c1r-collapse')) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'c1r-collapse';
+    b.setAttribute('aria-expanded', String(!p.classList.contains('is-collapsed')));
+    b.setAttribute('aria-label', 'Collapse section');
+    b.title = 'Collapse or expand this section';
+    b.innerHTML = _C1R_CHEV;
+    b.addEventListener('click', () => {
+      const closed = p.classList.toggle('is-collapsed');
+      b.setAttribute('aria-expanded', String(!closed));
+      b.setAttribute('aria-label', closed ? 'Expand section' : 'Collapse section');
+      c1ReportScroll();
+    });
+    head.appendChild(b);
+  });
+}
+
+function _c1rFoldAll(collapse) {
+  document.querySelectorAll('#c1r-advanced .c1r-collapse').forEach(b => {
+    const p = b.closest('.c1r-panel');
+    if (p && p.classList.contains('is-collapsed') !== collapse) b.click();
+  });
+}
+
+function c1BuildJumpbar() {
+  const nav = document.getElementById('c1r-jumpbar');
+  if (!nav) return;
+  _c1rSecs = [];
+  _C1R_JUMP.forEach(([label, sel]) => {
+    const el = document.querySelector(sel);
+    if (_c1rPresent(el)) _c1rSecs.push({ el: el, label: label });
+  });
+  if (_c1rSecs.length < 3) { nav.innerHTML = ''; return; }
+  nav.innerHTML = _c1rSecs.map((s, i) =>
+    '<button type="button" class="c1r-jchip" data-i="' + i + '">' + _c1Esc(s.label) + '</button>').join('') +
+    '<span class="c1r-jsp"></span>' +
+    '<button type="button" class="c1r-jtool" data-act="fold" aria-pressed="false">Collapse all</button>';
+}
+
+function c1ReportScroll() {
+  const body = document.querySelector('#c1r-modal .c1r-modal-body');
+  if (!body) return;
+  const max = body.scrollHeight - body.clientHeight, top = body.scrollTop;
+  const fill = document.getElementById('c1r-progress-fill');
+  if (fill) fill.style.transform = 'scaleX(' + (max > 0 ? Math.min(1, top / max) : 0) + ')';
+  const btt = document.getElementById('c1r-top');
+  if (btt) btt.classList.toggle('on', top > 520);
+  const nav = document.getElementById('c1r-jumpbar');
+  if (!nav || nav.hidden || !_c1rSecs.length) return;
+  const base = body.getBoundingClientRect().top;
+  let cur = 0;
+  _c1rSecs.forEach((s, i) => { if (s.el.getBoundingClientRect().top - base <= 96) cur = i; });
+  if (max > 0 && top >= max - 4) cur = _c1rSecs.length - 1;
+  const chips = nav.querySelectorAll('.c1r-jchip');
+  chips.forEach((c, i) => c.classList.toggle('on', i === cur));
+  const on = chips[cur];
+  if (on && (on.offsetLeft < nav.scrollLeft || on.offsetLeft + on.offsetWidth > nav.scrollLeft + nav.clientWidth)) {
+    nav.scrollLeft = Math.max(0, on.offsetLeft - 24);
+  }
+}
+
+// An icon tile in front of each section heading, chosen by the heading's own title.
+const _C1R_HEAD_ICO = [
+  ['allowed to do',    'blue',  '<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/>'],
+  ['worth knowing',    'blue',  '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'],
+  ['static analysis',  'blue',  '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>'],
+  ['set up',           'blue',  '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>'],
+  ['dynamic sandbox',  '',      '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'],
+  ['sent data',        '',      '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'],
+  ['did when run',     '',      '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'],
+  ['servers',          '',      '<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/>'],
+  ['verdict report',   'amber', '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><polyline points="9 14 11 16 15 12"/>'],
+];
+function c1AddHeadIcons() {
+  document.querySelectorAll('#c1r-modal .c1r-phead').forEach(head => {
+    if (head.classList.contains('has-ico')) return;
+    const title = (head.querySelector('.c1r-ptitle') || {}).textContent || '';
+    const hit = _C1R_HEAD_ICO.find(r => title.toLowerCase().indexOf(r[0]) !== -1);
+    if (!hit) return;
+    const tile = document.createElement('span');
+    tile.className = 'c1r-ico ' + hit[1];
+    tile.setAttribute('aria-hidden', 'true');
+    tile.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + hit[2] + '</svg>';
+    head.insertBefore(tile, head.firstChild);
+    head.classList.add('has-ico');
+  });
+}
+
+function c1EnhanceReport() {
+  const ex = document.getElementById('c1r-adv-export');
+  if (ex) ex.innerHTML = _c1ExportInner();
+  // the four key facts, as the Simple view opens with them (set directly: no count-up here)
+  const st = document.getElementById('c1r-adv-stats');
+  if (st && _c1LastResult) {
+    st.innerHTML = c1StatCardsHtml(_c1LastResult);
+    st.querySelectorAll('.c1r-stat-num[data-target]').forEach(el => { el.textContent = Number(el.dataset.target || 0).toLocaleString(); });
+  }
+  c1AddHeadIcons();
+  c1AddCollapsers();
+  c1BuildJumpbar();
+  if (_c1rWired) return;
+  _c1rWired = true;
+  const body = document.querySelector('#c1r-modal .c1r-modal-body');
+  let raf = 0;
+  if (body) body.addEventListener('scroll', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = 0; c1ReportScroll(); });
+  }, { passive: true });
+  const nav = document.getElementById('c1r-jumpbar');
+  if (nav) nav.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.act === 'fold') {
+      const collapse = b.getAttribute('aria-pressed') !== 'true';
+      _c1rFoldAll(collapse);
+      b.setAttribute('aria-pressed', String(collapse));
+      b.textContent = collapse ? 'Expand all' : 'Collapse all';
+      return;
+    }
+    const s = _c1rSecs[Number(b.dataset.i)];
+    if (!s) return;
+    const panel = s.el.matches('.c1r-panel') ? s.el : s.el.querySelector('.c1r-panel');
+    if (panel && panel.classList.contains('is-collapsed')) {
+      const fold = panel.querySelector(':scope > .c1r-phead .c1r-collapse');
+      if (fold) fold.click();
+    }
+    s.el.scrollIntoView({ behavior: _c1rReduced() ? 'auto' : 'smooth', block: 'start' });
+  });
+  const top = document.getElementById('c1r-top');
+  if (top && body) top.addEventListener('click', () => body.scrollTo({ top: 0, behavior: _c1rReduced() ? 'auto' : 'smooth' }));
 }
 
 // ── Export ──────────────────────────────────────────────────────────────────
@@ -10131,6 +11498,19 @@ function c1SummaryText(data) {
       : 'Sandbox did not run, so the verdict is based on static analysis only.');
   }
 
+  const evx = _c1Evidence(data);
+  if ((evx.profile.notes || []).length) {
+    L.push(''); L.push('HOW IT IS SET UP'); L.push('─'.repeat(52));
+    evx.profile.notes.forEach(n => L.push('  * ' + _c1Prose(n)));
+  }
+  const doms = evx.intel.domains || [];
+  if (doms.length) {
+    L.push(''); L.push('SERVERS'); L.push('─'.repeat(52));
+    doms.forEach(d => L.push(`  ${d.host}  (${_C1_ROLE[d.role] || d.role}, ${_C1_KIND[d.kind] || d.kind})`));
+    const ioc = evx.intel.iocs || {};
+    if ((ioc.domains || []).length) { L.push(''); L.push('INDICATORS (defanged)'); ioc.domains.concat(ioc.ips || []).forEach(i => L.push('  ' + i)); }
+  }
+
   if ((rpt.flags || []).length) {
     L.push(''); L.push('DETECTION FLAGS'); L.push('─'.repeat(52));
     rpt.flags.forEach(f => L.push(`[${f.severity}] ${f.flag}\n    ${_c1Prose(f.description)}`));
@@ -10153,51 +11533,343 @@ function c1Export(kind) {
   } else if (kind === 'summary') {
     _c1Download(`${stem}_summary.txt`, c1SummaryText(data), 'text/plain;charset=utf-8');
     showToast('Summary downloaded');
-  } else if (kind === 'pdf') {
-    c1ExportPdf(stem);
+  } else if (kind === 'html') {
+    c1ExportHtml(data, stem);
   }
 }
 
-// PDF is produced by Electron's printToPDF against the print stylesheet, which
-// gives the user one native Save dialog and a file. window.print() instead
-// raised a printer-picker dialog reading "This app doesn't support print
-// preview" — the wrong affordance entirely for a Download button. Plain
-// browsers (no Electron bridge) still fall back to print().
-async function c1ExportPdf(stem) {
-  // Expand both views first so the PDF is complete regardless of the mode on
-  // screen, then restore whatever the user was looking at.
-  const was = c1ReportMode();
-  const aEl = document.getElementById('c1r-advanced');
-  const sEl = document.getElementById('c1r-simple');
-  if (aEl) aEl.style.display = 'flex';
-  if (sEl) sEl.style.display = 'flex';
-  const restore = () => c1SetReportMode(was);
+// ── HTML report ─────────────────────────────────────────────────────────────
+// One self-contained file: no external requests, no fonts or scripts to fetch, so it
+// opens the same offline, from email, or years later. Light and dark themes (follows the
+// system, with a toggle), filterable permission table, and a print stylesheet for anyone
+// who still wants paper. Every value that came from the analysis is escaped.
+const _C1_RPT_CSS = `
+:root{--bg:#f4f5fb;--card:#fff;--ink:#15172b;--mut:#596080;--faint:#8a90ab;--line:#e3e6f1;--soft:#f0f2fa;
+  --acc:#6b46f5;--safe:#0b8a5f;--safe-bg:#e3f5ec;--warn:#b45309;--warn-bg:#fdf0da;--bad:#c81e1e;--bad-bg:#fdeaea;
+  --info:#2358d8;--info-bg:#e7eefc;--shadow:0 1px 2px rgba(21,23,43,.05),0 10px 28px rgba(21,23,43,.07)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b0d1a;--card:#131629;--ink:#e8eaf6;--mut:#a0a7c4;
+  --faint:#6e7596;--line:#232843;--soft:#1a1e36;--acc:#9a7cff;--safe:#2fd29a;--safe-bg:#0f2c25;--warn:#f5b04a;
+  --warn-bg:#33260f;--bad:#ff6b6b;--bad-bg:#341519;--info:#6b9bff;--info-bg:#14213f;--shadow:0 1px 2px #0006,0 10px 28px #0005}}
+:root[data-theme=dark]{--bg:#0b0d1a;--card:#131629;--ink:#e8eaf6;--mut:#a0a7c4;--faint:#6e7596;--line:#232843;--soft:#1a1e36;
+  --acc:#9a7cff;--safe:#2fd29a;--safe-bg:#0f2c25;--warn:#f5b04a;--warn-bg:#33260f;--bad:#ff6b6b;--bad-bg:#341519;
+  --info:#6b9bff;--info-bg:#14213f;--shadow:0 1px 2px #0006,0 10px 28px #0005}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:70px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,"Cascadia Code",Consolas,monospace}
+a{color:var(--acc)}
+.top{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line)}
+.top-in{max-width:1040px;margin:0 auto;padding:10px 24px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.brand i{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#7c5cff,#4b2fd6);display:grid;place-items:center}
+.brand i svg{width:15px;height:15px;stroke:#fff}
+.toc{display:flex;gap:4px;margin-left:auto;overflow-x:auto}
+.toc a{padding:5px 11px;border-radius:999px;font-size:13px;font-weight:600;color:var(--mut);text-decoration:none;white-space:nowrap}
+.toc a:hover{background:var(--soft);color:var(--ink)}
+.tools{display:flex;gap:6px}
+.btn{font-weight:600;font-size:13px;line-height:1;font-family:inherit;padding:8px 12px;border-radius:9px;border:1px solid var(--line);background:var(--card);
+  color:var(--ink);cursor:pointer}
+.btn{transition:transform .12s,border-color .15s,color .15s,box-shadow .15s}
+.btn:hover{border-color:var(--acc);color:var(--acc);transform:translateY(-1px);box-shadow:0 8px 18px -12px var(--acc)}
+.btn:active{transform:translateY(1px);box-shadow:none}
+.btn:focus-visible,.filters button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.filters button{transition:background-color .15s,border-color .15s,color .15s,transform .12s}
+.filters button:hover:not(.on){border-color:var(--acc);color:var(--acc)}
+.filters button:active{transform:scale(.96)}
+@media (prefers-reduced-motion:reduce){.btn,.filters button{transition:none}.btn:hover,.btn:active,.filters button:active{transform:none}}
+main{max-width:1040px;margin:0 auto;padding:28px 24px 56px}
+.hero{display:grid;grid-template-columns:1fr auto;gap:28px;align-items:center;padding:30px 32px;border-radius:20px;background:var(--card);
+  border:1px solid var(--line);box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0 auto 0 0;width:6px;background:var(--k)}
+.k-safe{--k:var(--safe);--kbg:var(--safe-bg)}.k-sus{--k:var(--warn);--kbg:var(--warn-bg)}.k-mal{--k:var(--bad);--kbg:var(--bad-bg)}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.vb{display:inline-flex;align-items:center;gap:8px;margin:12px 0 10px;padding:7px 15px 7px 11px;border-radius:999px;background:var(--kbg);
+  color:var(--k);font-weight:800;font-size:15px}
+.vb i{width:22px;height:22px;border-radius:50%;background:var(--k);display:grid;place-items:center;color:var(--bg);font-style:normal;font-size:13px}
+h1{font-size:30px;line-height:1.2;margin:0 0 8px;letter-spacing:-.02em;word-break:break-word}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;background:var(--soft);color:var(--mut);font-size:12.5px;
+  border:1px solid var(--line)}
+.chip b{color:var(--ink);font-weight:600}
+.hero>div{min-width:0}.chip{flex-wrap:wrap;max-width:100%}.chip .mono{word-break:break-all}
+.lead{margin:6px 0 0;color:var(--ink);font-size:16px;max-width:64ch}
+.gauge{width:176px;height:176px}.g-track{fill:none;stroke:var(--soft);stroke-width:11}
+.g-arc{fill:none;stroke:var(--k);stroke-width:11;stroke-linecap:round}
+.g-num{font:800 38px/1 system-ui;fill:var(--ink)}.g-lbl{font:700 7px system-ui;letter-spacing:.09em;fill:var(--faint);text-transform:uppercase}
+section{margin-top:34px}
+h2{display:flex;align-items:baseline;gap:10px;font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
+h2 small{font-size:12px;font-weight:700;color:var(--acc);letter-spacing:.12em}
+.sub{margin:0 0 16px;color:var(--mut);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:20px 22px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(4,1fr)}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.stat .n{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.1}.stat .t{font-size:12px;font-weight:700;color:var(--faint);
+  letter-spacing:.08em;text-transform:uppercase}.stat .d{font-size:13px;color:var(--mut);margin-top:2px}
+.na{color:var(--faint)}
+.callout{border-radius:14px;padding:16px 20px;background:var(--kbg);border:1px solid color-mix(in srgb,var(--k) 30%,transparent);color:var(--ink)}
+.callout b{color:var(--k)}
+.bars{display:grid;gap:14px}.bar-row{display:grid;grid-template-columns:150px 1fr 46px;gap:14px;align-items:center;font-size:14px}
+.bar{height:10px;border-radius:99px;background:var(--soft);overflow:hidden}.bar>i{display:block;height:100%;border-radius:99px;background:var(--b,var(--acc))}
+.bar-row b{text-align:right}
+.scale{position:relative;margin:26px 0 8px;height:12px;border-radius:99px;
+  background:linear-gradient(90deg,var(--safe) 0 40%,var(--warn) 40% 70%,var(--bad) 70% 100%)}
+.scale i{position:absolute;top:-7px;width:4px;height:26px;border-radius:2px;background:var(--ink);box-shadow:0 0 0 3px var(--card);transform:translateX(-2px)}
+.scale-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--faint);font-weight:600}
+.formula{margin-top:14px;padding:11px 14px;border-radius:10px;background:var(--soft);color:var(--mut);font-size:13.5px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:0 12px 10px}
+td{padding:11px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr:hover td{background:color-mix(in srgb,var(--soft) 55%,transparent)}
+.sev{display:inline-block;min-width:68px;text-align:center;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:800;letter-spacing:.05em}
+.s-CRITICAL,.s-HIGH{background:var(--bad-bg);color:var(--bad)}.s-MEDIUM{background:var(--warn-bg);color:var(--warn)}
+.s-LOW{background:var(--info-bg);color:var(--info)}.s-INFO,.s-{background:var(--soft);color:var(--mut)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.filters button{padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--mut);font-weight:600;font-size:12.5px;
+  font-family:inherit;cursor:pointer}.filters button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.pname{font-weight:700;word-break:break-word}.pdesc{color:var(--mut)}
+.tag{font-size:11px;color:var(--faint);border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:6px;font-weight:600}
+.flag{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;padding:14px 0;border-top:1px solid var(--line)}
+.flag:first-child{border-top:0;padding-top:0}.flag code{font-weight:700;font-size:13px}.flag p{grid-column:2;margin:0;color:var(--mut)}
+.hb{display:flex;align-items:center;gap:10px}.hb .bar{flex:1;min-width:60px;height:7px}.hb span{min-width:30px;text-align:right;font-weight:700}
+.flagged{color:var(--bad);font-weight:700}
+.kv{display:grid;grid-template-columns:240px 1fr;gap:0}.kv>div{padding:10px 0;border-top:1px solid var(--line)}
+.kv>div:nth-child(-n+2){border-top:0}.kv .k{color:var(--mut)}
+.pill{padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700}.yes{background:var(--safe-bg);color:var(--safe)}
+.no{background:var(--bad-bg);color:var(--bad)}.neu{background:var(--soft);color:var(--mut)}
+.warns{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:8px}.warns li{padding:10px 14px;border-radius:10px;background:var(--warn-bg);
+  color:var(--ink);font-size:13.5px}
+.about p{margin:0 0 10px;color:var(--mut)}.about b{color:var(--ink)}
+code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.9em;background:var(--soft);padding:1px 6px;border-radius:6px;word-break:break-all}
+.notes{margin:0 0 16px;padding:0;list-style:none;display:grid;gap:8px}.notes li{padding:10px 14px;border-radius:10px;background:var(--info-bg);
+  color:var(--ink);font-size:13.5px}
+.sub2{margin:22px 0 8px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chips span{padding:3px 10px;border-radius:99px;background:var(--soft);border:1px solid var(--line);
+  font-size:12.5px;color:var(--mut);word-break:break-all}
+.mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.mini div{padding:10px 14px;border-radius:10px;background:var(--soft)}
+.mini b{display:block;font-size:21px;line-height:1.25}.mini span{font-size:12.5px;color:var(--mut)}
+footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--faint);font-size:12.5px;display:flex;
+  justify-content:space-between;gap:16px;flex-wrap:wrap}
+.empty{color:var(--mut);padding:6px 0}
+@media (max-width:820px){.hero{grid-template-columns:1fr;padding:24px}.gauge{width:140px;height:140px}.grid{grid-template-columns:1fr 1fr}
+  .bar-row{grid-template-columns:100px 1fr 40px}.kv{grid-template-columns:1fr}.kv .k{border-top:1px solid var(--line);font-weight:600;padding-bottom:0}
+  .kv>div:nth-child(2){border-top:0;padding-top:2px}.toc{display:none}h1{font-size:24px}.tbl{overflow-x:auto}}
+@media print{:root{--bg:#fff;--card:#fff;--shadow:none}body{background:#fff;color:#111;font-size:12.5px}.top,.filters,.tools{display:none}
+  main{padding:0}section,.card,.stat,.hero,.flag,tr{break-inside:avoid}.hero,.card,.stat{box-shadow:none}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pr-all{display:table-row!important}}
+`;
 
-  const api = window.electronAPI;
-  if (!api || typeof api.savePdf !== 'function') {
-    showToast('Opening the print dialog. Choose "Save as PDF".');
-    setTimeout(() => { window.print(); restore(); }, 120);
-    return;
-  }
+const _C1_RPT_SEV = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+const _C1_RPT_ISO = {
+  windows_sandbox: 'Windows Sandbox (disposable virtual machine)',
+  inprocess: 'Host process with a throwaway browser profile',
+};
+const _C1_RPT_SRC = { background: 'Background worker', page: 'Page', content_script: 'Content script' };
 
-  const btn = document.querySelector(".c1r-xbtn[data-kind='pdf']");
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-  try {
-    // Let layout settle with both views expanded before the render is captured.
-    await new Promise(r => setTimeout(r, 180));
-    const res = await api.savePdf(`${stem}_report.pdf`);
-    if (res && res.ok) {
-      showToast('PDF saved');
-      if (typeof api.showFile === 'function') api.showFile(res.path);
-    } else if (res && res.reason !== 'cancelled') {
-      showToast('PDF export failed: ' + (res.reason || 'unknown error'));
-    }
-  } catch (err) {
-    showToast('PDF export failed: ' + err.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'PDF'; }
-    restore();
-  }
+function c1BuildHtmlReport(data) {
+  const E = _c1Esc, P = s => _c1Esc(_c1Prose(s));
+  const rpt   = data.report || {};
+  const ident = data.identity || rpt.identity || {};
+  const st    = data.static || {};
+  const dy    = data.dynamic || {};
+  const obs   = rpt.observed || dy.observed || {};
+  const cnt   = obs.counts || {};
+  const sb    = rpt.score_breakdown || {};
+  const iso   = rpt.isolation || dy.isolation || null;
+  const bl    = st.blocklist_details || rpt.blocklist_details || null;
+  const perms = data.permissions || rpt.permissions || [];
+  const hosts = (obs.hosts || []).slice().sort((a, b) => (b.requests || 0) - (a.requests || 0));
+  const flags = (rpt.flags && rpt.flags.length)
+    ? rpt.flags
+    : (data.flags || []).map(f => typeof f === 'string' ? { flag: f, severity: '', description: '' } : f);
+  const kind  = _c1VerdictKind(data.verdict);
+  const word  = _c1Word(data.verdict);
+  const score = Math.round((data.score || 0) * 100);
+  const pct   = v => Math.round((Number(v) || 0) * 100);
+  const name  = ident.name || data.filename || data.extension_id || data.ext_id || 'Unnamed extension';
+  const extId = ident.ext_id || data.extension_id || data.ext_id || '';
+  const ran   = !!dy.executed;
+  const plain = _c1Prose(rpt.plain_summary || rpt.summary || data.detail || '');
+  const bandColor = v => v >= 70 ? 'var(--bad)' : v >= 40 ? 'var(--warn)' : 'var(--safe)';
+  const glyph = { safe: '&#10003;', sus: '!', mal: '&#10005;' }[kind];
+  const when  = data.timestamp ? new Date(data.timestamp) : null;
+  const whenTxt = when && !isNaN(when) ? when.toLocaleString() : '';
+  const high  = perms.filter(p => p.severity === 'CRITICAL' || p.severity === 'HIGH').length;
+  const nSig  = cnt.signals != null ? cnt.signals : (dy.signals || []).length;
+  const yn    = (v, yes = 'Yes', no = 'No') => '<span class="pill ' + (v ? 'yes' : 'no') + '">' + (v ? yes : no) + '</span>';
+  const stat  = (t, n, d, na) => '<div class="stat"><div class="t">' + t + '</div><div class="n' + (na ? ' na' : '') + '">' + n +
+                '</div><div class="d">' + d + '</div></div>';
+  const why   = dy.extension_loaded === false ? 'extension failed to load' : 'sandbox not run';
+
+  const ev = _c1Evidence(data);
+  const hasSetup = _c1ProfileRows(ev.profile).length > 0, hasServers = (ev.intel.domains || []).length > 0;
+  const toc = [['summary', 'Summary'], ['scores', 'Scores'], ['findings', 'Findings'], ['permissions', 'Permissions'],
+               ['setup', 'Setup'], ['network', 'Network'], ['servers', 'Servers'], ['containment', 'Containment'], ['about', 'About']]
+    .filter(t => !(t[0] === 'findings' && !flags.length && !bl) && !(t[0] === 'permissions' && !perms.length) &&
+                 !(t[0] === 'setup' && !hasSetup) && !(t[0] === 'servers' && !hasServers) && !(t[0] === 'containment' && !iso));
+  // Section numbers follow what is actually present, in the order the sections are built.
+  let secNo = 0;
+  const nx = () => String(++secNo).padStart(2, '0');
+
+  // ── hero
+  const hero =
+    '<div class="hero k-' + kind + '" id="summary"><div>' +
+      '<div class="eyebrow">Extension analysis report</div>' +
+      '<div class="vb"><i>' + glyph + '</i>' + E(word) + '</div>' +
+      '<h1>' + E(name) + '</h1>' +
+      '<p class="lead">' + E(plain) + '</p>' +
+      '<div class="meta">' +
+        (ident.version ? '<span class="chip">Version <b>' + E(ident.version) + '</b></span>' : '') +
+        (extId ? '<span class="chip">ID <b class="mono">' + E(extId) + '</b> <button class="btn" style="padding:2px 8px;font-size:11px" data-copy="' + E(extId) + '">Copy</button></span>' : '') +
+        (whenTxt ? '<span class="chip">Analysed <b>' + E(whenTxt) + '</b></span>' : '') +
+        (data.source ? '<span class="chip">Source <b>' + E(String(data.source).replace(/_/g, ' ')) + '</b></span>' : '') +
+        (rpt.risk_level ? '<span class="chip">Risk level <b>' + E(rpt.risk_level) + '</b></span>' : '') +
+      '</div></div>' +
+      '<svg class="gauge" viewBox="0 0 120 120" role="img" aria-label="Threat score ' + score + ' out of 100">' +
+        '<circle class="g-track" cx="60" cy="60" r="50"/>' +
+        (score ? '<circle class="g-arc" cx="60" cy="60" r="50" pathLength="100" stroke-dasharray="' + score + ' 100" transform="rotate(-90 60 60)"/>' : '') +
+        '<text class="g-num" x="60" y="66" text-anchor="middle">' + score + '</text>' +
+        '<text class="g-lbl" x="60" y="82" text-anchor="middle">Threat score</text></svg></div>';
+
+  // ── key facts + recommendation
+  const facts =
+    '<div class="grid" style="margin-top:18px">' +
+      stat('Network requests', ran ? ((cnt.attributed != null ? cnt.attributed : cnt.requests) || 0) : 'N/A',
+           ran ? (cnt.attributed != null ? 'made by the extension itself' : 'HTTP calls made in the sandbox') : why, !ran) +
+      stat('External servers', ran ? (cnt.hosts || 0) : 'N/A', ran ? 'distinct hosts contacted' : why, !ran) +
+      stat('Runtime signals', ran ? nSig : 'N/A', ran ? 'behaviours observed' : why, !ran) +
+      stat('Permissions', perms.length, high + ' high risk', false) + '</div>' +
+    (rpt.recommendation
+      ? '<div class="callout k-' + kind + '" style="margin-top:14px"><b>Recommendation</b><br>' + P(rpt.recommendation) + '</div>' : '');
+
+  // ── scores
+  const bar = (label, v, color) =>
+    '<div class="bar-row"><span>' + label + '</span><div class="bar"><i style="width:' + Math.max(0, Math.min(100, v)) + '%;--b:' + color +
+    '"></i></div><b>' + v + '</b></div>';
+  const staticPct = pct(st.score), dynPct = pct(dy.score);
+  const anomaly = st.anomaly_score !== undefined ? Number(st.anomaly_score) * 100 : sb.anomaly_score;
+  const scores =
+    '<section id="scores"><h2><small>' + nx() + '</small>Scores</h2><p class="sub">How the threat score was reached. 0 is harmless, 100 is certain malware.</p>' +
+    '<div class="card"><div class="bars">' +
+      bar('Final score', score, bandColor(score)) +
+      bar('Static analysis (ML)', staticPct, 'var(--info)') +
+      bar('Dynamic sandbox', ran ? dynPct : 0, 'var(--acc)') + '</div>' +
+    '<div class="scale"><i style="left:' + Math.max(1, Math.min(99, score)) + '%"></i></div>' +
+    '<div class="scale-lbl"><span>Safe, below 40</span><span>Suspicious, 40 to 69</span><span>Malicious, 70 and above</span></div>' +
+    (sb.formula ? '<div class="formula"><b>How it was combined:</b> <span class="mono">' + E(sb.formula) + '</span>' +
+       (ran ? '' : ' (the sandbox did not run, so the static score is the final score)') + '</div>' : '') +
+    (data.score_source === 'blocklist'
+       ? '<div class="formula"><b>Blocklist authority:</b> this extension ID is on the confirmed malicious blocklist, so the score is set by that record rather than by the models.</div>' : '') +
+    '<div class="kv" style="margin-top:14px">' +
+      '<div class="k">ML probability (XGBoost)</div><div>' + (st.ml_score != null && (data.score_source !== 'blocklist' || st.measured_static_score !== undefined)
+          ? (Number(st.ml_score) * 100).toFixed(1) + '%' : '<span class="na">Not measured</span>') + '</div>' +
+      '<div class="k">Anomaly score (Isolation Forest)</div><div>' + (anomaly != null ? Number(anomaly).toFixed(1) + ' / 100' : '<span class="na">Not measured</span>') + '</div>' +
+      '<div class="k">Blocklist hash match</div><div>' + yn(st.hash_match, 'Match', 'No match') + '</div>' +
+      '<div class="k">Sandbox executed</div><div>' + yn(ran) + '</div>' +
+    '</div></div></section>';
+
+  // ── findings: blocklist record + flags
+  const blRows = bl ? [['Name', bl.extension_name], ['Reason', bl.reason], ['Date reported', bl.date], ['Store', bl.store],
+                       ['Version', bl.version], ['SHA256', bl.sha256], ['Source', bl.source]].filter(r => r[1]) : [];
+  const findings = (flags.length || bl)
+    ? '<section id="findings"><h2><small>' + nx() + '</small>Findings</h2><p class="sub">Every signal that contributed to the verdict, most serious first.</p>' +
+      (bl ? '<div class="card" style="margin-bottom:14px"><div class="eyebrow">Blocklist record</div><div class="kv" style="margin-top:8px">' +
+            blRows.map(r => '<div class="k">' + r[0] + '</div><div class="' + (r[0] === 'SHA256' ? 'mono' : '') + '" style="word-break:break-all">' +
+              E(r[1]) + '</div>').join('') + '</div></div>' : '') +
+      (flags.length ? '<div class="card">' + flags.slice().sort((a, b) => _C1_RPT_SEV.indexOf(a.severity) - _C1_RPT_SEV.indexOf(b.severity))
+        .map(f => '<div class="flag"><span class="sev s-' + E(f.severity || '') + '">' + E(f.severity || 'INFO') + '</span><code class="mono">' +
+          E(f.flag) + '</code>' + (f.description ? '<p>' + P(f.description) + '</p>' : '') + '</div>').join('') + '</div>' : '') +
+      '</section>' : '';
+
+  // ── permissions
+  const sevCount = s => perms.filter(p => p.severity === s).length;
+  const permsHtml = perms.length
+    ? '<section id="permissions"><h2><small>' + nx() + '</small>Permissions</h2><p class="sub">What the extension is allowed to do once installed, whether or not it ever does.</p>' +
+      '<div class="card"><div class="filters"><button class="on" data-f="ALL">All ' + perms.length + '</button>' +
+      _C1_RPT_SEV.filter(s => sevCount(s)).map(s => '<button data-f="' + s + '">' + s[0] + s.slice(1).toLowerCase() + ' ' + sevCount(s) + '</button>').join('') +
+      '</div><div class="tbl"><table id="ptable"><thead><tr><th>Risk</th><th>Permission</th><th>What it allows</th></tr></thead><tbody>' +
+      perms.slice().sort((a, b) => _C1_RPT_SEV.indexOf(a.severity) - _C1_RPT_SEV.indexOf(b.severity)).map(p =>
+        '<tr data-s="' + E(p.severity) + '"><td><span class="sev s-' + E(p.severity) + '">' + E(p.severity) + '</span></td><td class="pname mono">' +
+        E(p.name) + (p.is_host ? '<span class="tag">host</span>' : '') + '</td><td class="pdesc">' + P(p.description) + '</td></tr>').join('') +
+      '</tbody></table></div></div></section>' : '';
+
+  const setupHtml = _c1RptSetup(data, nx());
+
+  // ── network
+  const maxReq = Math.max(1, ...hosts.map(h => h.requests || 0));
+  const sigs = (dy.signals || []);
+  const network =
+    '<section id="network"><h2><small>' + nx() + '</small>Network behaviour</h2><p class="sub">What the extension did while it ran inside the sandbox.</p>' +
+    (ran
+      ? '<div class="card">' + (hosts.length
+          ? c1GraphHtml(data) + '<div class="tbl" style="margin-top:16px"><table><thead><tr><th>Host</th><th>Requests</th><th>Methods</th><th>Made by</th><th></th></tr></thead><tbody>' +
+            hosts.map(h => '<tr><td class="mono" style="word-break:break-all">' + E(h.host) + '</td><td><div class="hb"><div class="bar"><i style="width:' +
+              Math.round(100 * (h.requests || 0) / maxReq) + '%"></i></div><span>' + (h.requests || 0) + '</span></div></td><td>' +
+              E((h.methods || []).join(', ')) + '</td><td>' + E((h.sources || []).map(s => _C1_RPT_SRC[s] || s).join(', ') || 'Network layer') +
+              '</td><td>' + (h.suspicious ? '<span class="flagged">Flagged</span>' : '') + '</td></tr>').join('') +
+            '</tbody></table></div>' + (obs.truncated ? '<p class="sub" style="margin:12px 0 0">Showing the busiest hosts only.</p>' : '')
+          : '<div class="empty">No external servers were contacted.</div>') +
+        (sigs.length ? '<div class="eyebrow" style="margin-top:18px">Runtime signals</div><div class="meta">' +
+            sigs.map(s => '<span class="chip mono">' + E(typeof s === 'string' ? s : (s.signal || JSON.stringify(s))) + '</span>').join('') + '</div>' : '') +
+        _c1RptCalls(data) + '</div>'
+      : '<div class="card"><div class="empty">' + (dy.extension_loaded === false
+          ? 'The sandbox started but Chromium rejected the extension, so no behaviour was observed. The verdict rests on static analysis alone and is not evidence of safety.'
+          : 'The sandbox did not run for this analysis (it runs when the static score is 50 or more), so the verdict is based on static analysis only.') +
+        '</div></div>') + '</section>';
+
+  const serversHtml = _c1RptServers(data, nx());
+
+  // ── containment
+  const timing = iso && iso.timing ? iso.timing : {};
+  const sec = v => v != null ? Number(v).toFixed(1) + ' s' : '';
+  const containment = iso
+    ? '<section id="containment"><h2><small>' + nx() + '</small>Containment</h2><p class="sub">Where the extension was run, and what it could not touch.</p>' +
+      '<div class="card"><div class="kv">' +
+        '<div class="k">Backend</div><div>' + E(_C1_RPT_ISO[iso.backend] || iso.backend || 'Unknown') + '</div>' +
+        '<div class="k">Fresh for this analysis</div><div>' + yn(iso.fresh_per_analysis) + '</div>' +
+        '<div class="k">Destroyed afterwards</div><div>' + yn(iso.discarded_after) + '</div>' +
+        '<div class="k">Shares the host kernel</div><div>' + yn(iso.shares_host_kernel, 'Yes', 'No') + '</div>' +
+        '<div class="k">Shares the host file system</div><div>' + yn(iso.shares_host_filesystem, 'Yes', 'No') + '</div>' +
+        '<div class="k">Network policy</div><div>' + E(iso.network_policy || '') + '</div>' +
+        (iso.elapsed_seconds != null ? '<div class="k">Total time</div><div>' + sec(iso.elapsed_seconds) +
+          (timing.guest_boot_s != null ? ' <span class="na">(boot ' + sec(timing.guest_boot_s) + ', observation ' + sec(timing.observe_s) + ', teardown ' + sec(timing.teardown_s) + ')</span>' : '') + '</div>' : '') +
+      '</div>' + (iso.detail ? '<p class="sub" style="margin:14px 0 0">' + P(iso.detail) + '</p>' : '') +
+      ((iso.warnings || []).length ? '<ul class="warns">' + iso.warnings.map(w => '<li>' + P(w) + '</li>').join('') + '</ul>' : '') +
+      '</div></section>' : '';
+
+  const about =
+    '<section id="about" class="about"><h2><small>' + nx() + '</small>About this report</h2><div class="card">' +
+    '<p><b>Static analysis</b> reads the manifest and source code without running them. An XGBoost classifier scores 33 features, an Isolation Forest flags anything unlike a normal extension, and rules raise the score for extreme patterns.</p>' +
+    '<p><b>Dynamic analysis</b> runs the extension in an isolated browser when the static score is 50 or more, and records its network requests and behaviour. It then visits a few public pages for context. What those sites do is listed but never scored, because it is the site\u2019s behaviour and not the extension\u2019s.</p>' +
+    '<p><b>Setup and servers</b> come from reading the manifest and code, plus a DNS lookup for the addresses. They are evidence for a reviewer and do not change the score.</p>' +
+    '<p><b>The verdict</b> combines them as 70% static and 30% dynamic. A score below 40 is Safe, 40 to 69 is Suspicious, and 70 or more is Malicious. An ID on the confirmed blocklist is Malicious outright.</p>' +
+    '<p style="margin:0">These are automated indicators, not proof. Treat a Safe result as the absence of known signals, and review a Suspicious one before installing.</p></div></section>';
+
+  const script =
+    c1GraphInit.toString() + ';document.querySelectorAll(".c1g").forEach(c1GraphInit);' +
+    'document.querySelectorAll("[data-copy]").forEach(function(b){b.addEventListener("click",function(){' +
+    'navigator.clipboard&&navigator.clipboard.writeText(b.dataset.copy);b.textContent="Copied"})});' +
+    'var t=document.getElementById("theme");t&&t.addEventListener("click",function(){var r=document.documentElement,' +
+    'd=r.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");' +
+    'r.setAttribute("data-theme",d==="dark"?"light":"dark")});' +
+    'document.querySelectorAll(".filters button").forEach(function(b){b.addEventListener("click",function(){' +
+    'document.querySelectorAll(".filters button").forEach(function(x){x.classList.toggle("on",x===b)});var f=b.dataset.f;' +
+    'document.querySelectorAll("#ptable tbody tr").forEach(function(r){r.style.display=(f==="ALL"||r.dataset.s===f)?"":"none"})})});';
+
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + E(name) + ' | WebSentinel extension analysis</title><style>' + _C1_RPT_CSS + _C1_GRAPH_RPT_MAP + _C1_GRAPH_CSS + '</style></head><body>' +
+    '<header class="top"><div class="top-in"><div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" ' +
+    'stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg></i>WebSentinel</div>' +
+    '<nav class="toc">' + toc.map(t => '<a href="#' + t[0] + '">' + t[1] + '</a>').join('') + '</nav>' +
+    '<div class="tools"><button class="btn" id="theme">Theme</button><button class="btn" onclick="window.print()">Print</button></div></div></header>' +
+    '<main>' + hero + facts + scores + findings + permsHtml + setupHtml + network + serversHtml + containment + about +
+    '<footer><span>Generated by WebSentinel C1 Extension Analyzer</span><span>' + E(new Date().toLocaleString()) + '</span></footer></main>' +
+    '<script>' + script + '<\/script></body></html>';
+}
+
+function c1ExportHtml(data, stem) {
+  _c1Download(`${stem}_report.html`, c1BuildHtmlReport(data), 'text/html;charset=utf-8');
+  showToast('HTML report downloaded');
 }
 
 function c1Render(data) {
@@ -10321,7 +11993,7 @@ function c1Render(data) {
   } else if (dy.executed) {
     dynHtml = `<b>Sandbox executed:</b> <span style="color:var(--safe)">Yes</span><br><b>Dynamic score:</b> ${dynPct}/100<br>`;
     if (dy.extension_loaded === null || dy.extension_loaded === undefined) {
-      dynHtml += `<span style="font-size:10px;color:var(--t3)">Extension load could not be confirmed because it declares no background context.</span><br>`;
+      dynHtml += `<span class="c1r-small">Extension load could not be confirmed because it declares no background context.</span><br>`;
     }
   } else {
     dynHtml = `<b>Sandbox:</b> <span style="color:var(--t3)">Not executed</span><br>
@@ -10374,16 +12046,12 @@ function c1Render(data) {
     flagsDiv.innerHTML = (rpt.flags || []).map(f => {
       const clr = sevClr[f.severity] || '#6b7280';
       return (
-        `<div style="padding:9px 12px;border-radius:var(--radius);` +
-             `background:var(--bg1);border:1px solid var(--b1);border-left:3px solid ${clr}">` +
-          `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;flex-wrap:wrap">` +
-            `<span style="font-size:8px;font-weight:800;color:${clr};letter-spacing:.06em;` +
-                  `padding:3px 6px;border-radius:4px;background:${clr}22;` +
-                  `border:1px solid ${clr}55">${_c1Esc(f.severity)}</span>` +
-            `<span style="font-size:10.5px;font-weight:700;color:var(--t0);` +
-                  `font-family:'Cascadia Code','Consolas',monospace">${_c1Esc(f.flag)}</span>` +
+        `<div class="c1r-flagrow" style="--fc:${clr}">` +
+          `<div class="c1r-flagrow-top">` +
+            `<span class="c1r-flagrow-sev">${_c1Esc(f.severity)}</span>` +
+            `<span class="c1r-flagrow-name">${_c1Esc(f.flag)}</span>` +
           `</div>` +
-          `<div style="font-size:10px;color:var(--t2);line-height:1.6">${_c1Esc(_c1Prose(f.description))}</div>` +
+          `<div class="c1r-flagrow-desc">${_c1Esc(_c1Prose(f.description))}</div>` +
         `</div>`);
     }).join('');
 
@@ -10431,6 +12099,8 @@ function c1Render(data) {
     c1RenderSimple(data);
     c1RenderPermPanel(data);
     c1RenderGraphPanel(data);
+    c1RenderEvidencePanels(data);
+    c1EnhanceReport();
     c1SetReportMode(c1ReportMode());
     c1AnimateReport();
   } catch (err) {
@@ -10456,12 +12126,13 @@ function c1InstallUi(state, text) {
   if (!btn || !spin || !stat) return;
   clearTimeout(_c1InstallTimer);
   if (state === 'busy') {
-    btn.disabled = true;
+    btn.disabled = true; _c1BtnBusy(btn, true);
     spin.style.display = 'flex';
     stat.textContent = text || 'Installing...';
     return;
   }
   spin.style.display = 'none';
+  _c1BtnBusy(btn, false);
   if (state === 'done') {
     btn.disabled = true;
     btn.classList.add('is-done');
@@ -10931,7 +12602,7 @@ function c1SetFile(f) {
 async function c1UploadAnalyze() {
   if (!_c1UploadFile) return;
   const btn  = document.getElementById('c1-upload-btn');
-  btn.disabled = true;
+  btn.disabled = true; _c1BtnBusy(btn, true);
   const done = _c1Busy(document.getElementById('c1-spinner'),
                        document.getElementById('c1-spin-label'), 'Analyzing...');
   const fd = new FormData();
@@ -10945,7 +12616,7 @@ async function c1UploadAnalyze() {
   } catch (err) {
     showToast('Upload failed: ' + err.message, 6000);
   } finally {
-    btn.disabled = (_c1UploadFile === null);
+    btn.disabled = (_c1UploadFile === null); _c1BtnBusy(btn, false);
     done();
   }
 }
@@ -10956,7 +12627,7 @@ async function c1WebstoreAnalyze() {
   const raw = input.value.trim();
   if (!raw) { showToast('Enter a Chrome Web Store URL or extension ID.'); input.focus(); return; }
   const btn  = document.getElementById('c1-ws-btn');
-  btn.disabled = true;
+  btn.disabled = true; _c1BtnBusy(btn, true);
   const done = _c1Busy(document.getElementById('c1-ws-spinner'),
                        document.getElementById('c1-ws-label'), 'Downloading from Chrome Web Store...');
   try {
@@ -10972,7 +12643,7 @@ async function c1WebstoreAnalyze() {
   } catch (err) {
     showToast('Lookup failed: ' + err.message, 6000);
   } finally {
-    btn.disabled = false;
+    btn.disabled = false; _c1BtnBusy(btn, false);
     done();
   }
 }
@@ -11012,7 +12683,7 @@ async function c1Analyze() {
   const manifest = manifestEl.value.trim();
   if (!manifest) { showToast('Paste manifest.json first.'); manifestEl.focus(); return; }
   const btn = document.getElementById('c1-submit-btn');
-  btn.disabled = true;
+  btn.disabled = true; _c1BtnBusy(btn, true);
   const done = _c1Busy(document.getElementById('c1-manual-spinner'),
                        document.getElementById('c1-manual-label'), 'Analyzing...');
   try {
@@ -11032,7 +12703,7 @@ async function c1Analyze() {
   } catch (err) {
     showToast('Analysis failed: ' + err.message, 6000);
   } finally {
-    btn.disabled = false;
+    btn.disabled = false; _c1BtnBusy(btn, false);
     done();
   }
 }
@@ -11122,8 +12793,8 @@ function c1LiveCreateCard(extId, url) {
       '<div class="c1-ring" style="width:13px;height:13px"></div>Analyzing extension…' +
     '</div>' +
     '<div class="c1-lc-actions" id="c1-lc-actions-' + id + '">' +
-      '<button class="c1-btn ghost" style="display:inline-flex;align-items:center;gap:5px" onclick="c1LiveBlock(\'' + id + '\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Block</button>' +
-      '<button class="c1-btn primary" id="c1-lc-approve-' + id + '" disabled style="opacity:.4;display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Analyzing…</button>' +
+      '<button class="c1-btn ghost danger" onclick="c1LiveBlock(\'' + id + '\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Block</button>' +
+      '<button class="c1-btn primary success" id="c1-lc-approve-' + id + '" disabled style="opacity:.4"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Analyzing…</button>' +
     '</div>';
 
   const host = document.getElementById('c1-live-cards');
@@ -11268,7 +12939,7 @@ function c1LiveMarkDone(extId, outcome) {
         ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>Browser restarted with extension loaded'
         : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Blocked') +
       '</span>' +
-      '<button class="c1-btn ghost" style="padding:4px 10px;font-size:10px;margin-left:auto" onclick="c1LiveDismiss(\'' + id + '\')">Dismiss</button>';
+      '<button class="c1-btn ghost sm" style="margin-left:auto" onclick="c1LiveDismiss(\'' + id + '\')">Dismiss</button>';
   }
   c1LiveBadge(false);
 }
@@ -11293,9 +12964,9 @@ async function c1LiveApprove(extId) {
   const btn = document.getElementById('c1-lc-approve-' + id);
   const again = () => {
     const b = document.getElementById('c1-lc-approve-' + id);
-    if (b) { b.disabled = false; b.style.opacity = '1'; b.innerHTML = _C1_APPROVE_ICON + 'Approve Install'; }
+    if (b) { b.disabled = false; b.style.opacity = '1'; _c1BtnBusy(b, false); b.innerHTML = _C1_APPROVE_ICON + 'Approve Install'; }
   };
-  if (btn) { btn.disabled = true; btn.textContent = 'Installing...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Installing...'; _c1BtnBusy(btn, true); }
   try {
     const res = await fetch(API + '/session/approve_install', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -11432,8 +13103,11 @@ async function c1LoadBlocklistStats() {
       'scaleX(' + (Math.max(0, Math.min(100, d.coverage_pct || 0)) / 100) + ')';
     _c1Cov = d;
     c1RenderPipeline();
+    // Provenance in words, not a folder on the analyst's disk: the path is neither
+    // useful to a reader nor something a shipped product should print.
     document.getElementById('c1-cov-caption').textContent =
-      d.documented + ' of ' + d.total + ' rows carry complete evidence · sheet: ' + (d.sheet_path || '');
+      Number(d.documented || 0).toLocaleString() + ' of ' + Number(d.total || 0).toLocaleString() +
+      ' entries carry complete evidence · Source: finalized blocklist, compiled from MalExt Sentry and chrome-mal-ids';
     document.getElementById('c1-cov-fields').innerHTML =
       Object.keys(d.missing_by_field || {}).map(k =>
         '<div class="c1-cov-field"><span>' + (_C1_FIELD_LABELS[k] || k) + '</span><b>' +
@@ -11448,7 +13122,7 @@ async function c1BlocklistDocument() {
   const extId = (input.value || '').trim().toLowerCase();
   if (!extId) { showToast('Enter a 32-character extension ID'); return; }
   const btn = document.getElementById('c1-cov-doc-btn');
-  btn.disabled = true; btn.textContent = 'Analyzing…';
+  btn.disabled = true; btn.textContent = 'Analyzing…'; _c1BtnBusy(btn, true);
   try {
     const res = await fetch(API + '/extension/blocklist/document', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -11466,24 +13140,24 @@ async function c1BlocklistDocument() {
   } catch (err) {
     showToast('Request failed: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = 'Document this ID';
+    btn.disabled = false; btn.textContent = 'Document this ID'; _c1BtnBusy(btn, false);
   }
 }
 
 async function c1BlocklistBackfill() {
   const limit = parseInt(document.getElementById('c1-cov-limit').value, 10) || 25;
   const btn = document.getElementById('c1-cov-sweep-btn');
-  btn.disabled = true; btn.textContent = 'Sweeping…';
+  btn.disabled = true; btn.textContent = 'Sweeping…'; _c1BtnBusy(btn, true);
   try {
     const d = await (await fetch(API + '/extension/blocklist/backfill', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ limit: limit, sandbox: false, concurrency: 4 }),
     })).json();
     c1CovLog('', 'Sweep queued: ' + (d.queued || 0) + ' undocumented row(s)');
-    if (d.status === 'nothing_to_do') { btn.disabled = false; btn.textContent = 'Run sweep'; }
+    if (d.status === 'nothing_to_do') { btn.disabled = false; btn.textContent = 'Run sweep'; _c1BtnBusy(btn, false); }
   } catch (err) {
     showToast('Sweep failed: ' + err.message);
-    btn.disabled = false; btn.textContent = 'Run sweep';
+    btn.disabled = false; btn.textContent = 'Run sweep'; _c1BtnBusy(btn, false);
   }
 }
 
@@ -11507,7 +13181,7 @@ function c1BacklogProgress(msg) {
       msg.ext_id + '  ' + msg.status +
       ((msg.filled || []).length ? '  → ' + msg.filled.join(', ') + '  |  ' + (msg.reason || '') : ''));
   } else if (msg.state === 'done') {
-    if (btn) { btn.disabled = false; btn.textContent = 'Run sweep'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Run sweep'; _c1BtnBusy(btn, false); }
     const t = msg.tally || {};
     c1CovLog('ok', 'Sweep finished: ' +
       Object.keys(t).map(k => k + ': ' + t[k]).join(', '));
@@ -13303,7 +14977,7 @@ function _testsUpdateItem(msg) {
   <div class="c1r-modal-shell" role="document">
     <div class="c1r-modal-bar">
       <div class="c1r-modal-heading">
-        <span class="c1r-modal-dot" id="c1r-modal-dot"></span>
+        <span class="c1r-modal-dot" id="c1r-modal-dot" aria-hidden="true"></span>
         <div>
           <div class="c1r-modal-title" id="c1r-modal-title">Analysis report</div>
           <div class="c1r-modal-sub" id="c1r-modal-sub"></div>
@@ -13319,7 +14993,9 @@ function _testsUpdateItem(msg) {
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
+      <div class="c1r-progress" aria-hidden="true"><i id="c1r-progress-fill"></i></div>
     </div>
+    <nav id="c1r-jumpbar" class="c1r-jumpbar" aria-label="Sections of this report" hidden></nav>
     <div class="c1r-modal-body">
     <div id="c1-result-area">
 
@@ -13363,14 +15039,17 @@ function _testsUpdateItem(msg) {
           <button id="c1-install-btn" class="c1-btn primary" onclick="c1InstallIntoBrowser()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install into Browser
           </button>
-          <span style="font-size:10px;color:var(--t3)">
+          <span class="c1r-install-hint">
             Downloads the extension directly and loads it into the live browser session
           </span>
-          <div id="c1-install-spinner" style="display:none;align-items:center;gap:6px;font-size:10.5px;color:var(--t2)">
+          <div id="c1-install-spinner" class="c1r-install-spin" style="display:none">
             <div class="c1-ring"></div><span id="c1-install-status">Installing...</span>
           </div>
         </div>
       </div>
+
+      <!-- The same four key facts the Simple view opens with -->
+      <div id="c1r-adv-stats"></div>
 
       <!-- Blocklist Match card — only shown when the extension ID hit the finalized blocklist -->
       <div class="c1-card c1-bl-card" id="c1-blocklist-card" style="display:none;margin-top:10px">
@@ -13414,7 +15093,10 @@ function _testsUpdateItem(msg) {
 
       <!-- Declared capability + observed network — rendered by JS -->
       <div id="c1r-perm-panel"></div>
+      <div id="c1r-profile-panel"></div>
       <div id="c1r-graph-panel"></div>
+      <div id="c1r-calls-panel"></div>
+      <div id="c1r-intel-panel"></div>
 
       <!-- Verdict Report card -->
       <div class="c1-card" id="c1-report-card" style="display:none;margin-top:10px">
@@ -13426,14 +15108,18 @@ function _testsUpdateItem(msg) {
           </div>
           <span id="c1-risk-badge" class="c1r-riskbadge"></span>
         </div>
-        <p id="c1-report-summary" style="font-size:11px;color:var(--t1);line-height:1.6;margin:0 0 10px"></p>
-        <div id="c1-report-formula" style="font-size:10.5px;color:var(--t1);font-family:'Cascadia Code','Consolas',monospace;margin-bottom:10px;padding:8px 11px;background:var(--bg0);border:1px solid var(--b2);border-radius:6px;letter-spacing:.01em"></div>
-        <div id="c1-report-flags" style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px"></div>
-        <div id="c1-report-recommendation" style="font-size:10.5px;font-style:italic;color:var(--t2);border-top:1px solid var(--b1);padding-top:8px"></div>
+        <p id="c1-report-summary" class="c1r-vsummary"></p>
+        <div id="c1-report-formula" class="c1r-formula"></div>
+        <div id="c1-report-flags" class="c1r-flaglist"></div>
+        <div id="c1-report-recommendation" class="c1r-vreco"></div>
       </div>
+      <div class="c1r-export" id="c1r-adv-export"></div>
       </div><!-- /c1r-advanced -->
     </div>
     </div>
+    <button type="button" class="c1r-top" id="c1r-top" aria-label="Back to top" title="Back to top">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+    </button>
   </div>
 </div>
 </body>

@@ -20,6 +20,7 @@
 - ✅ Full FastAPI integration: upload, webstore lookup, live "Add to Chrome" click interception with block/approve flow — `core/main.py`
 - ✅ Dashboard panel (upload, webstore lookup, live install monitor, history) — `frontend/dashboard.html`
 - ✅ Report surface (2026-08-30) — Simple/Advanced report modes, plain-language verdict, threat gauge, honest stat cards, declared-permission risk panel (`permissions.py`), realm-attributed network graph, and PDF/JSON/text export — `report.py` / `frontend/dashboard.html`
+- ✅ Evidence layer (2026-10-10) — a static extension profile (`profile.py`), request attribution and real-page observation in the sandbox, and network intelligence (`netintel.py`: domain roles, IP addresses, defanged indicators). Evidence for the reviewer: none of it changes the score. See "Evidence layer" below.
 - ⬜ Puppeteer/Docker container sandbox from the original proposal — the VM route was taken instead (`isolation/windows_sandbox.py`); a Docker backend remains a registered extension point in `isolation/__init__.py` if a Linux/CI target is needed
 
 ## Purpose
@@ -350,6 +351,9 @@ two are directly comparable.
    as material worth stealing.
 4. **Fixed observation window** — 20 s by default, clamped to 5-30 s.
 5. **Weighted scoring** — 9 signal types totalling 200 points, capped at 100.
+6. **Request attribution and a real-page visit** (2026-10-10) — every request is
+   tagged with who made it, and a few public pages are visited after the bait
+   page. See "Evidence layer".
 
 ### Isolation backends (added 2026-08-29)
 
@@ -672,6 +676,36 @@ background worker is being reached with no page open, which is where persistent
 C2 lives. A physics layout would scatter that; a radial layout grouped by realm
 makes it the first thing visible.
 
+#### Graph interaction (2026-10-10)
+
+One builder, `c1GraphHtml()`, draws the graph for both the app and the exported
+HTML report, and one self-contained function, `c1GraphInit()`, wires it (the report
+embeds that function's source, so it stays interactive offline). Its CSS is
+`_C1_GRAPH_CSS`, mapped onto each page's own colour tokens.
+
+- **Bigger and readable.** The canvas matches the panel's shape, the layout uses
+  one to three concentric rings by host count, labels get a halo and shorten when
+  crowded, and a small pass nudges a node outward when its label would sit on
+  another. A dense list (60 hosts) is still crowded in the default view; zoom
+  handles the rest.
+- **Zoom and move.** Wheel (and trackpad pinch), the plus and minus buttons, two-finger
+  pinch on touch, drag to pan, double click or Fit to reset, and the keys `+`, `-`,
+  `0` and the arrows when the graph is focused. A percentage shows the level.
+- **Expand** uses real fullscreen (Esc leaves it) and falls back to a taller box
+  where fullscreen is refused.
+- **Detail.** Hovering or focusing a server dims the rest, lights its edge and shows a
+  card (requests, methods, who made them, and from the network intelligence: what the
+  host is and its IP addresses). A click keeps the card; a click elsewhere lets go.
+- **Legend chips** switch a group on or off. The servers the sandbox's real-page visit
+  touched are a hidden group on an outer ring: context, never the extension's own.
+- **Graph or List** toggle in the app, and the graph is now shown for any number of
+  servers (it used to fall back to a list under three).
+- **Animation** is one-shot and transform only: the hub, a single ripple, edges growing
+  out of the hub and nodes popping in, played when the graph first scrolls into view.
+  Nothing loops, and `prefers-reduced-motion` and print turn it all off.
+- Decorative layers (ripple, rings, edges) are `pointer-events:none`. The ripple ends up
+  nine times its size and used to swallow every click until that was set.
+
 ### Persistence contract
 
 **Everything the report needs must live inside `report`.** `db._to_dict()`
@@ -896,6 +930,7 @@ isolation strings that reach the UI no longer use a dash as punctuation (see
 | Visual language | Violet-ink surfaces with a faint dot grid, 6px corners, scanner-bracket corners on the gate, live cards and report hero, verdict badges, and "key" buttons with a hard bottom edge. Lavender paper in the light theme. |
 | Verdict badge | `.c1-vb`: a solid icon cell (tick / exclamation / cross, so colour is never the only cue) plus the verdict word in sentence case on a tint of the same colour. One element; the glyph is a CSS mask on `::before`, so a ledger of 50 cases adds no extra nodes. Sizes `md` (live cards) and `lg` (report hero). Static, never rotated or animated. On paper it keeps its colour (`print-color-adjust`) but the word stays dark ink, and the hero's scanner brackets are hidden. |
 | Report modal | Same content; restyled to the same vocabulary, and the cost below removed. |
+| Report export | **HTML report** (the main export), JSON and a plain text summary. The HTML report is one self-contained file built by `c1BuildHtmlReport()`: no external requests, light and dark themes (system default plus a toggle), a contents bar, a score gauge and a 0 to 100 scale showing where the score lands, how the score was combined, findings, a permission table that filters by risk, a host table with request bars, the sandbox containment summary, and a short "about" section. Every analysis value is escaped, and it prints cleanly. **The PDF export was removed on 2026-10-10**; the older notes below describe it for history only (`electron/main.js` still carries the unused `report:savePdf` handler). |
 
 ### Why it was laggy, and the rules that now apply
 
@@ -932,6 +967,53 @@ Rules for anything added to this panel:
 - The extension ID in a WebSocket message and extension names in history rows are escaped / sanitised before they reach `innerHTML` or an inline handler; both can be influenced by the monitored browser.
 - Failures in this panel use `showToast`, not `alert()` (a modal alert freezes the whole window).
 
+### Buttons (2026-10-10)
+
+One family for everything clickable in C1, scoped to `#panel-c1` and `#c1r-modal` so C2 and the Test Runner keep their own look.
+
+| Role | Class | Used for |
+|------|-------|----------|
+| Primary | `.c1-btn.primary` | The one main action on a screen: Analyze, Document this ID, Install into Browser. A violet key with a hard bottom edge. |
+| Ghost | `.c1-btn.ghost` | Supporting actions: Simulate a click, Try malicious example, Clear, Run sweep, Reload sheet. Outlined, accent icon, tinted on hover. |
+| Success | `.c1-btn.success` (with `.primary`) | Approve Install on the live card. A green key. |
+| Danger | `.c1-btn.ghost.danger`, `.c1-btn.danger.solid` | Block (outlined, fills red on hover); Force Install is the solid red key. |
+
+- **Sizes:** 34 px by default, `.sm` 28 px. Chips, segmented switches, the dismiss and close icon buttons, the export buttons and the two link buttons ("View full technical report", "+ N more") follow the same hover, pressed and focus behaviour.
+- **States every button has:** a hover lift, a pressed state, a visible keyboard focus ring, and a disabled state that stops reacting. `.is-busy` puts a spinner in front of the label while the work runs; `_c1BtnBusy(btn, on)` toggles it (with `aria-busy`) for Analyze file, Check extension, Analyze, Document this ID, Run sweep, Install into Browser and Approve. The spinner is the only thing that loops, and only while the work does.
+- **Icons:** the export buttons, Try malicious example, Clear, Reload sheet and Copy indicators have icons. **Document this ID and Run sweep deliberately do not**: their scripts rewrite the label with `textContent` while they run, which would wipe an icon.
+- **Colour:** green and red fills use deeper shades so white text keeps its contrast (the same reason `#c8232f` is used for the red).
+- **Motion** is transform and colour only and is removed under `prefers-reduced-motion`. The exported HTML report's own buttons and the graph controls got the same hover, pressed and focus treatment.
+
+### Report popup (2026-10-10)
+
+The popup that opens when a case in the ledger is clicked (`#c1r-modal`). Its Advanced view runs to several screens, so it now says where you are and lets you move. Everything is scoped to `#c1r-modal`.
+
+- **Header:** a score badge in the verdict colour (dark ink on the amber and green fills, white on red, for contrast), the extension name, and chips for version, verdict and date. The text still reads "v2.4 / MALICIOUS / date": the separators stay in the markup and are hidden by CSS.
+- **Reading progress:** a thin line under the header fills as you scroll.
+- **Jump bar (Advanced only):** one chip per section that is actually present (Overview, Analysis, Containment, Permissions, Setup, Network, Activity, Servers, Verdict report, Export). It follows the scroll position (`c1ReportScroll`, one passive, frame-throttled listener), clicking a chip scrolls to the section (smooth, or immediate under reduced motion), and jumping to a folded section opens it. Presence is judged from rendered content, not height, because the popup is still closed when the bar is built.
+- **Folding:** each long panel has a chevron in its heading (`c1AddCollapsers`, idempotent, re-run when the permissions panel is rebuilt by "Show all"). *Collapse all / Expand all* sits at the end of the jump bar. The two Analysis panels do not fold, because they are laid out as an equal-height pair.
+- **Back to top** appears after scrolling, and the Advanced view now ends with the export buttons (the same row as the Simple view, built by `_c1ExportInner`).
+- **Tables** are banded with a hover row. Print hides the new controls and shows folded panels in full.
+- **Profile wording:** an alarm whose name is a variable is shown by that name with a "variable" tag instead of `(variable r.Name)`, and an unknown schedule reads "Set at run time" rather than "Not set". `profile.py` stops a URL at `$` or `{` (template literals) and ignores documentation links that framework bundles carry (Vue, Angular and similar).
+
+#### Popup type scale and layout (2026-10-10)
+
+The popup's text used to run at 8 to 11 px (314 of 339 text elements were under 12.5 px), which is too small to read for the length of a report. A first fix (13.5 px body text, a 1200 px popup) overshot and looked oversized on a scaled 1080p display, so the scale was stepped back to a balanced middle. One scale governs it, defined as variables on `#c1r-modal` and applied by scoped overrides:
+
+| Step | Size | Used for |
+|------|------|----------|
+| micro | 10.5 px | table column heads, badges, small uppercase labels |
+| small | 11.5 px | secondary text, descriptions, notes, chips |
+| body | 12.5 px | table cells, list items, key and value rows, permission text |
+| lead | 14 to 14.5 px | the summary and the recommendation |
+| h3 | 15.5 px | panel titles (the header title is 17.5 px) |
+
+- **Layout:** the popup is 1120 px wide (was 1060), panels have 20 x 24 px padding and 14 px between them, the score badge is 44 px, the key-fact numbers 28 px and the verdict score 56 px, and the scrollbar is thin and themed.
+- **Richer text:** every section heading has an icon tile (`c1AddHeadIcons`, chosen from the heading's own title); the Simple view has a **What to do** callout in the verdict's colour; the Advanced view opens with the same four key-fact cards as the Simple view; the verdict report's flags are class-based rows with a coloured edge, and its recommendation is a callout. None of these used inline font sizes any more.
+- **Edit rule:** change a size by editing the variables or the scoped rule in the "Report popup: type scale and layout" block, not by adding an inline `font-size`. The survey that found the problem (every text element with its computed size) is easy to rerun in a browser console.
+- **Graph:** labels are 15 px (12.5 px when the extension has more than 26 servers), and the label spacing estimate follows the font size.
+- **Phones:** below 760 px the padding, hero text, gauge and heading sizes step down.
+
 ### Writing for this panel
 
 - **No dash as punctuation** in anything the user reads: no em dash, en dash or spaced hyphen. Use a full stop, a comma or a colon. Plain compound words (read only, sign in) are written as words where that reads naturally. Extension names are data and are shown exactly as the extension spells them.
@@ -963,6 +1045,96 @@ The dashboard side: the report's install button is shared by every report, so it
 
 Block is remembered for the session: an analysis still running when Block is clicked finishes onto a card that cannot be approved, and `approve_install` answers 409 for a blocked ID. The next click on that extension clears the block.
 
+## Evidence layer (added 2026-10-10)
+
+The verdict answers "how malicious does this look". A reviewer also needs to know
+what the extension *is*, what it did, and who it talked to. This layer records
+that, using a comparison against another analyzer's report for the same
+extension (Ad Blocker Pro) as the yardstick. **None of it changes a score or a
+verdict**; it is evidence beside them, kept in the stored report so a reopened
+analysis still has it.
+
+| Piece | Code | What it adds |
+|-------|------|--------------|
+| Static profile | `profile.py` `build_profile()` | Background process, content scripts declared **and registered from code** (with JS world and sites), alarms with their schedule (names resolved through constants and `importScripts`), domains named in the code, uninstall page, sensitive API use, eval and remote-script counts, declarativeNetRequest rule counts by action, package inventory. Reads the unpacked folder when there is one, because the classifier input is capped at 300 KB. Offline, never raises. |
+| Request attribution | `sandbox.py` `_request_source()` | Each request is tagged `background`, `bait_page`, `browse_page`, `other_page` or `page`. A real site's own traffic (`browse_page`, `other_page`) is **listed but never scored**. |
+| Request detail | `sandbox.py` `summarise_observations()` | One row per distinct call: method, address, who made it, size and **field names** of any body (never values). Plus behaviour counts, pages the extension opened by itself, and the traffic of the visited sites kept apart. |
+| Real-page visit | `sandbox.py` `_browse_real_pages()` | After the bait page, visits `example.com`, a Wikipedia page and a news page so a content blocker or content script has something real to act on. Reported only. Skipped when the extension did not load; failures (no network) are recorded, not fatal. |
+| Content-script world | `sandbox.py` `_track_isolated_world()`, `_display_name()` | Resolves `__MSG_x__` display names from `_locales`, so the content-script world of a translated extension is matched and read (the old "known gap"). Read only: see the limit below about hooking. |
+| Time limits | `sandbox.py` `_bounded()`, `_step()` | Every read-back from the browser (page, worker, content-script world) and every step of the real-page visit has a time limit, and the visit has a 60 s budget, so a busy or hung page costs seconds, never the analysis. Phase lines (`[c1-observe] ...`) go to stdout, which inside the VM is the guest log the host returns when a run times out. |
+| Network intelligence | `netintel.py` `build_network_intel()` | Each host is classed as the extension's own server (named in its code), a shared service, a raw IP or unexplained; DNS adds IP addresses; defanged domain, IP and URL indicators for the extension's own infrastructure only. Query strings are dropped from URL indicators because they often carry an install identifier. |
+
+How it connects: `analyzer._evidence_extras()` builds `profile` and
+`network_intel` once and every result path attaches them (normal, blocklist
+evidence, blocklist instant). `report.build_report()` copies them into the report
+dict. The dashboard shows them as "How it is set up", "What it did when run" and
+"Servers and indicators" in the Advanced view, a short "Worth knowing" list in the
+Simple view, and the same sections in the HTML report.
+
+### Rules worth keeping
+
+- **Evidence, not score.** The profile, the real-page visit and the network
+  intelligence never feed `_score()` or the fusion. Only attributable activity
+  (bait page, background worker, content script) is scored, exactly as before;
+  on the bundled malicious test extension the dynamic score and flags are
+  identical with and without this layer.
+- **Empty means not looked up.** A lookup that fails or is switched off is
+  recorded in `network_intel.lookups`; it is never shown as clean.
+- **`sandbox.py` stays self-contained.** The VM guest stages that file alone, so
+  it must not import other C1 modules (`test_c1_intel.py` checks this). The
+  host-only modules (`profile.py`, `netintel.py`) are free to import each other.
+- **Sizes are capped.** 60 request rows, 40 hosts, 12 page hosts and 1,500 raw
+  requests per run, so a noisy extension cannot bloat the stored report.
+
+### Lookups and settings
+
+- DNS runs on the host after the sandbox, for at most 12 hosts, 4 s each.
+- No third-party reputation service is used (a VirusTotal column was tried and
+  removed on 2026-10-10: it needs an API key the project does not have, so it only
+  ever said "not checked").
+- `C1_NETINTEL_LOOKUPS=off` switches the DNS lookup off (the test suite sets it).
+- The real-page visit is the `browse` argument of `observe_extension()`
+  (default on) and the `_BROWSE_URLS` list in `sandbox.py`.
+
+### Known limits
+
+- The real-page visit uses three public pages. It shows how an extension behaves
+  on ordinary sites, not on a bank or a shop, so it can miss behaviour keyed to
+  specific sites or to a later date.
+- The first request of a tab the extension opens is not visible to the network
+  listener, so the opened page is reported as a page, with its sub-requests
+  listed as the site's own traffic.
+- Content scripts an extension registers from code are not hooked, only reported
+  in the profile. Installing the monitor into such a world after it exists was
+  tried and removed: inside the Windows Sandbox VM it starved the extension's own
+  background worker (found by running variants of the observer in the VM, with
+  the display-name match and the reads on and only the hook off). Declared
+  content scripts are still hooked from the first line, as before.
+- If a VM run is cut off, an orphaned sandbox can stay resident. `wsb list` shows
+  it and `wsb stop --id <id>` removes it without administrator rights (the
+  elevated `Restart-Service vmcompute -Force` the backend suggests is not needed
+  on this Windows version).
+- No library vulnerability scan (RetireJS style) and no automated "benign
+  confidence" are included, to keep the layer simple.
+- A broad-permission ad blocker can still score high on the static model. That
+  is the classifier's behaviour, not something this layer changes; the profile
+  and the attributed requests are there so a reviewer can see why and judge it.
+
+### Verified
+
+`test/C1/test_c1_intel.py` (35 tests): profile facts, alarm-name resolution,
+request attribution and the unchanged score for a site's own traffic, the summary
+shape and size cap, domain roles and defanging, lookups with fakes, and the
+history round trip. Live: Ad Blocker Pro analysed through the real pipeline in a
+headless-patched in-process sandbox and in the Windows Sandbox VM (about 65 s end to
+end, same score and verdict as the in-process run), and the bundled malicious test
+extension in the VM (score 100 and the same 36 signals as before this layer); the dashboard
+panels and the HTML report were driven in Chromium (31 checks including hostile
+input, mobile width, print and old stored analyses) and the computed style of the
+964 elements outside C1 was identical to the previous version.
+
+---
+
 ## Verdict Engine
 
 ### Score Fusion
@@ -992,6 +1164,8 @@ score_final = (0.7 * score_static) + (0.3 * score_dynamic)
 | enrich.py | Live evidence resolution (name/version/store/hash) + reason derivation |
 | isolation/ | Sandbox containment backends — `base.py` (contract + IsolationReport), `inprocess.py` (host fallback), `windows_sandbox.py` (disposable VM), `guest_agent.py` (runs inside the VM) |
 | report.py | Human-readable report + flag catalogue + plain-language summary |
+| profile.py | Static extension profile: background and content scripts, alarms, endpoints, API use, rule sets, package |
+| netintel.py | Domain roles, DNS and defanged indicators for the hosts an extension contacts or names |
 | permissions.py | Declared-capability risk catalogue (severity + plain-English description per permission) |
 | db.py | SQLite analysis history |
 | crx_utils.py | CRX v2/v3 parsing + Chrome Web Store download |

@@ -69,6 +69,109 @@ def _is_suspicious_url(url: str) -> bool:
     return bool(_IP_RE.match(url) or _DATA_RE.match(url))
 
 
+# ── Who made a request ────────────────────────────────────────────────────────
+# The request listener sees everything the browser sends, including the traffic
+# of whichever web page happens to be open. Only some of that can be laid at the
+# extension's door, so every request is tagged with where it came from:
+#
+#   background   the extension's own service worker or background page
+#   bait_page    the page we serve (it runs no scripts of its own, so anything it
+#                does was done by the extension)
+#   browse_page  the real sites visited afterwards  -- the site's traffic
+#   other_page   any other tab, e.g. a welcome page the extension opened
+#                                                   -- the site's traffic
+#   page         could not be told (kept as before: counted)
+#
+# The two kinds of "site's traffic" are listed in the report but never scored:
+# an analytics POST from a news site says nothing about the extension. (The fact
+# that the extension opened a tab at all is reported separately.)
+_UNATTRIBUTED_SOURCES = frozenset(("browse_page", "other_page"))
+
+# Real pages visited after the bait page, so a content blocker or a content
+# script has something real to act on. Public, login-free, stable. What they do
+# is reported, but never changes the score (see _UNATTRIBUTED_SOURCES).
+_BROWSE_URLS = (
+    "https://example.com/",
+    "https://en.wikipedia.org/wiki/Main_Page",
+    "https://www.bbc.com/news",
+)
+_BROWSE_NAV_TIMEOUT_MS = 10_000
+_BROWSE_DWELL_MS       = 2_500
+_BROWSE_STEP_SECONDS   = 8.0        # any single browser call in the visit
+_BROWSE_BUDGET_SECONDS = 60.0       # the whole visit: it must never be able to stall an analysis
+_MAX_NET_LOG           = 1500       # a noisy page must not grow the result without bound
+
+
+_READ_SECONDS = 8.0     # one read-back from the browser (a page, a worker, a content-script world)
+
+
+async def _bounded(coro, default=None, seconds: float = _READ_SECONDS):
+    """Await a browser call, but give up after `seconds` and return `default`.
+
+    The reads that collect what the hooks recorded all go through here. A page
+    or a worker that is busy, hung or already gone must cost a few seconds at
+    worst, never the whole analysis."""
+    try:
+        return await asyncio.wait_for(coro, seconds)
+    except Exception:
+        return default
+
+
+def _progress(text: str) -> None:
+    """One short line per phase. Inside the VM stdout is captured as the guest
+    log, which the host returns when a run times out, so a stall shows where."""
+    try:
+        print("[c1-observe] " + text, flush=True)
+    except Exception:
+        pass
+
+
+def _request_source(req, bait_page, browse_page) -> str:
+    """Tag one request with who most plausibly made it (see above)."""
+    try:
+        if req.service_worker:
+            return "background"
+    except Exception:
+        pass
+    try:
+        frame = req.frame
+        if frame.url.startswith("chrome-extension://"):
+            return "background"             # an MV2 background page
+        owner = frame.page
+        if bait_page is not None and owner is bait_page:
+            return "bait_page"
+        if browse_page is not None and owner is browse_page:
+            return "browse_page"
+        return "other_page"
+    except Exception:
+        return "page"
+
+
+def _body_shape(req) -> Tuple[bool, int, List[str]]:
+    """(has a body, its size in bytes, top-level field names).
+
+    Field names only: the values can be personal data, and the names are what
+    show whether a request carries an install ID or a page address."""
+    try:
+        raw = req.post_data_buffer
+    except Exception:
+        raw = None
+    if not raw:
+        return False, 0, []
+    keys: List[str] = []
+    try:
+        text = raw.decode("utf-8", errors="ignore")
+        if text.lstrip().startswith("{"):
+            data = json.loads(text)
+            if isinstance(data, dict):
+                keys = [str(k)[:40] for k in list(data)[:12]]
+        elif "=" in text and "\n" not in text[:200]:
+            keys = [p.split("=", 1)[0][:40] for p in text.split("&")[:12] if "=" in p]
+    except Exception:
+        pass
+    return True, len(raw), keys
+
+
 # ── Monitoring hooks injected into every page context ────────────────────────
 # The hooks overwrite built-ins so we capture calls made by content scripts
 # and the page itself. Results are accumulated in window.__c1_signals.
@@ -77,8 +180,16 @@ _MONITOR_JS = r"""
     if (window.__c1_monitor) return;
     window.__c1_monitor = true;
     window.__c1_signals = [];
+    window.__c1_counters = { dom: 0 };
 
     function _log(obj) { window.__c1_signals.push(obj); }
+
+    /* DOM changes. The bait page runs no scripts of its own, so on that page
+       every change is the extension's; on real pages it is a mixed count. */
+    try {
+        new MutationObserver(function (m) { window.__c1_counters.dom += m.length; })
+            .observe(document, { childList: true, subtree: true, attributes: true });
+    } catch (_) {}
 
     /* eval */
     var _ev = window.eval;
@@ -88,10 +199,11 @@ _MONITOR_JS = r"""
            expression through the page's window.eval, which this hook has just
            patched — so reading the buffer logged an 'eval' every single time and
            EVAL_AT_RUNTIME fired for 100% of extensions, including ones that run
-           no code at all. Only suppress strings referencing our private symbol;
-           genuine extension eval() is still recorded. */
-        if (_s.indexOf('__c1_signals') === -1) {
-            _log({ t: 'eval', len: _s.length });
+           no code at all. Only suppress strings referencing our private symbols
+           (__c1_signals, __c1_counters); genuine extension eval() is still
+           recorded, with its first characters so a reviewer can see what it ran. */
+        if (_s.indexOf('__c1_') === -1) {
+            _log({ t: 'eval', len: _s.length, preview: _s.slice(0, 100) });
         }
         return _ev.call(this, code);
     };
@@ -252,19 +364,14 @@ async def _pull_background_signals(ctx) -> List[Dict]:
     page-signals read."""
     out: List[Dict] = []
     for worker in list(ctx.service_workers):
-        try:
-            sig = await worker.evaluate("() => self.__c1_sw_signals || []")
-            if isinstance(sig, list):
-                out.extend(sig)
-        except Exception:
-            pass    # worker torn down mid-read, or not yet instrumented
+        # worker torn down mid-read, or not yet instrumented: just skipped
+        sig = await _bounded(worker.evaluate("() => self.__c1_sw_signals || []"))
+        if isinstance(sig, list):
+            out.extend(sig)
     for bg in list(ctx.background_pages):
-        try:
-            sig = await bg.evaluate("() => window.__c1_signals || []")
-            if isinstance(sig, list):
-                out.extend(sig)
-        except Exception:
-            pass
+        sig = await _bounded(bg.evaluate("() => window.__c1_signals || []"))
+        if isinstance(sig, list):
+            out.extend(sig)
     return out
 
 
@@ -312,6 +419,9 @@ def _score(
     for r in net_log:
         url = r.get("url", "")
         if not _is_external(url):
+            continue
+        # A real site's own traffic is not the extension's behaviour.
+        if r.get("source") in _UNATTRIBUTED_SOURCES:
             continue
         external_urls.add(url)
         if r.get("method", "GET").upper() in ("POST", "PUT", "PATCH"):
@@ -366,7 +476,13 @@ def _score(
 # because the background and isolated worlds are now instrumented separately,
 # and it is what the report's network view is built on.
 
-_MAX_SUMMARY_HOSTS = 40
+_MAX_SUMMARY_HOSTS    = 40
+_MAX_SUMMARY_REQUESTS = 60
+_MAX_PAGE_HOSTS       = 12
+
+# What the network layer says about a request, translated to the labels the
+# report already uses for "who made it".
+_SOURCE_LABEL = {"background": "background", "bait_page": "page", "page": "page"}
 
 
 def _host_of(url: str) -> str:
@@ -375,6 +491,43 @@ def _host_of(url: str) -> str:
         return netloc[:120] if netloc else ""
     except Exception:
         return ""
+
+
+def _behaviour(result: Dict[str, Any], scored_signals: List[Dict]) -> Dict[str, Any]:
+    """What the extension did, as counts a reviewer can read at a glance.
+
+    Built only from signals that are scored (bait page, background, content
+    script), so every number here is attributable to the extension."""
+    def count(kind: str) -> int:
+        return sum(1 for s in scored_signals if isinstance(s, dict) and s.get("t") == kind)
+
+    samples: List[str] = []
+    for sig in scored_signals:
+        if isinstance(sig, dict) and sig.get("t") == "eval":
+            preview = str(sig.get("preview") or "").strip()
+            if preview and preview not in samples:
+                samples.append(preview[:100])
+            if len(samples) >= 5:
+                break
+
+    by_realm = {"background": 0, "content_script": 0, "page": 0}
+    for sig in scored_signals:
+        if isinstance(sig, dict) and sig.get("t") in ("fetch", "xhr", "ws"):
+            realm = str(sig.get("src") or "page")
+            by_realm[realm if realm in by_realm else "page"] += 1
+
+    counters = result.get("counters") if isinstance(result.get("counters"), dict) else {}
+    return {
+        "dom_mutations":  int(counters.get("dom_mutations") or 0),
+        "console_errors": int(counters.get("console_errors") or 0),
+        "cookie_reads":   count("cookie_read"),
+        "eval_calls":     count("eval"),
+        "eval_samples":   samples,
+        "key_listeners":  count("key_listener"),
+        "form_submits":   count("form_submit"),
+        "websockets":     count("ws"),
+        "calls_by_realm": by_realm,
+    }
 
 
 def summarise_observations(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -395,6 +548,8 @@ def summarise_observations(result: Dict[str, Any]) -> Dict[str, Any]:
     content = result.get("content_script_signals") or []
 
     hosts: Dict[str, Dict[str, Any]] = {}
+    page_hosts: Dict[str, int] = {}                 # a real site's own traffic: listed, not attributed
+    requests: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 
     def touch(host: str) -> Dict[str, Any]:
         if host not in hosts:
@@ -403,7 +558,9 @@ def summarise_observations(result: Dict[str, Any]) -> Dict[str, Any]:
         return hosts[host]
 
     # Request counts and methods come from the network listener, which sees
-    # every request regardless of which JS realm issued it.
+    # every request regardless of which JS realm issued it. A request tagged as
+    # a real site's own traffic is counted apart: the extension did not make it.
+    attributed = 0
     for req in net_log:
         if not isinstance(req, dict):
             continue
@@ -413,6 +570,11 @@ def summarise_observations(result: Dict[str, Any]) -> Dict[str, Any]:
         host = _host_of(url)
         if not host:
             continue
+        source = str(req.get("source") or "page")
+        if source in _UNATTRIBUTED_SOURCES:
+            page_hosts[host] = page_hosts.get(host, 0) + 1
+            continue
+        attributed += 1
         entry = touch(host)
         entry["requests"] += 1
         method = str(req.get("method", "GET")).upper()
@@ -420,6 +582,20 @@ def summarise_observations(result: Dict[str, Any]) -> Dict[str, Any]:
             entry["methods"].append(method)
         if _is_suspicious_url(url):
             entry["suspicious"] = True
+        label = _SOURCE_LABEL.get(source, "page")
+        if source != "page" and label not in entry["sources"]:
+            entry["sources"].append(label)      # a bare "page" tag carries no information
+
+        # One row per distinct request, so the report can show the actual calls
+        # (path, method, whether it carried data) and not only a host total.
+        row = requests.setdefault((method, url, label), {
+            "method": method, "url": url[:220], "source": label, "count": 0,
+        })
+        row["count"] += 1
+        if req.get("has_body"):      # body fields appear only on calls that carried data
+            row["has_body"] = True
+            row["body_size"] = max(row.get("body_size", 0), int(req.get("body_size") or 0))
+            row["body_keys"] = row.get("body_keys") or list(req.get("body_keys") or [])[:12]
 
     # Realm attribution comes from the in-page hooks, which do know who called.
     for signals, source in ((page, "page"),
@@ -447,17 +623,39 @@ def summarise_observations(result: Dict[str, Any]) -> Dict[str, Any]:
                      key=lambda h: (-h["requests"], h["host"]))
     truncated = len(ordered) > _MAX_SUMMARY_HOSTS
 
+    # Calls that carry data come first, then the ones from the background
+    # worker, then the rest by how often they repeat.
+    calls = sorted(requests.values(), key=lambda r: (
+        not r.get("has_body"), r["source"] != "background", -r["count"], r["url"]))
+
+    outside = sorted(page_hosts.items(), key=lambda kv: (-kv[1], kv[0]))
+    scored = list(page) + list(backgr) + list(content)
+    browse = result.get("browse") if isinstance(result.get("browse"), dict) else {}
+
     return {
         "hosts": ordered[:_MAX_SUMMARY_HOSTS],
         "truncated": truncated,
         "counts": {
             "requests":       len(net_log),
+            "attributed":     attributed,
             "hosts":          len(hosts),
             "signals":        len(page) + len(backgr) + len(content),
             "page":           len(page),
             "background":     len(backgr),
             "content_script": len(content),
+            "page_requests":  sum(page_hosts.values()),
+            "page_hosts":     len(page_hosts),
         },
+        # Each distinct call the extension made, capped; `requests_truncated`
+        # says whether the cap dropped any.
+        "requests":           calls[:_MAX_SUMMARY_REQUESTS],
+        "requests_truncated": len(calls) > _MAX_SUMMARY_REQUESTS,
+        # Traffic of the real sites the sandbox visited (and of tabs the
+        # extension opened): shown for context, never attributed or scored.
+        "page_hosts": [{"host": h, "requests": n} for h, n in outside[:_MAX_PAGE_HOSTS]],
+        "opened_tabs": [str(u)[:200] for u in (result.get("opened_tabs") or [])][:5],
+        "behaviour":  _behaviour(result, scored),
+        "browse":     browse,
     }
 
 
@@ -547,6 +745,178 @@ def _patch_content_scripts_with_monitor(staged_ext_path: str, manifest: dict) ->
                 pass    # declared file missing on disk; nothing to patch
 
 
+def _display_name(manifest: dict, ext_dir: str) -> str:
+    """The extension's name as Chromium shows it.
+
+    Chromium names a content script's isolated world after this, and a manifest
+    that stores a translation key (`__MSG_title__`) would otherwise never match
+    it, hiding every content-script signal. Resolved from the extension's own
+    _locales folder; "" when it cannot be."""
+    name = str(manifest.get("name") or "")
+    match = re.fullmatch(r"__MSG_(\w+)__", name)
+    if not match:
+        return name
+    key = match.group(1).lower()
+    for locale in (str(manifest.get("default_locale") or "en"), "en", "en_US"):
+        try:
+            with open(os.path.join(ext_dir, "_locales", locale, "messages.json"),
+                      "r", encoding="utf-8-sig", errors="ignore") as handle:
+                messages = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        for k, v in (messages or {}).items():
+            if str(k).lower() == key and isinstance(v, dict) and v.get("message"):
+                return str(v["message"])
+    return ""
+
+
+async def _track_isolated_world(ctx, page, ext_name: str):
+    """Follow the extension's content-script world on one page.
+
+    Returns an async function that reads back whatever the monitor recorded
+    there. A content script does not run in the page's JS world: it gets an
+    isolated one that shares the DOM but not the JS objects, so the page-level
+    hook cannot see it and its signals must be read through the world's own
+    context id, learned from Runtime.executionContextCreated events.
+
+    Only reads. The hook itself is baked into the declared content script
+    files (`_patch_content_scripts_with_monitor`); installing it into a world
+    after the fact was tried for scripts an extension registers from code, and
+    removed: inside the VM it starved the extension's own background worker,
+    which is exactly the observer effect an analyzer must not have.
+
+    Chromium names that world after the extension's display name, and
+    Playwright's own utility world is also of type "isolated", so the name
+    match is what keeps the two apart. With no usable name there is nothing to
+    match on and the reader returns nothing (main-world coverage still applies).
+    """
+    context_ids: List[int] = []
+    cdp = None
+    if ext_name:
+        try:
+            cdp = await ctx.new_cdp_session(page)
+
+            def _on_context(event: dict) -> None:
+                c = event.get("context") or {}
+                aux = c.get("auxData") or {}
+                if aux.get("type") == "isolated" and c.get("name") == ext_name:
+                    context_ids.append(c["id"])
+
+            cdp.on("Runtime.executionContextCreated", _on_context)
+            await cdp.send("Runtime.enable")
+        except Exception:
+            cdp = None      # CDP unavailable: main-world coverage still applies
+
+    async def pull() -> List[Dict]:
+        out: List[Dict] = []
+        if not cdp:
+            return out
+        for cid in list(context_ids):
+            # a world that navigated away or was torn down answers with an
+            # error, or not at all: either way it is skipped
+            r = await _bounded(cdp.send("Runtime.evaluate", {
+                "expression": "window.__c1_signals || []",
+                "contextId": cid,
+                "returnByValue": True,
+            }), {})
+            val = ((r or {}).get("result") or {}).get("value")
+            if isinstance(val, list):
+                for s in val:
+                    s = dict(s)
+                    s.setdefault("src", "content_script")
+                    out.append(s)
+        return out
+
+    return pull
+
+
+def _new_browse_report() -> Dict[str, Any]:
+    return {
+        "enabled": True, "visited": [], "failed": [],
+        "dom_mutations": 0, "page_cookie_reads": 0, "page_eval_calls": 0,
+        "content_script": {"requests": 0, "cookie_reads": 0, "key_listeners": 0},
+        "console_errors": 0,
+    }
+
+
+async def _step(coro):
+    """One browser call, bounded. A heavy real page in a slow or GPU-less VM can
+    leave a call waiting indefinitely, and nothing in the visit is worth that."""
+    return await asyncio.wait_for(coro, _BROWSE_STEP_SECONDS)
+
+
+async def _browse_real_pages(ctx, holders: Dict[str, Any], phase: Dict[str, str],
+                             ext_name: str, console_errors: List[int],
+                             report: Dict[str, Any]) -> Dict[str, Any]:
+    """Visit a few real public pages so the extension has something real to act on.
+
+    Everything observed here is reported and none of it is scored: the sites'
+    own scripts make requests, read cookies and call eval, and none of that is
+    the extension's behaviour. (The extension's own requests still carry their
+    source tag, so a background worker's calls stay attributable.)
+
+    `report` is filled in as the visit goes, so when the caller's time budget
+    cuts it short what was already seen is kept rather than thrown away.
+    """
+    phase["name"] = "browse"
+    page = await _step(ctx.new_page())
+    holders["browse"] = page
+
+    def _on_console(msg) -> None:
+        try:
+            if msg.type == "error":
+                console_errors[0] += 1
+        except Exception:
+            pass
+
+    page.on("console", _on_console)
+    await _step(page.add_init_script(_MONITOR_JS))
+    pull_isolated = await _step(_track_isolated_world(ctx, page, ext_name))
+
+    for url in _BROWSE_URLS:
+        _progress(f"visiting {url}")
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=_BROWSE_NAV_TIMEOUT_MS)
+            await page.wait_for_timeout(_BROWSE_DWELL_MS)
+            try:
+                await _step(page.evaluate("() => window.scrollTo(0, document.body.scrollHeight / 2)"))
+            except Exception:
+                pass
+            await page.wait_for_timeout(500)
+        except Exception as exc:
+            report["failed"].append({"url": url, "error": (str(exc).split("\n")[0] or type(exc).__name__)[:120]})
+            continue
+        report["visited"].append(url)
+        # Read this page's record before the next navigation replaces it.
+        try:
+            counters = await _step(page.evaluate("() => window.__c1_counters || {}"))
+            report["dom_mutations"] += int((counters or {}).get("dom") or 0)
+            signals = await _step(page.evaluate("() => window.__c1_signals || []"))
+            report["page_cookie_reads"] += sum(1 for s in signals if s.get("t") == "cookie_read")
+            report["page_eval_calls"]   += sum(1 for s in signals if s.get("t") == "eval")
+        except Exception:
+            pass
+        try:
+            cs_signals = await _step(pull_isolated())
+        except Exception:
+            cs_signals = []
+        for s in cs_signals:
+            kind = s.get("t")
+            if kind in ("fetch", "xhr"):
+                report["content_script"]["requests"] += 1
+            elif kind == "cookie_read":
+                report["content_script"]["cookie_reads"] += 1
+            elif kind == "key_listener":
+                report["content_script"]["key_listeners"] += 1
+
+    report["console_errors"] = console_errors[0]
+    try:
+        await _step(page.close())
+    except Exception:
+        pass
+    return report
+
+
 # ── Observation ───────────────────────────────────────────────────────────────
 # Adaptive-window tuning. An extension gets at least _MIN_OBSERVE_SECONDS
 # regardless, and the window only closes early after _QUIET_PERIOD_SECONDS with
@@ -562,6 +932,7 @@ async def observe_extension(
     extension_path: str,
     timeout_seconds: int = 20,
     early_exit: bool = True,
+    browse: bool = True,
 ) -> Dict[str, Any]:
     """
     Load an unpacked extension, observe it on a test page, and return scored
@@ -576,16 +947,21 @@ async def observe_extension(
         extension_path:  Absolute path to the unpacked extension directory
                          (must contain manifest.json).
         timeout_seconds: How long to let the extension run on the test page.
+        browse:          After the bait page, visit a few real public pages
+                         and report what the extension did there. Reported
+                         only; it never changes the score.
 
     Returns a dict matching the C1 dynamic output contract:
         {
           "executed":        bool,
           "score":           int  (0–100),
           "signals":         list[str],
-          "network_requests": list[dict],
+          "network_requests": list[dict],   # each tagged with its source/phase
           "page_signals":    list[dict],
           "background_signals": list[dict],
           "content_script_signals": list[dict],
+          "counters":        dict,          # DOM changes, console errors (bait page)
+          "browse":          dict,          # what happened on the real pages
           "detail":          str,
           "error":           str | None,
         }
@@ -612,6 +988,11 @@ async def observe_extension(
         # A dynamic score of 0 means nothing unless this is True.
         "extension_loaded": None,
         "load_error": None,
+        # Counts that are not signals: DOM changes and console errors seen on
+        # the bait page, and a record of the real-page visit (see `browse`).
+        "counters": {},
+        "opened_tabs": [],
+        "browse": {},
     }
 
     ext_path = os.path.abspath(extension_path)
@@ -694,15 +1075,30 @@ async def observe_extension(
                 # Register the request listener immediately after context creation —
                 # BEFORE ctx.new_page() — so background-page network calls made after
                 # a short delay (setTimeout in the extension) are captured.
+                #
+                # `holders` and `phase` are read by the listener each time it
+                # fires, so it can tag a request with the page it came from and
+                # whether it happened on the bait page or the real-page visit.
+                holders: Dict[str, Any] = {"bait": None, "browse": None}
+                phase: Dict[str, str] = {"name": "bait"}
+
                 def _req_cb(req) -> None:
                     try:
                         if req.url.startswith(_BAIT_ORIGIN):
                             return  # our own intercepted bait page, not extension traffic
-                        net_log.append({
+                        if len(net_log) >= _MAX_NET_LOG:
+                            return
+                        entry = {
                             "url":           req.url[:300],
                             "method":        req.method,
                             "resource_type": req.resource_type,
-                        })
+                            "source":        _request_source(req, holders["bait"], holders["browse"]),
+                            "phase":         phase["name"],
+                        }
+                        has_body, size, keys = _body_shape(req)
+                        if has_body:
+                            entry.update(has_body=True, body_size=size, body_keys=keys)
+                        net_log.append(entry)
                     except Exception:
                         pass
 
@@ -756,78 +1152,34 @@ async def observe_extension(
                 for b in ctx.background_pages:
                     await _instrument_background_page(b)
 
+                _progress("extension loaded=%s, opening the test page" % result["extension_loaded"])
                 page = await ctx.new_page()
 
                 # Inject monitoring hooks before any page script runs
                 await page.add_init_script(_MONITOR_JS)
 
-                # A content script does not run in the page's own JS world — it
-                # gets an isolated world that shares the DOM but not the JS
-                # object graph, specifically so neither side can tamper with
-                # the other. That means the add_init_script hook above is
-                # invisible to it: a content script reading document.cookie
-                # never touches the overridden accessor defined in the main
-                # world, so the read goes unlogged even though the DOM-level
-                # cookie access is real. The hook that actually reaches that
-                # world is baked into the content script files themselves by
-                # `_patch_content_scripts_with_monitor` above, on the staged
-                # copy — see that function for why (an out-of-process,
-                # after-the-fact injection attempt over CDP was tried first
-                # and provably lands in the wrong world).
+                # A content script runs in an isolated JS world the page-level
+                # hook cannot see, so it is followed separately: the hook is
+                # baked into the declared content script files (see
+                # `_patch_content_scripts_with_monitor`) and read back through
+                # the world's own context id. See `_track_isolated_world`.
                 #
-                # Getting the hook running there is only half of it: an
-                # isolated world gets its own `window` wrapper too, so
-                # window.__c1_signals inside it is a different array than the
-                # one page.evaluate() reads back from the main world. Reading
-                # it back needs the isolated world's contextId, learned by
-                # matching Runtime.executionContextCreated events by name —
-                # Chromium names a content script's isolated world after the
-                # extension's own display name, and Playwright's own utility
-                # world is also type "isolated" so the name match is what
-                # keeps this from grabbing the wrong one.
-                #
-                # Known gap: if the manifest's "name" is an unresolved i18n
-                # placeholder (`__MSG_x__`), this name match misses and that
-                # extension's isolated-world activity falls back to invisible
-                # — rare in practice and not worth a messages.json resolver.
-                ext_name = manifest.get("name", "")
-                isolated_ctx_ids: List[int] = []
-                cdp = None
-                if ext_name:
+                # The name Chromium gives that world is the extension's
+                # display name, so an i18n placeholder (`__MSG_x__`) in the
+                # manifest is resolved from the extension's own _locales first.
+                ext_name = _display_name(manifest, staged_ext_path)
+                holders["bait"] = page
+                bait_console = [0]
+
+                def _on_bait_console(msg) -> None:
                     try:
-                        cdp = await ctx.new_cdp_session(page)
-
-                        def _track_isolated_world(event: dict) -> None:
-                            c = event.get("context") or {}
-                            aux = c.get("auxData") or {}
-                            if aux.get("type") == "isolated" and c.get("name") == ext_name:
-                                isolated_ctx_ids.append(c["id"])
-
-                        cdp.on("Runtime.executionContextCreated", _track_isolated_world)
-                        await cdp.send("Runtime.enable")
+                        if msg.type == "error":
+                            bait_console[0] += 1
                     except Exception:
-                        pass    # CDP unavailable — main-world coverage still applies
+                        pass
 
-                async def _pull_isolated_world_signals() -> List[Dict]:
-                    out: List[Dict] = []
-                    if not cdp:
-                        return out
-                    for cid in list(isolated_ctx_ids):
-                        try:
-                            r = await cdp.send("Runtime.evaluate", {
-                                "expression": "window.__c1_signals || []",
-                                "contextId": cid,
-                                "returnByValue": True,
-                            })
-                            val = (r.get("result") or {}).get("value")
-                            if isinstance(val, list):
-                                for s in val:
-                                    s = dict(s)
-                                    s.setdefault("src", "content_script")
-                                    out.append(s)
-                        except Exception:
-                            pass    # world navigated away or was torn down
-                    return out
+                page.on("console", _on_bait_console)
+                _pull_isolated_world_signals = await _track_isolated_world(ctx, page, ext_name)
 
                 # Intercept the bait navigation instead of resolving it over the
                 # network — see the _BAIT_ORIGIN comment for why this replaced a
@@ -840,6 +1192,7 @@ async def observe_extension(
                     wait_until="domcontentloaded",
                     timeout=12_000,
                 )
+                _progress("test page loaded, watching the extension for up to %ds" % int(min(max(timeout_seconds, 5), 30)))
 
                 # Give the extension time to act on the page.
                 #
@@ -869,11 +1222,9 @@ async def observe_extension(
                             break
                         await asyncio.sleep(min(_ACTIVITY_POLL_SECONDS,
                                                 observe_secs - elapsed))
-                        try:
-                            page_sigs = await page.evaluate(
-                                "() => window.__c1_signals || []")
-                        except Exception:
-                            page_sigs = []      # page navigated or closed
+                        # page navigated or closed: nothing to read
+                        page_sigs = await _bounded(
+                            page.evaluate("() => window.__c1_signals || []"), [])
                         # A service worker that starts mid-observation (on an
                         # alarm, or on first use) is only caught by instrumenting
                         # it here too, not just at start-of-run.
@@ -895,16 +1246,55 @@ async def observe_extension(
                 else:
                     await asyncio.sleep(observe_secs)
 
+                _progress("watched for %ss" % observed_for)
+                # DOM changes and console errors on the bait page. Read now,
+                # before any other page is opened, while "everything that
+                # changed here was the extension" still holds.
+                counters = await _bounded(page.evaluate("() => window.__c1_counters || {}"), {})
+                result["counters"] = {"dom_mutations": int((counters or {}).get("dom") or 0),
+                                      "console_errors": bait_console[0]}
+
+                # Tabs the extension opened on its own (a welcome or survey page
+                # is the usual one). The first request of such a tab happens
+                # before the browser lets us watch it, so the tab itself is the
+                # evidence, not its request.
+                result["opened_tabs"] = [
+                    t.url[:200] for t in ctx.pages
+                    if t is not page and t.url.startswith(("http://", "https://"))
+                ][:5]
+
+                # Then a few real pages, so a content blocker or a content script
+                # has something real to act on. Observed and reported, never
+                # scored (see _browse_real_pages). Skipped when the extension
+                # never loaded, since there is nothing to watch.
+                if browse and result["extension_loaded"] is not False:
+                    browse_report = _new_browse_report()
+                    try:
+                        await asyncio.wait_for(
+                            _browse_real_pages(ctx, holders, phase, ext_name, [0], browse_report),
+                            _BROWSE_BUDGET_SECONDS)
+                    except asyncio.TimeoutError:
+                        browse_report["error"] = ("stopped after %d s; what was seen so far is kept"
+                                                  % int(_BROWSE_BUDGET_SECONDS))
+                    except Exception as exc:
+                        browse_report["error"] = (str(exc).split("\n")[0] or type(exc).__name__)[:160]
+                    result["browse"] = browse_report
+                    _progress("real-page visit done: %d visited, %d failed" % (
+                        len(browse_report["visited"]), len(browse_report["failed"])))
+                else:
+                    result["browse"] = {"enabled": False}
+
                 # Final read of whatever the monitor hooks recorded
-                try:
-                    page_sigs = await page.evaluate("() => window.__c1_signals || []")
-                except Exception:
-                    pass
+                page_sigs = await _bounded(page.evaluate("() => window.__c1_signals || []"), page_sigs)
                 bg_sigs = await _pull_background_signals(ctx)
                 cs_sigs = await _pull_isolated_world_signals()
                 result["observed_seconds"] = observed_for
 
-                await ctx.close()
+                _progress("observation finished, closing the browser")
+                try:
+                    await asyncio.wait_for(ctx.close(), 30)
+                except Exception:
+                    pass        # the browser is torn down with the driver either way
 
         result["network_requests"]       = net_log
         result["page_signals"]           = page_sigs if isinstance(page_sigs, list) else []
