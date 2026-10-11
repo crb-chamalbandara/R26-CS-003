@@ -551,10 +551,14 @@ class TestContentScriptIsolatedWorldInstrumentation(unittest.TestCase):
             _patch_content_scripts_with_monitor(d, manifest)   # must not raise
 
     def test_isolated_world_is_tracked_by_name_not_grabbed_indiscriminately(self):
+        # The tracking lives in _track_isolated_world (shared by the bait page
+        # and the real-page visit); observe_extension must still go through it.
         import inspect
         from core.c1 import sandbox
-        src = inspect.getsource(sandbox.observe_extension)
+        src = inspect.getsource(sandbox._track_isolated_world)
         self.assertIn('aux.get("type") == "isolated" and c.get("name") == ext_name', src)
+        self.assertIn("_track_isolated_world(ctx, page, ext_name)",
+                      inspect.getsource(sandbox.observe_extension))
 
     def test_content_script_signals_are_a_distinct_evidence_bucket_that_scores(self):
         import inspect

@@ -23,11 +23,12 @@ Detection pipeline order:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from typing import Dict, List, Optional
 
-from .features     import extract_manifest_features, build_feature_vector  # feature extraction
+from .features    import extract_manifest_features, build_feature_vector  # feature extraction
 from .static_model import (                                                 # ML model runner
     load_model, load_feature_columns, predict_score, predict_anomaly_score,
 )
@@ -198,6 +199,45 @@ def _observed_summary(sandbox_result: Dict) -> Dict:
         return summarise_observations(sandbox_result)
     except Exception:
         return {"hosts": [], "counts": {}, "truncated": False}
+
+
+def _unpacked_folder(extension_path: str, ext_id: str) -> str:
+    """The unpacked extension folder to read the profile from.
+
+    The live "Add to Chrome" path analyses twice: first static-only, with no
+    folder, then (if the score warrants it) again with one. The folder it
+    unpacked is already on disk by the first call, in the place
+    crx_utils.extract_crx_to_persistent_dir() puts it, so use it when the caller
+    did not pass one. That keeps a static-only result from describing an
+    extension off the 300 KB the classifier saw. Only the profile uses it; the
+    sandbox still runs only when a path is passed in."""
+    if extension_path:
+        return extension_path
+    guess = os.path.join(os.path.expanduser("~"), ".websentinel", "extensions", ext_id or "-")
+    return guess if ext_id and os.path.isdir(guess) else ""
+
+
+async def _evidence_extras(manifest_dict: dict, source_code: str, extension_path: str,
+                           observed: Optional[Dict], ext_id: str = "") -> Dict:
+    """The two reviewer-facing evidence blocks that sit beside the verdict.
+
+    `profile` is what the extension is set up to do (static, from the manifest
+    and code); `network_intel` is what the servers it contacts are (domain
+    roles, IPs, indicators). Neither feeds the score. Both are built here, once,
+    so every path that produces a result attaches them the same way, and each is
+    allowed to fail on its own without costing the analysis."""
+    from .profile import build_profile
+    from .netintel import build_network_intel
+    try:
+        profile = await asyncio.to_thread(build_profile, manifest_dict, source_code or "",
+                                          _unpacked_folder(extension_path, ext_id))
+    except Exception:
+        profile = {}
+    try:
+        intel = await build_network_intel(observed, profile)
+    except Exception:
+        intel = {}
+    return {"profile": profile, "network_intel": intel}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -419,6 +459,7 @@ def _blocklist_result(
     observed_flags: Optional[List[str]] = None,
     identity: Optional[Dict] = None,
     permissions: Optional[List[Dict]] = None,
+    extras: Optional[Dict] = None,
 ) -> dict:
     """Assemble the MALICIOUS verdict for a blocklist hit.
 
@@ -469,6 +510,7 @@ def _blocklist_result(
                                      "ext_id": ext_id, "provenance": "blocklist"},
         "permissions":  permissions or [],
     }
+    result.update(extras or {})          # profile + network_intel, when available
     result["report"] = build_report(result)
     return result
 
@@ -560,12 +602,16 @@ async def analyze_extension(
                 observed_flags=gathered["observed_flags"],
                 identity=_identity(manifest_dict, ext_id, extension_path, webstore_url),
                 permissions=explain_permissions(manifest_dict),
+                extras=await _evidence_extras(manifest_dict, source_code, extension_path,
+                                              (gathered["dynamic_info"] or {}).get("observed"), ext_id),
             )
 
         return _blocklist_result(                            # instant path — row is already documented
             ext_id, blocklist_entry,
             identity=_identity(manifest_dict, ext_id, extension_path, webstore_url),
             permissions=explain_permissions(manifest_dict),
+            # No sandbox run on this path, so the profile is all there is to add.
+            extras=await _evidence_extras(manifest_dict, source_code, extension_path, None, ext_id),
         )
 
     # ── Step 3: Guard — model must be loaded ──────────────────────
@@ -683,6 +729,10 @@ async def analyze_extension(
         "identity":     _identity(manifest_dict, ext_id, extension_path, webstore_url),
         "permissions":  explain_permissions(manifest_dict),
     }
+    # What the extension is set up to do, and what the servers it contacts are.
+    # Evidence for the reviewer; neither changes the score above.
+    output.update(await _evidence_extras(manifest_dict, source_code, extension_path,
+                                         dynamic_info.get("observed"), ext_id))
     output["report"] = build_report(output)    # attach human-readable report from report.py
     return output
 

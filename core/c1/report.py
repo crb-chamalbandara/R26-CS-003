@@ -248,9 +248,21 @@ def _plain_summary(verdict: str, final_score: float, explained: List[Dict],
                      for h in (observed.get("hosts") or []))
             sentence = (f"While running in an isolated test browser it contacted "
                         f"{hosts} external server{'s' if hosts != 1 else ''}")
-            sentence += (", some of them from its background process, which keeps "
-                         "running even when you are not using it." if bg else ".")
+            if bg:
+                sentence += (", " + ("from" if hosts == 1 else "some of them from")
+                             + " its background process, which keeps running "
+                               "even when you are not using it.")
+            else:
+                sentence += "."
             parts.append(sentence)
+            # An extension that opens a page by itself is doing something the
+            # user did not ask for, whatever the page turns out to be.
+            tabs = observed.get("opened_tabs") or []
+            if tabs:
+                from urllib.parse import urlparse
+                site = urlparse(str(tabs[0])).netloc
+                parts.append("It also opened a web page on its own right after it loaded"
+                             + (f" ({site})." if site else "."))
         else:
             parts.append("While running in an isolated test browser it contacted "
                          "no external servers.")
@@ -417,6 +429,11 @@ def build_report(result: Dict) -> Dict:
         "identity":      result.get("identity") or {},
         "permissions":   result.get("permissions") or [],
         "observed":      dynamic_info.get("observed") or {},
+        # What the extension is set up to do (static profile) and what the
+        # servers it contacts are (domain roles, IPs, defanged indicators).
+        # Evidence only; neither is part of the score.
+        "profile":       result.get("profile") or {},
+        "network_intel": result.get("network_intel") or {},
         "plain_summary": _plain_summary(
             verdict, final_score, explained,
             result.get("permissions") or [],
