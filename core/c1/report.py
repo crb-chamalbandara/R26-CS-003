@@ -5,7 +5,27 @@ for the dashboard and research paper documentation.
 """
 from __future__ import annotations
 
+import math
 from typing import Dict, List
+
+# ── Verdict thresholds ────────────────────────────────────────────────────────
+# The verdict is decided on the whole number the reader sees, not on the decimal
+# behind it. The dashboard shows a score of 69.84 as 70; deciding "SUSPICIOUS"
+# on 69.84 while the screen said 70 (the malicious threshold) is the mismatch
+# this guards against. Rounding is half up, the same as the dashboard's own.
+MALICIOUS_AT  = 70
+SUSPICIOUS_AT = 40
+
+
+def verdict_for(score: float) -> str:
+    """SAFE, SUSPICIOUS or MALICIOUS for a 0-100 score, using the displayed whole number."""
+    shown = math.floor(float(score or 0) + 0.5)
+    if shown >= MALICIOUS_AT:
+        return "MALICIOUS"
+    if shown >= SUSPICIOUS_AT:
+        return "SUSPICIOUS"
+    return "SAFE"
+
 
 # ── Flag catalogue ────────────────────────────────────────────────────────────
 # Each entry: severity (CRITICAL / HIGH / MEDIUM / LOW) + one-sentence description.
@@ -281,6 +301,26 @@ def _plain_summary(verdict: str, final_score: float, explained: List[Dict],
             parts.append(_humanise(worst.get("description", "")))
 
     return " ".join(p for p in parts if p)
+
+
+def restate_verdict(report: Dict, old: str, new: str) -> Dict:
+    """A copy of a stored report with its verdict-dependent text rewritten for `new`.
+
+    Used only when a stored analysis was labelled by the older rule (decided on the
+    unrounded score) and is read back under the current one. Everything that is not
+    a statement of the verdict is left exactly as it was stored."""
+    if not isinstance(report, dict) or old == new:
+        return report
+    out = dict(report)
+    out["risk_level"]     = _RISK_LABEL.get(new, out.get("risk_level"))
+    out["recommendation"] = _RECOMMENDATIONS.get(new, out.get("recommendation"))
+    head = f"{old} extension detected"
+    if isinstance(out.get("summary"), str) and out["summary"].startswith(head):
+        out["summary"] = f"{new} extension detected" + out["summary"][len(head):]
+    was, now = _VERDICT_OPENER.get(old), _VERDICT_OPENER.get(new)
+    if was and now and isinstance(out.get("plain_summary"), str) and out["plain_summary"].startswith(was):
+        out["plain_summary"] = now + out["plain_summary"][len(was):]
+    return out
 
 
 def build_report(result: Dict) -> Dict:

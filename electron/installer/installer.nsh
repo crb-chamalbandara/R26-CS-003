@@ -10,6 +10,7 @@
 !include "MUI2.nsh"   ; this file is read before electron-builder pulls MUI2 in; the page code needs MUI_HEADER_TEXT
 !include "nsDialogs.nsh"
 !include "LogicLib.nsh"
+!include "${__FILEDIR__}\c1_sandbox.nsh"   ; C1: the optional "Turn on Windows Sandbox" step, kept in its own file
 
 ; These variables are only used by the options page and install section, which are compiled out
 ; of the uninstaller pass; declaring them there trips NSIS warning 6001
@@ -33,6 +34,7 @@
 ; ── The options page, shown after the install-folder page ──────────────────
 !macro customPageAfterChangeDir
   Page custom ScOptionsCreate ScOptionsLeave
+  Page custom C1SbCreate C1SbLeave   ; C1: Windows Sandbox (skipped when it is already on)
 !macroend
 
 !ifndef BUILD_UNINSTALLER
@@ -65,7 +67,7 @@ Function ScOptionsCreate
     ${NSD_Check} $ScAdminBox
   ${EndIf}
 
-  ${NSD_CreateLabel} 12u 87u 95% 36u "Tick this only if WebSentinel fails to start or cannot reach the browser or sandbox without it. Windows will ask for permission each time the app opens."
+  ${NSD_CreateLabel} 12u 87u 95% 36u "Not needed for Windows Sandbox. Tick this only if WebSentinel fails to start without it. Windows will ask for permission each time the app opens."
   Pop $0
 
   nsDialogs::Show
@@ -106,6 +108,9 @@ FunctionEnd
       Quit
     ScSkipElevate:
   ${EndIf}
+
+  ; C1: turn on Windows Sandbox when the box was ticked. After the check above, so it cannot trigger it.
+  !insertmacro c1SandboxInstall
 !macroend
 
 ; ── Remove them again on uninstall ──────────────────────────────────────────

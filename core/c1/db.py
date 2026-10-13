@@ -14,6 +14,8 @@ import os
 import sqlite3
 from typing import Dict, List
 
+from .report import restate_verdict, verdict_for
+
 # Full path to the SQLite database file — stored in the user's home directory
 _DB_PATH = os.path.join(os.path.expanduser("~"), ".websentinel", "c1_analyses.db")
 
@@ -115,6 +117,15 @@ def _to_dict(row: sqlite3.Row) -> Dict:
     report = d["report"] if isinstance(d.get("report"), dict) else {}
     d["score"]        = round(d["final_score"] / 100, 4)
     d["score_source"] = report.get("score_source", "")
+    # Analyses saved before the verdict was decided on the displayed whole number can
+    # carry SUSPICIOUS for a score shown as 70 (stored 69.84). Only a label the old rule
+    # itself produced is corrected, and the text that states it is rewritten to match.
+    fs = d["final_score"]
+    old_rule = "MALICIOUS" if fs >= 70 else "SUSPICIOUS" if fs >= 40 else "SAFE"
+    now_rule = verdict_for(fs)
+    if d.get("verdict") == old_rule and now_rule != old_rule:
+        report = restate_verdict(report, old_rule, now_rule)
+        d["report"], d["verdict"] = report, now_rule
     d["static"]  = {
         "score":      round(d["static_score"]  / 100, 4),
         "ml_score":   d["ml_prob"],
@@ -127,7 +138,13 @@ def _to_dict(row: sqlite3.Row) -> Dict:
     }
     # Only set when the models actually ran. Its absence is what tells the
     # dashboard a blocklist hit short-circuited, so it must not be defaulted.
-    measured = (report.get("score_breakdown") or {}).get("measured_static")
+    breakdown = report.get("score_breakdown") or {}
+    # The anomaly score is not a column; it travels in the stored report. Without
+    # this, only an analysis still in memory showed it and every reopened one read 0.
+    # Left unset when the row has none, so the dashboard can say "not recorded".
+    if breakdown.get("anomaly_score") is not None:
+        d["static"]["anomaly_score"] = round(float(breakdown["anomaly_score"]) / 100, 4)
+    measured = breakdown.get("measured_static")
     if measured is not None:
         d["static"]["measured_static_score"] = round(measured / 100, 4)
     d["dynamic"] = {

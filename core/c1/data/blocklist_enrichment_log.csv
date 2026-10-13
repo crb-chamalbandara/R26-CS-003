@@ -407,3 +407,6 @@ timestamp,extension_id,field,old_value,new_value,confidence,method
 2026-08-29T10:32:38,ojnagfkemdilpdkjehfajjmcnaefhjhn,sha256,Not Found,a90b3702f7998e7243a0dadff183dc646a28cc3ab97c8950fdb30e57cda47c2d,Low,XGBoost + Isolation Forest (sandbox unavailable)
 2026-08-29T10:32:38,ojnagfkemdilpdkjehfajjmcnaefhjhn,date,N/A,8/29/2026,Low,XGBoost + Isolation Forest (sandbox unavailable)
 2026-08-29T10:32:38,ojnagfkemdilpdkjehfajjmcnaefhjhn,reason,Not yet confirmed,In store but Suspicious,Low,XGBoost + Isolation Forest (sandbox unavailable)
+2026-10-13T05:22:45,ifdepgnnjpnbkcgempionjablajancjc,sha256,Not Found,c3144f925b519eff3e7e6521a07877c4a33e64bc3b7e57ff3f8e53f8b5d950a1,Medium,XGBoost + Isolation Forest + dynamic sandbox
+2026-10-13T05:22:45,ifdepgnnjpnbkcgempionjablajancjc,date,N/A,10/13/2026,Medium,XGBoost + Isolation Forest + dynamic sandbox
+2026-10-13T05:22:45,ifdepgnnjpnbkcgempionjablajancjc,reason,Not yet confirmed,Spyware / Data Exfiltration,Medium,XGBoost + Isolation Forest + dynamic sandbox
