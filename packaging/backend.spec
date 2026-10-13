@@ -4,7 +4,7 @@
 # Data files keep the same relative layout as the repo so the backend's
 # `dirname(__file__)/../..` lookups keep working inside the frozen app.
 import os
-from PyInstaller.utils.hooks import collect_all, collect_data_files
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, '..'))
 
@@ -26,6 +26,10 @@ for rel in [
 for pkg in ['sklearn', 'xgboost', 'tldextract', 'imagehash', 'playwright', 'uvicorn', 'pandas']:
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
+
+# anyio picks its backend with importlib.import_module('anyio._backends._asyncio'), which PyInstaller
+# cannot see. Without it every StreamingResponse (the Live Test Runner stream) fails with HTTP 500.
+hiddenimports += collect_submodules('anyio') + ['anyio._backends._asyncio']
 
 hiddenimports += [
     'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.auto',
