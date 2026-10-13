@@ -297,10 +297,26 @@ _SETTINGS_DEFAULTS: dict = {
     "live_preview": True,            # C2 Live Analysis: send a small page thumbnail with each result
 }
 
+# Installed builds ship the C2 fusion tuning from the developer's settings.json
+# (packaging/backend.spec writes it; tuning keys only, never API keys).
+_TUNED_DEFAULTS_FILE = os.path.join(os.path.dirname(__file__), "c2_tuned_defaults.json")
+try:
+    with open(_TUNED_DEFAULTS_FILE, "r", encoding="utf-8") as _tf:
+        _SETTINGS_DEFAULTS.update({k: v for k, v in json.load(_tf).items()
+                                   if k in ("weights", "verdict_suspicious", "verdict_phishing",
+                                            "warn_threshold", "block_threshold")})
+    print(f"[C2-fusion] Using shipped tuned weights: {_SETTINGS_DEFAULTS['weights']}")
+except (FileNotFoundError, json.JSONDecodeError, AttributeError):
+    pass
+
 def _load_settings() -> dict:
     try:
         with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+        # Saved weights identical to the built-in defaults were never tuned (any
+        # save writes the whole settings dict), so the shipped tuning wins there.
+        if data.get("weights") == _DEFAULT_WEIGHTS:
+            data.pop("weights")
         merged = dict(_SETTINGS_DEFAULTS)
         merged.update(data)
         return merged
