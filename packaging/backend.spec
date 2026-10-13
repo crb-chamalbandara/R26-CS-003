@@ -30,6 +30,7 @@ for pkg in ['sklearn', 'xgboost', 'tldextract', 'imagehash', 'playwright', 'uvic
 hiddenimports += [
     'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.auto',
     'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on',
+    'unittest', 'argparse', 'http.server', 'runpy',
     'multipart', 'sklearn.utils._typedefs', 'sklearn.neighbors._partition_nodes',
 ]
 

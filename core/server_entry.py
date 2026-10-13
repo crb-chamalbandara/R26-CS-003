@@ -18,6 +18,17 @@ if __name__ == "__main__":
         if os.path.isdir(browsers):
             os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", browsers)
 
+    # `websentinel-backend.exe --run-script <file> [args]` runs a bundled helper script (the C3 mimicry
+    # server, the component unit tests) the way `python <file> [args]` would. In the frozen app
+    # sys.executable is this exe, so launching it with a script path must not start a second backend.
+    if len(sys.argv) > 2 and sys.argv[1] == "--run-script":
+        import runpy
+        script = sys.argv[2]
+        sys.argv = sys.argv[2:]
+        sys.path.insert(0, os.path.dirname(script))
+        runpy.run_path(script, run_name="__main__")
+        sys.exit(0)
+
     import uvicorn
     from core.main import app
 

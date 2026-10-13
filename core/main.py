@@ -1328,12 +1328,20 @@ async def block_install(req: ApproveInstallReq):
     return {"status": "blocked", "ext_id": req.ext_id}
 
 
+def _script_cmd(script: str, *args: str) -> list:
+    """Command line that runs a Python helper script. When frozen, sys.executable is the backend exe,
+    which would start another backend, so route through server_entry's --run-script mode."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--run-script", script, *args]
+    return [sys.executable, script, *args]
+
+
 def _run_test_component(label: str, script: str) -> dict:
     """Run a test script as a subprocess and parse unittest -v output."""
     start = _time.time()
     try:
         proc = subprocess.run(
-            [sys.executable, script, "-v"],
+            _script_cmd(script, "-v"),
             capture_output=True, text=True, timeout=120,
             cwd=_REPO_ROOT, encoding="utf-8", errors="replace"
         )
@@ -2239,9 +2247,9 @@ async def _tc_c3_ngrok_beacon():
         await _step(f"Starting the inert C2 mimicry server on port {_C3_NGROK_PORT}. It answers every "
                     f"check-in with the same fixed reply and never contacts anyone itself")
         server_proc = subprocess.Popen(
-            [sys.executable, os.path.join(_REPO_ROOT, "test", "C3", "tc03_mimicry_server.py"),
-             "--port", str(_C3_NGROK_PORT), "--interval-ms", str(_C3_NGROK_INTERVAL_MS),
-             "--jitter-pct", str(_C3_NGROK_JITTER_PCT)],
+            _script_cmd(os.path.join(_REPO_ROOT, "test", "C3", "tc03_mimicry_server.py"),
+                        "--port", str(_C3_NGROK_PORT), "--interval-ms", str(_C3_NGROK_INTERVAL_MS),
+                        "--jitter-pct", str(_C3_NGROK_JITTER_PCT)),
             cwd=_REPO_ROOT, **quiet)
         import socket
         for _ in range(40):
