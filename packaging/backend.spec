@@ -23,7 +23,8 @@ for rel in [
         datas.append((src, rel))
 
 # Packages that ship data files / native libs PyInstaller can't discover itself.
-for pkg in ['sklearn', 'xgboost', 'tldextract', 'imagehash', 'playwright', 'uvicorn', 'pandas']:
+for pkg in ['sklearn', 'xgboost', 'tldextract', 'imagehash', 'playwright', 'uvicorn', 'pandas',
+            'bs4', 'lxml']:   # C2 L1 asks bs4 for the "lxml" parser by name; PyInstaller can't see that
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
 
@@ -34,7 +35,7 @@ hiddenimports += collect_submodules('anyio') + ['anyio._backends._asyncio']
 hiddenimports += [
     'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.auto',
     'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on',
-    'unittest', 'argparse', 'http.server', 'runpy',
+    'unittest', 'unittest.mock', 'argparse', 'http.server', 'runpy',
     'multipart', 'sklearn.utils._typedefs', 'sklearn.neighbors._partition_nodes',
 ]
 

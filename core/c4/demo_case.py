@@ -40,6 +40,7 @@ import os
 import random
 import shutil
 import sqlite3
+import sys
 from datetime import datetime, timedelta
 
 from .crypto import _DATA_BLOB
@@ -51,7 +52,11 @@ except Exception:                                        # pragma: no cover
     _HAS_AESGCM = False
 
 CHROME_EPOCH = datetime(1601, 1, 1)
-CASE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "output", "case_profile"))
+if getattr(sys, "frozen", False):
+    # Packaged build: install dir is read-only, plant the case per-user.
+    CASE_ROOT = os.path.join(os.path.expanduser("~"), ".websentinel", "c4_case_profile")
+else:
+    CASE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "output", "case_profile"))
 
 # The breach domains. Deliberately not registrable look-alikes of real brands —
 # they exist only inside this evidence set.

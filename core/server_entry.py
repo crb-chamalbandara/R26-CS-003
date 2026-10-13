@@ -56,6 +56,18 @@ if __name__ == "__main__":
         except OSError:
             pass
 
+        # The .pkl models are version-sensitive; log what this build bundled so a mismatch with the
+        # dev venv is visible next to the "[C3] ML classifier loaded" / "[L1]" lines that follow.
+        import importlib
+        _vers = []
+        for _mod in ("xgboost", "sklearn", "numpy", "pandas", "lxml.etree"):
+            try:
+                _m = importlib.import_module(_mod)
+                _vers.append(f"{_mod}={getattr(_m, '__version__', None) or getattr(_m, 'LXML_VERSION', '?')}")
+            except Exception as _exc:
+                _vers.append(f"{_mod}=MISSING({_exc.__class__.__name__})")
+        print("[build] " + " ".join(_vers))
+
     import uvicorn
     from core.main import app
 

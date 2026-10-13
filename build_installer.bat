@@ -9,7 +9,18 @@ echo [1/6] Python build environment...
 if not exist .buildvenv ( python -m venv .buildvenv || goto :fail )
 call .buildvenv\Scripts\activate.bat
 python -m pip install --upgrade pip || goto :fail
-pip install -r requirements.txt pyinstaller || goto :fail
+REM requirements.txt is unpinned, so a fresh install can pull newer xgboost/numpy/sklearn than the
+REM .venv the models were trained and tested with (run.bat). The .pkl models then load differently or
+REM not at all, and ML test cases that pass from source fail in the installed app. When .venv exists,
+REM freeze exactly the versions it has.
+set REQ=requirements.txt
+if exist .venv\Scripts\python.exe (
+  if not exist build mkdir build
+  .venv\Scripts\python.exe -m pip list --format=freeze --exclude-editable | findstr /v /i /b "pip= setuptools= wheel=" > build\requirements.lock || goto :fail
+  set REQ=build\requirements.lock
+)
+echo Installing Python packages from %REQ%
+pip install -r %REQ% pyinstaller || goto :fail
 
 echo [2/6] Playwright Chromium (bundled into the installer)...
 REM Downloaded once and kept in dist\ms-playwright. Pass --refresh-browser to
