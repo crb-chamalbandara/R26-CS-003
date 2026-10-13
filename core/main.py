@@ -3230,6 +3230,14 @@ async def run_tests_stream_endpoint(component: str = "all", step: bool = False, 
              and (not case or tc["id"] == case)]
 
     async def generate():
+        try:
+            async for chunk in generate_inner():
+                yield chunk
+        except Exception as e:   # never drop the connection: report why the run stopped
+            import traceback; traceback.print_exc()
+            yield f"data: {json.dumps({'type':'done','passed':0,'failed':1,'total':1,'error':str(e)})}\n\n"
+
+    async def generate_inner():
         global _STEP_CTX
         total = len(cases)
         yield f"data: {json.dumps({'type':'init','total':total,'step':step})}\n\n"

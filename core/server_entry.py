@@ -29,6 +29,33 @@ if __name__ == "__main__":
         runpy.run_path(script, run_name="__main__")
         sys.exit(0)
 
+    # The packaged app has no console, so a crash would leave no trace. Keep a log file the user can send.
+    if getattr(sys, "frozen", False):
+        import logging.handlers
+        import traceback
+        log_dir = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "WebSentinel", "logs")
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+            _h = logging.handlers.RotatingFileHandler(
+                os.path.join(log_dir, "backend.log"), maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+            _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+            logging.getLogger().addHandler(_h)
+            logging.getLogger().setLevel(logging.INFO)
+
+            class _ToLog:
+                def __init__(self, level): self.level = level
+                def write(self, text):
+                    if text and text.strip():
+                        logging.getLogger("stdio").log(self.level, text.rstrip())
+                def flush(self): pass
+                encoding = "utf-8"
+                def isatty(self): return False
+
+            sys.stdout, sys.stderr = _ToLog(logging.INFO), _ToLog(logging.ERROR)
+            sys.excepthook = lambda *a: logging.getLogger("crash").error("".join(traceback.format_exception(*a)))
+        except OSError:
+            pass
+
     import uvicorn
     from core.main import app
 

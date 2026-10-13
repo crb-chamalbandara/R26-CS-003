@@ -15121,7 +15121,8 @@ function _testsStart(component, caseId) {
       const col = msg.failed > 0 ? 'var(--danger)' : 'var(--safe)';
       document.getElementById('tests-summary').innerHTML =
         `<span style="color:${col}">${msg.passed}/${msg.total} passed</span> · ` +
-        `<span style="color:var(--t3)">${((Date.now()-_testsStartTime)/1000).toFixed(1)}s total</span>`;
+        `<span style="color:var(--t3)">${((Date.now()-_testsStartTime)/1000).toFixed(1)}s total</span>` +
+        (msg.error ? ` · <span style="color:var(--danger)">${String(msg.error).replace(/</g,'&lt;')}</span>` : '');
       document.getElementById('tests-progress-bar').style.background =
         msg.failed > 0 ? 'var(--danger)' : 'var(--safe)';
     }
@@ -15133,7 +15134,19 @@ function _testsStart(component, caseId) {
     _testsShowNextBtn(false);
     document.getElementById('tests-stop-btn').style.display = 'none';
     document.getElementById('tests-run-all').disabled = false;
-    document.getElementById('tests-summary').textContent = 'Connection error';
+    const sumEl = document.getElementById('tests-summary');
+    sumEl.textContent = 'Connection error';
+    // EventSource hides why it failed; ask the same URL once to learn the HTTP status.
+    const ctl = new AbortController();
+    const tmo = setTimeout(() => ctl.abort(), 4000);
+    fetch(API + '/dev/run_tests_stream?component=none', {signal: ctl.signal})
+      .then(r => r.text().then(t => {
+        sumEl.textContent = r.ok
+          ? 'Connection error: the test stream dropped (HTTP ' + r.status + ')'
+          : 'Test stream failed: HTTP ' + r.status + ' ' + t.slice(0, 200);
+      }))
+      .catch(() => { sumEl.textContent = 'Connection error: the backend is not reachable'; })
+      .finally(() => clearTimeout(tmo));
   };
 }
 
