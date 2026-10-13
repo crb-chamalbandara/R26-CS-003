@@ -17,7 +17,10 @@ How a run works
       in\      the unpacked extension + the guest agent + the observation code
       out\     the only writable channel back to the host
 2.  Generate a .wsb configuration mapping in, read-only:
-      - a Python runtime            - the Playwright package tree
+      - a guest runtime: on a development checkout the host's own Python and
+        Playwright package tree, in an installed WebSentinel the shipped
+        c1_guest folder (c1-guest.exe: Python, Playwright and the observation
+        code, built by packaging/c1_guest.spec)
       - the Playwright Chromium build
       - the staged `in\` directory
     and mapping `out\` read-write.
@@ -34,6 +37,10 @@ Constraints worth knowing
   are serialised behind a lock.
 * Guest boot costs roughly 30-60 s, so a VM-isolated analysis takes far longer
   than the in-process one. That is the price of the isolation.
+* A VM can only start when the hypervisor is running. `is_available()` checks
+  that up front, so a PC with virtualization turned off in its BIOS, or one that
+  has not restarted since Windows Sandbox was enabled, is told so at once rather
+  than after a long wait.
 * Mapped folders are shared, not copied; the read-only ones cannot be modified
   by the guest, but they ARE visible to the extension under analysis. Only
   paths this module maps are exposed — never the repository or user profile.
@@ -81,6 +88,10 @@ _WSB_BROKER_IMAGE  = "WindowsSandboxServer.exe"
 _WSB_VM_IMAGE      = "vmmemWindowsSandbox"
 _WSB_ALL_IMAGES    = _WSB_UI_IMAGES + (_WSB_BROKER_IMAGE, _WSB_VM_IMAGE)
 
+# The installed backend has no console of its own, so every console tool it runs (tasklist,
+# taskkill, PowerShell) would otherwise open and close a window on the user's screen.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 # Only one sandbox instance can exist per machine — serialise analyses.
 _RUN_LOCK = asyncio.Lock()
 
@@ -88,6 +99,7 @@ _RUN_LOCK = asyncio.Lock()
 # user profile so nothing collides with the extension's own writes.
 _G_ROOT     = r"C:\c1"
 _G_PYTHON   = _G_ROOT + r"\py"
+_G_GUEST    = _G_ROOT + r"\guest"         # the shipped runtime (see _guest_bundle)
 _G_SITE     = _G_ROOT + r"\site"
 _G_BROWSERS = _G_ROOT + r"\browsers"
 _G_IN       = _G_ROOT + r"\in"
@@ -106,6 +118,26 @@ _BOOT_ALLOWANCE_SECONDS = 420
 # The result is ready the moment the guest drops its `done` marker; a coarse
 # poll just adds dead time to every analysis.
 _POLL_INTERVAL_SECONDS  = 0.5
+
+# The VM (or at least Windows Sandbox's broker process) appears within seconds of the launch, long
+# before the guest has booted. If neither has appeared after this long, the sandbox did not start
+# (a blocked policy, an error dialog waiting on the screen), and waiting out the full allowance above
+# would only hide that for several minutes. Either process counts, so a Windows build that names one
+# differently can never make a healthy run look dead. Probed every few seconds, and only until seen.
+_VM_START_ALLOWANCE_SECONDS = 150
+_VM_PROBE_INTERVAL_SECONDS  = 2
+# A VM that was running and is then gone for this long, with no result, was closed or died (an error
+# window, the user closing it). A guest that finishes writes its result before it goes, so a healthy
+# run never looks like this. It is the VM that is watched, not the broker: after a failed start the
+# broker stays alive behind the error window.
+_VM_GONE_ALLOWANCE_SECONDS  = 10
+# The guest's logon command creates agent.log in the shared output folder the moment it starts, so no
+# agent.log after this long means the analysis never began inside the VM, whatever processes exist.
+# Boot to that point measured 17 to 37 s, so this is several times the longest seen.
+_GUEST_START_ALLOWANCE_SECONDS = 240
+
+# How long to wait, before an analysis, for a sandbox that is already open to go away by itself.
+_FOREIGN_SANDBOX_WAIT_SECONDS = 15
 
 # How long to wait for the sandbox processes to actually exit after being
 # killed, before giving up on deleting the staging directory.
@@ -143,6 +175,94 @@ def _browsers_dir() -> str:
     if override and os.path.isdir(override):
         return override
     return os.path.join(os.environ.get("LOCALAPPDATA", ""), "ms-playwright")
+
+
+# ── The guest runtime ─────────────────────────────────────────────────────────
+# What the VM runs the analysis with. A development checkout lends the VM its own Python and
+# site-packages. An installed copy of WebSentinel has neither: its backend is a frozen program with no
+# python.exe to lend. So the installer ships a ready-made runtime, c1_guest\c1-guest.exe (Python,
+# Playwright and the observation code in one folder, built by packaging/c1_guest.spec), and the VM is
+# lent that instead.
+_GUEST_EXE_NAME = "c1-guest.exe"
+
+
+def _is_frozen() -> bool:
+    """True inside the installed (PyInstaller) backend."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def _guest_bundle_candidates() -> List[str]:
+    found: List[str] = []
+    override = os.environ.get("C1_GUEST_DIR", "").strip()
+    if override:
+        found.append(override)               # also how a developer tries the installed path from a checkout
+    if _is_frozen():
+        # <install>\resources\backend\websentinel-backend.exe  ->  <install>\resources\c1_guest
+        found.append(os.path.join(os.path.dirname(os.path.dirname(sys.executable)), "c1_guest"))
+    return found
+
+
+def _guest_bundle() -> str:
+    """The folder holding the shipped guest runtime, or "" when there is none to use."""
+    for folder in _guest_bundle_candidates():
+        if os.path.isfile(os.path.join(folder, _GUEST_EXE_NAME)):
+            return folder
+    return ""
+
+
+# ── Can a VM start on this PC at all? ────────────────────────────────────────
+# Windows Sandbox is a Hyper-V virtual machine, so it needs the hypervisor to be running. Two things
+# stop that and both look, from here, like a sandbox that "just never answers": virtualization turned
+# off in the BIOS, and a PC that has not restarted since the feature was enabled. Asking first turns
+# a multi-minute wait into a one-line reason. The answer is cached briefly: it is asked for on every
+# analysis and every time the dashboard shows the containment status.
+_PREFLIGHT_TTL_SECONDS = 30.0
+_preflight_cache: Dict[str, Any] = {"at": 0.0, "problem": ""}
+
+
+def _hypervisor_running() -> Optional[bool]:
+    """Whether Windows is running with its hypervisor. None when that could not be established."""
+    powershell = os.path.join(os.environ.get("WINDIR", r"C:\Windows"),
+                              "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    try:
+        out = subprocess.run(
+            [powershell, "-NoProfile", "-NonInteractive", "-Command",
+             "(Get-CimInstance Win32_ComputerSystem).HypervisorPresent"],
+            capture_output=True, text=True, timeout=30, check=False,
+            creationflags=_NO_WINDOW).stdout.strip().lower()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return {"true": True, "false": False}.get(out)
+
+
+def _firmware_virtualization_on() -> bool:
+    """Whether virtualization is enabled in the firmware (PF_VIRT_FIRMWARE_ENABLED)."""
+    try:
+        import ctypes
+        return bool(ctypes.windll.kernel32.IsProcessorFeaturePresent(21))
+    except Exception:
+        return True                      # cannot tell: do not blame the BIOS
+
+
+def _virtualization_problem() -> str:
+    """The empty string when a VM can start, otherwise a plain sentence saying what stops it.
+
+    Conservative on purpose: it only reports a problem it is sure of. If the hypervisor state cannot
+    be read it says nothing, and the run itself will find out.
+    """
+    now = time.monotonic()
+    if now - _preflight_cache["at"] < _PREFLIGHT_TTL_SECONDS and _preflight_cache["at"]:
+        return _preflight_cache["problem"]
+    problem = ""
+    if _hypervisor_running() is False:
+        if not _firmware_virtualization_on():
+            problem = ("virtualization is turned off in this PC's BIOS or UEFI settings (Intel VT-x or AMD-V). "
+                       "Turn it on, restart, and Windows Sandbox will be used")
+        else:
+            problem = ("Windows' hypervisor is not running. If Windows Sandbox was only just turned on, "
+                       "restart Windows and it will be used")
+    _preflight_cache.update(at=now, problem=problem)
+    return problem
 
 
 #: Windows Sandbox refuses to start below this, and Chromium needs headroom.
@@ -187,10 +307,16 @@ def _suggested_memory_mb() -> int:
 def _missing_dependencies() -> List[str]:
     """Everything the guest needs that we could not locate on the host."""
     missing: List[str] = []
-    if not os.path.isfile(os.path.join(_python_home(), "python.exe")):
-        missing.append(f"python.exe under {_python_home()}")
-    if not _site_packages():
-        missing.append("the playwright package")
+    if _guest_bundle():
+        pass                                  # the shipped runtime brings its own Python and Playwright
+    elif _is_frozen() or os.environ.get("C1_GUEST_DIR", "").strip():
+        missing.append(f"the guest runtime ({_GUEST_EXE_NAME} in a c1_guest folder). "
+                       "Reinstalling WebSentinel restores it")
+    else:
+        if not os.path.isfile(os.path.join(_python_home(), "python.exe")):
+            missing.append(f"python.exe under {_python_home()}")
+        if not _site_packages():
+            missing.append("the playwright package")
     browsers = _browsers_dir()
     if not os.path.isdir(browsers):
         missing.append(f"Playwright browsers directory ({browsers})")
@@ -199,22 +325,45 @@ def _missing_dependencies() -> List[str]:
     return missing
 
 
+def _new_staging_dir() -> str:
+    """A fresh folder under the temp directory for one run, which Windows Sandbox is able to open.
+
+    Not tempfile.mkdtemp(). Since Python 3.12 that gives the folder a permission list naming only the
+    creator, SYSTEM and Administrators. Normally the creator is the user and that is fine. When
+    WebSentinel runs as administrator the "creator" is the Administrators group, so the folder can
+    then only be opened by an elevated process, while Windows Sandbox runs with the user's normal
+    rights and fails with "Access is denied (0x80070005)". A plain mkdir inherits the temp folder's
+    permissions, which name the user explicitly, so it works whether or not the app is elevated.
+    """
+    base = tempfile.gettempdir()
+    for _ in range(20):
+        path = os.path.join(base, f"c1_wsb_{uuid.uuid4().hex[:8]}_{uuid.uuid4().hex[:8]}")
+        try:
+            os.mkdir(path)
+            return path
+        except FileExistsError:
+            continue
+    raise OSError(f"could not create a staging folder under {base}")
+
+
 # ── .wsb configuration ────────────────────────────────────────────────────────
 
 def build_wsb_config(
     *,
     staging_in: str,
     staging_out: str,
-    python_home: str,
-    site_packages: str,
+    python_home: str = "",
+    site_packages: str = "",
     browsers: str,
     networking: bool,
     memory_mb: int,
+    guest_bundle: str = "",
 ) -> str:
     """Render the Windows Sandbox configuration XML for one analysis.
 
-    Kept pure and side-effect free so it can be unit-tested without the
-    Windows Sandbox feature being installed.
+    The runtime is either the shipped guest bundle (`guest_bundle`) or, on a development checkout, the
+    host's Python and site-packages. Kept pure and side-effect free so it can be unit-tested without
+    the Windows Sandbox feature being installed.
     """
     def folder(host: str, guest: str, read_only: bool) -> str:
         return (
@@ -225,9 +374,9 @@ def build_wsb_config(
             "    </MappedFolder>"
         )
 
-    mapped = "\n".join([
-        folder(python_home,   _G_PYTHON,   True),
-        folder(site_packages, _G_SITE,     True),
+    runtime = ([folder(guest_bundle, _G_GUEST, True)] if guest_bundle else
+               [folder(python_home, _G_PYTHON, True), folder(site_packages, _G_SITE, True)])
+    mapped = "\n".join(runtime + [
         folder(browsers,      _G_BROWSERS, True),
         folder(staging_in,    _G_IN,       True),
         # The single writable channel back to the host.
@@ -256,7 +405,8 @@ def build_wsb_config(
     )
 
 
-def build_bootstrap_cmd(timeout_seconds: int, self_shutdown: bool = True) -> str:
+def build_bootstrap_cmd(timeout_seconds: int, self_shutdown: bool = True,
+                        bundled: bool = False) -> str:
     """The batch file Windows Sandbox runs on logon inside the guest.
 
     Writes result.json into the mapped output folder, then a `done` marker
@@ -271,13 +421,25 @@ def build_bootstrap_cmd(timeout_seconds: int, self_shutdown: bool = True) -> str
     inside ends the container the way Windows expects, needs no privileges on
     the host, and leaves nothing behind.
     """
+    if bundled:
+        # the shipped runtime carries its own Python and Playwright: only the browsers need pointing at
+        environment = [
+            f'set "PLAYWRIGHT_BROWSERS_PATH={_G_BROWSERS}"',
+            'set "PYTHONUNBUFFERED=1"',
+        ]
+        agent = f'"{_G_GUEST}\\{_GUEST_EXE_NAME}" '
+    else:
+        environment = [
+            f'set "PYTHONPATH={_G_SITE}"',
+            f'set "PLAYWRIGHT_BROWSERS_PATH={_G_BROWSERS}"',
+            'set "PYTHONDONTWRITEBYTECODE=1"',
+            'set "PYTHONUNBUFFERED=1"',
+        ]
+        agent = f'"{_G_PYTHON}\\python.exe" "{_G_IN}\\guest_agent.py" '
     lines = [
         "@echo off",
-        f'set "PYTHONPATH={_G_SITE}"',
-        f'set "PLAYWRIGHT_BROWSERS_PATH={_G_BROWSERS}"',
-        'set "PYTHONDONTWRITEBYTECODE=1"',
-        'set "PYTHONUNBUFFERED=1"',
-        f'"{_G_PYTHON}\\python.exe" "{_G_IN}\\guest_agent.py" '
+        *environment,
+        agent +
         f'--extension "{_G_IN}\\extension" --out "{_G_OUT}" '
         f'--timeout {int(timeout_seconds)} > "{_G_OUT}\\agent.log" 2>&1',
         f'echo %ERRORLEVEL% > "{_G_OUT}\\done"',
@@ -314,6 +476,12 @@ class WindowsSandboxBackend(IsolationBackend):
         if sys.platform != "win32":
             return False, "Windows Sandbox exists only on Windows"
         if not os.path.isfile(_WSB_EXE):
+            if _is_frozen():
+                return False, (
+                    "Windows Sandbox is not turned on. Turn it on in Windows Features "
+                    "(Turn Windows features on or off) or run the WebSentinel installer "
+                    "again and tick the Windows Sandbox option, then restart Windows"
+                )
             return False, (
                 "the Windows Sandbox feature is not enabled. Run as "
                 "Administrator: Enable-WindowsOptionalFeature -Online "
@@ -322,6 +490,9 @@ class WindowsSandboxBackend(IsolationBackend):
         missing = _missing_dependencies()
         if missing:
             return False, "cannot stage the guest runtime: missing " + "; ".join(missing)
+        problem = _virtualization_problem()
+        if problem:
+            return False, problem
         return True, "disposable Hyper-V VM, destroyed after every analysis"
 
     # ── description ───────────────────────────────────────────────
@@ -365,32 +536,38 @@ class WindowsSandboxBackend(IsolationBackend):
             return unavailable_result(
                 f"manifest.json not found in {ext_path}", self.describe())
 
-        # Only one Windows Sandbox may exist per machine, so a VM left over
-        # from an earlier run (or from the user's own sandbox) would make this
-        # analysis fail in a confusing way. Try to clear ours first, and say
-        # plainly what is wrong if it will not go.
-        if await asyncio.to_thread(self.vm_is_running):
-            if not await asyncio.to_thread(self._teardown):
-                return unavailable_result(
-                    "A Windows Sandbox VM is already running and could not be shut "
-                    "down. Only one sandbox may exist at a time. Close it, or clear "
-                    "an orphaned one with an elevated "
-                    "'Restart-Service vmcompute -Force'.",
-                    self.describe())
-
-        # Only one Windows Sandbox may exist per machine.
+        # Only one Windows Sandbox may exist per machine, so analyses take turns.
         async with _RUN_LOCK:
+            # With the lock held nothing of ours is running, so a sandbox that is open now is one
+            # WebSentinel did not start (very likely the user's own, with their work in it) or a
+            # leftover from a crash. It is checked here, inside the lock, because outside it a second
+            # analysis would see the first one's VM and mistake it for a stray. And it is never
+            # closed: a leftover finishes and shuts itself down within moments, so wait briefly for
+            # that, then say what is in the way.
+            if await asyncio.to_thread(self.vm_is_running):
+                if not await asyncio.to_thread(self._wait_until_gone, _FOREIGN_SANDBOX_WAIT_SECONDS):
+                    return unavailable_result(
+                        "Another Windows Sandbox is already open, so this analysis could not use "
+                        "one (only one can run at a time). WebSentinel does not close a sandbox it "
+                        "did not start, because it may be yours. Close it and analyse again. If none "
+                        "is open, a leftover one can be cleared with an elevated "
+                        "'Restart-Service vmcompute -Force'.",
+                        self.describe())
             return await asyncio.to_thread(
                 self._run_blocking, ext_path, timeout_seconds)
 
     # ── the blocking half, kept off the event loop ────────────────
     def _run_blocking(self, ext_path: str, timeout_seconds: int) -> Dict[str, Any]:
         report = self.describe()
-        staging = tempfile.mkdtemp(prefix=f"c1_wsb_{uuid.uuid4().hex[:8]}_")
+        staging = _new_staging_dir()
         stage_in = os.path.join(staging, "in")
         stage_out = os.path.join(staging, "out")
         started = time.time()
         launched_at = started
+        never_started = False
+        closed_early = False
+        guest_silent = False
+        launched = False
 
         try:
             os.makedirs(stage_in, exist_ok=True)
@@ -399,23 +576,28 @@ class WindowsSandboxBackend(IsolationBackend):
             # Stage the extension and the guest-side code. Only these reach
             # the VM — never the repository or the datasets.
             shutil.copytree(ext_path, os.path.join(stage_in, "extension"))
-            here = os.path.dirname(os.path.abspath(__file__))
-            shutil.copy2(os.path.join(here, "guest_agent.py"),
-                         os.path.join(stage_in, "guest_agent.py"))
-            shutil.copy2(os.path.join(os.path.dirname(here), "sandbox.py"),
-                         os.path.join(stage_in, "sandbox_observer.py"))
+            # With the shipped runtime the agent and the observation code are already inside
+            # c1-guest.exe. Without it (a checkout) they are staged as source for the host's Python.
+            bundle = _guest_bundle()
+            if not bundle:
+                here = os.path.dirname(os.path.abspath(__file__))
+                shutil.copy2(os.path.join(here, "guest_agent.py"),
+                             os.path.join(stage_in, "guest_agent.py"))
+                shutil.copy2(os.path.join(os.path.dirname(here), "sandbox.py"),
+                             os.path.join(stage_in, "sandbox_observer.py"))
 
             with open(os.path.join(stage_in, "bootstrap.cmd"), "w",
                       encoding="ascii", newline="") as handle:
-                handle.write(build_bootstrap_cmd(timeout_seconds))
+                handle.write(build_bootstrap_cmd(timeout_seconds, bundled=bool(bundle)))
 
             wsb_path = os.path.join(staging, "run.wsb")
             with open(wsb_path, "w", encoding="utf-8") as handle:
                 handle.write(build_wsb_config(
                     staging_in=stage_in,
                     staging_out=stage_out,
-                    python_home=_python_home(),
-                    site_packages=_site_packages(),
+                    python_home="" if bundle else _python_home(),
+                    site_packages="" if bundle else _site_packages(),
+                    guest_bundle=bundle,
                     browsers=_browsers_dir(),
                     networking=(self.network_policy != NET_DISABLED),
                     memory_mb=self.memory_mb,
@@ -425,22 +607,61 @@ class WindowsSandboxBackend(IsolationBackend):
             # host waits on the guest's own completion marker instead.
             launched_at = time.time()
             subprocess.Popen([_WSB_EXE, wsb_path], close_fds=True)
+            launched = True
 
             deadline = started + timeout_seconds + _BOOT_ALLOWANCE_SECONDS
             marker = os.path.join(stage_out, "done")
+            agent_log = os.path.join(stage_out, "agent.log")
+            vm_seen = anything_seen = False
+            gone_since = 0.0
+            next_probe = launched_at + _VM_PROBE_INTERVAL_SECONDS
             while time.time() < deadline and not os.path.exists(marker):
                 time.sleep(_POLL_INTERVAL_SECONDS)
+                if time.time() < next_probe:
+                    continue
+                next_probe = time.time() + _VM_PROBE_INTERVAL_SECONDS
+                waited = time.time() - launched_at
+                vm_now, any_now = self._sandbox_state()
+                anything_seen = anything_seen or any_now
+                if vm_now:
+                    vm_seen, gone_since = True, 0.0
+                elif vm_seen:
+                    gone_since = gone_since or time.time()
+                    if time.time() - gone_since >= _VM_GONE_ALLOWANCE_SECONDS:
+                        closed_early = True
+                        break
+                if not anything_seen and waited > _VM_START_ALLOWANCE_SECONDS:
+                    never_started = True
+                    break
+                if waited > _GUEST_START_ALLOWANCE_SECONDS and not os.path.exists(agent_log):
+                    guest_silent = True
+                    break
 
             timed_out = not os.path.exists(marker)
             result = self._read_result(stage_out)
 
             if result is None:
-                detail = ("Windows Sandbox timed out before the guest reported a "
-                          f"result (waited {int(time.time() - started)}s)"
-                          if timed_out else
-                          "Windows Sandbox finished but produced no readable result")
+                if never_started:
+                    detail = ("Windows Sandbox did not start: no virtual machine appeared within "
+                              f"{_VM_START_ALLOWANCE_SECONDS}s. Check that virtualization is turned "
+                              "on in the BIOS and that Windows has restarted since Windows Sandbox "
+                              "was turned on")
+                elif closed_early:
+                    detail = ("Windows Sandbox closed before the analysis finished. It was closed, or "
+                              "it stopped on its own; if an error window appeared, its text says why")
+                elif guest_silent:
+                    detail = ("Windows Sandbox started but the analysis never began inside it (no sign "
+                              f"of the guest after {_GUEST_START_ALLOWANCE_SECONDS}s). If an error window "
+                              "appeared, its text says why")
+                elif timed_out:
+                    detail = ("Windows Sandbox timed out before the guest reported a "
+                              f"result (waited {int(time.time() - started)}s)")
+                else:
+                    detail = "Windows Sandbox finished but produced no readable result"
                 result = unavailable_result(detail, report)
                 result["guest_log"] = self._read_log(stage_out)
+                if launched:
+                    self._close_windows()          # an error window must not be left on the user's screen
 
         except Exception as exc:
             result = unavailable_result(f"Windows Sandbox backend error: {exc}", report)
@@ -506,7 +727,8 @@ class WindowsSandboxBackend(IsolationBackend):
         try:
             out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"],
                                  capture_output=True, timeout=20, check=False,
-                                 text=True, errors="replace").stdout.lower()
+                                 text=True, errors="replace",
+                                 creationflags=_NO_WINDOW).stdout.lower()
         except (OSError, subprocess.SubprocessError):
             return set()
         return {img for img in _WSB_ALL_IMAGES if img.lower() in out}
@@ -515,6 +737,38 @@ class WindowsSandboxBackend(IsolationBackend):
     def vm_is_running(cls) -> bool:
         """True while the sandbox VM itself is still resident."""
         return _WSB_VM_IMAGE in cls._running_images()
+
+    @classmethod
+    def _wait_until_gone(cls, seconds: float) -> bool:
+        """Wait for the sandbox VM to go away on its own. Closes nothing."""
+        deadline = time.time() + seconds
+        while cls.vm_is_running():
+            if time.time() >= deadline:
+                return False
+            time.sleep(1.0)
+        return True
+
+    @classmethod
+    def _sandbox_state(cls) -> Tuple[bool, bool]:
+        """From one look at the process list: (the VM is running, the VM or at least its broker is)."""
+        images = cls._running_images()
+        vm = _WSB_VM_IMAGE in images
+        return vm, vm or _WSB_BROKER_IMAGE in images
+
+    @staticmethod
+    def _close_windows() -> None:
+        """Close the sandbox's own windows, such as an error window left on screen after a failed start.
+
+        Only used after a run that produced no result, and only on a sandbox this analysis launched (the
+        run lock is held and a sandbox that was already open is never touched). The VM and its broker
+        are left to Windows."""
+        for image in _WSB_UI_IMAGES:
+            try:
+                subprocess.run(["taskkill", "/IM", image, "/F", "/T"],
+                               capture_output=True, timeout=30, check=False,
+                               creationflags=_NO_WINDOW)
+            except (OSError, subprocess.SubprocessError):
+                pass
 
     @classmethod
     def _teardown(cls, expect_self_shutdown: bool = True) -> bool:
@@ -545,7 +799,8 @@ class WindowsSandboxBackend(IsolationBackend):
         for image in _WSB_UI_IMAGES:
             try:
                 subprocess.run(["taskkill", "/IM", image, "/F", "/T"],
-                               capture_output=True, timeout=30, check=False)
+                               capture_output=True, timeout=30, check=False,
+                               creationflags=_NO_WINDOW)
             except (OSError, subprocess.SubprocessError):
                 pass
 

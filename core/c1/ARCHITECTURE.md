@@ -487,6 +487,56 @@ Adding a container backend (Docker + Xvfb, reporting `LEVEL_CONTAINER` and
 enforcing network policy via `--network`) is a matter of implementing
 `IsolationBackend` and registering it in `isolation/__init__.py`.
 
+### The disposable VM in an installed build (2026-10-13)
+
+**What went wrong.** An installed WebSentinel said "Disposable VM unavailable" and ran every analysis on the host, even on a PC where Windows Sandbox was already on. The backend's own reason, read from the packaged build, was `cannot stage the guest runtime: missing python.exe under ...\resources\backend\_internal`. In a checkout the VM is lent the host's Python and its `site-packages`, and the guest agent and observer are staged as `.py` source. The installed backend is a frozen (PyInstaller) program with none of those: no `python.exe`, no `site-packages` folder, no source files.
+
+**The fix: ship the VM's runtime.** The installer now carries a ready-made guest runtime and the backend lends the VM that instead.
+
+| Piece | Where | What it does |
+|-------|-------|--------------|
+| Guest runtime | `packaging/c1_guest.spec` builds `dist/c1_guest/c1-guest.exe` (about 123 MB), installed at `resources\c1_guest` | Python, Playwright with its driver, `guest_agent.py` and the observation code (`core/c1/sandbox.py`) in one folder. The two source files are copied at build time, not kept as second copies, so the code that observes inside the VM is the code that observes on the host and the results stay comparable. |
+| Discovery | `windows_sandbox.py` `_guest_bundle()` | Looks next to the installed backend (`resources\c1_guest`). `C1_GUEST_DIR` names one explicitly, which is also how a developer exercises the installed path from a checkout. |
+| The VM | `build_wsb_config(guest_bundle=...)`, `build_bootstrap_cmd(bundled=True)` | Maps the folder read-only at `C:\c1\guest` (in place of the host's Python and site-packages) and the logon command runs `c1-guest.exe`. Only the output folder is writable, as before. A checkout without a bundle behaves exactly as it did. |
+| Build | `build_installer.bat` step 4 of 6, and an `extraResources` entry in `electron/package.json` | The build stops if `dist\c1_guest\c1-guest.exe` is missing, so an installer can never ship without it. |
+
+An installed build that lacks the runtime (a damaged install) now says `the guest runtime (c1-guest.exe in a c1_guest folder). Reinstalling WebSentinel restores it`, and never asks for a `python.exe`.
+
+**Knowing early when a VM cannot start.** Two things make Windows Sandbox "never answer", and without a check the analysis would wait out the full several-minute allowance and then report a timeout:
+
+- *Preflight* (`_virtualization_problem()`, cached for 30 s): Windows Sandbox needs the hypervisor. If it is not running, the reason is either "virtualization is turned off in this PC's BIOS or UEFI settings (Intel VT-x or AMD-V)" or "restart Windows if Windows Sandbox was only just turned on", and the dashboard's "why?" shows it. It is deliberately conservative: it says nothing when the state cannot be read, and the firmware flag is consulted only when the hypervisor is *not* running, because on a PC where it is running (the normal working case) that flag reads False.
+- *Fail fast*, from three signals probed every 2 s (`_running_images()` is one look at the process list): (1) neither the VM (`vmmemWindowsSandbox`) nor Windows Sandbox's broker (`WindowsSandboxServer.exe`) has appeared 150 s after the launch, so "Windows Sandbox did not start..."; (2) the VM was running and has been gone for 10 s with no result (an error window, someone closing it), so "closed before the analysis finished"; (3) no `agent.log` in the shared output folder 240 s after the launch. The guest's logon command creates that file the moment it starts and boot to that point measured 17 to 37 s, so this is several times the longest seen, and it does not depend on any process name. Process names alone are not trusted: after a failed start the broker stays alive behind the error window. A run that ends without a result has the sandbox's own windows closed (the VM and broker are left to Windows), so no error window stays on the user's screen.
+
+Console tools run from the windowless installed backend (`tasklist`, `taskkill`, PowerShell) now use `CREATE_NO_WINDOW`, so they no longer flash a window on the user's screen.
+
+**Never closing a sandbox WebSentinel did not start.** Only one Windows Sandbox can exist per machine. The old pre-run check closed whatever was open, and it ran *before* the lock that makes analyses take turns, so two overlapping analyses could close each other's VM, and a sandbox the user had opened for their own work could be closed too. The check now runs inside the lock (when nothing of ours can be running), waits up to 15 s for a leftover to finish by itself, and otherwise returns "Another Windows Sandbox is already open ... WebSentinel does not close a sandbox it did not start, because it may be yours". Only the VM an analysis itself launched is ever force-closed, at the end of that analysis. Whether the sandbox has started is judged by its VM *or* its broker process, so a Windows build that names one differently cannot make a healthy run look dead.
+
+**Running as administrator (found 2026-10-13).** With the installer's "Always run as administrator" option ticked, Windows Sandbox failed to start with `Access is denied (0x80070005)` and the analysis sat on "Running sandbox analysis...". The per-run staging folder was made by `tempfile.mkdtemp()`, which since Python 3.12 gives a folder a permission list naming only the creator, SYSTEM and Administrators. When the app is elevated the "creator" is the Administrators group, so the folder could only be opened by an elevated process, and Windows Sandbox, which runs with the user's normal rights, was refused (even the user's own non-elevated session could not read it). The error was reproduced on purpose from a normal session by sharing a folder with that permission list. `_new_staging_dir()` now makes the folder with a plain `mkdir`, which inherits the temp folder's permissions (they name the user), so it works whether or not the app is elevated. Admin rights are not needed for the sandbox, and the installer's wording no longer suggests they are. With the failure re-created through the real code path (a staging folder only elevated processes can open), the analysis used to wait 7.6 minutes and leave the error window open; with the fix the folder is accessible and the analysis runs, and if some other fault keeps the guest from starting it gives up after 4.4 minutes, says why, and closes the window.
+
+**Verified.** The installer was built with `build_installer.bat` (all six steps) and its installed layout (`electron\dist\win-unpacked`) run the way Electron runs it, with its own backend and browsers: the backend answered in 7 s and selected Windows Sandbox; with `c1_guest` hidden it reported the incomplete-installation reason and fell back to the host; a real analysis of Browsec VPN from the Web Store ran inside Windows Sandbox using only the shipped runtime (`isolation.level = ephemeral_vm`, `discarded_after = true`, guest boot 18 s, about 103 s in all) and came out MALICIOUS 69.8, the same as the host path. A separate run with a stand-in "user" sandbox open confirmed the analysis was refused without touching it. Tests: `test/C1/test_guest_runtime.py` (42 checks, no VM needed).
+
+### Turning on Windows Sandbox at install time (2026-10-12)
+
+Windows Sandbox is an optional Windows feature (`Containers-DisposableClientVM`), off by default, and turning it on needs administrator approval and a restart. Without it the analyzer falls back to the host-process backend and says so. The installer therefore offers to turn it on.
+
+| Piece | Where | What it does |
+|-------|-------|--------------|
+| Page | `electron/installer/c1_sandbox.nsh` | One page after "Setup options", with a single checkbox, **unticked by default**. Skipped entirely when Windows Sandbox is already on. Disabled, with a one-line reason, on Windows Home or Windows 10 before 1903. |
+| Script | `electron/installer/enable-windows-sandbox.ps1` | Shipped to `resources\c1\` (an `extraResources` entry in `electron/package.json`). Run at the end of the install only when the box was ticked. |
+| Hooks | `electron/installer/installer.nsh` | Three additive lines: the include, the page, and the call after the shortcut step. |
+
+**It never turns the feature on twice.** Three independent checks, in order:
+
+1. *The page* is skipped when `System32\WindowsSandbox.exe` exists, which is the test the app itself uses to decide the VM backend is available (`WindowsSandboxBackend.is_available`). Nothing is asked and nothing is run.
+2. *The installer* tests again just before it runs the script, in case the state changed while the page was open.
+3. *The script* tests the launcher first, and otherwise asks Windows for the feature's state and changes it only when the state is `Disabled`. `EnablePending` (switched on, waiting for a restart) and `DisablePending` are reported and left alone, which is the case a second run would otherwise hit.
+
+When Windows Sandbox was turned on (or was already waiting for a restart) the installer sets the NSIS reboot flag, so the Finish page offers the standard "restart now or later" choice and the analyzer uses the VM from the next start of Windows.
+
+Administrator approval is requested by the script itself (it re-runs itself elevated, one UAC prompt, nothing if the installer is already elevated), and a 32-bit installer hands over to the 64-bit PowerShell through `Sysnative`, because the Windows feature commands do not work from a 32-bit one. The script reports through its exit code (0 already on, 10 pending restart, 11 and 12 turned on, 20 not available, 30 failed, 31 other change pending, 40 approval declined) and writes `%TEMP%\WebSentinel-sandbox-setup.log`. A failed or declined step never fails the install: the user gets one message and WebSentinel runs in its less isolated mode. Silent installs (`/S`) and an unticked box change nothing about Windows, and uninstalling does not turn the feature off, because other programs may use it.
+
+Tests: `test/C1/test_enable_sandbox.py` loads the script with the two Windows cmdlets replaced by fakes and checks every state (already on, enabled, pending, unsupported, refused, not administrator), that a second run does not enable again, and runs the real script here without elevation.
+
 ### Extension load verification (added 2026-08-29)
 
 Chromium refuses unpacked extensions for ordinary reasons, and when it does the
@@ -755,6 +805,8 @@ to commas on the way out and strips lab jargon ("Sandbox detected" →
 
 ### Engine signatures and the level-panels problem (2026-08-30)
 
+> **Superseded 2026-10-12.** The engine plates described below were removed from the popup: their sentences repeated the meters, the containment card and the notes beside them, and the case where a plate carried news (models not run, sandbox not run) is already said by the panel's own note. `c1EngineHtml`, the two marks and the slot divs are gone, and the two analysis panels again keep their own height (`align-items:start`). The rest of this section (containment moved out, meters, the time-spent bar, saying it once) still holds.
+
 The Static and Dynamic panels sit side by side and hold unrelated amounts of
 content, so one was always visibly shorter than the other. This has now been
 solved twice, and the second answer supersedes the first:
@@ -998,21 +1050,41 @@ The popup that opens when a case in the ledger is clicked (`#c1r-modal`). Its Ad
 
 #### Popup type scale and layout (2026-10-10)
 
-The popup's text used to run at 8 to 11 px (314 of 339 text elements were under 12.5 px), which is too small to read for the length of a report. A first fix (13.5 px body text, a 1200 px popup) overshot and looked oversized on a scaled 1080p display, so the scale was stepped back to a balanced middle. One scale governs it, defined as variables on `#c1r-modal` and applied by scoped overrides:
+The popup's text used to run at 8 to 11 px (314 of 339 text elements were under 12.5 px), which is too small to read for the length of a report. Two earlier passes (13.5 px, then 12.5 px body text) were still a little large at real desktop size, so the scale was stepped down to the settled middle below. One scale governs it, defined as variables on `#c1r-modal` and applied by scoped overrides:
 
 | Step | Size | Used for |
 |------|------|----------|
-| micro | 10.5 px | table column heads, badges, small uppercase labels |
-| small | 11.5 px | secondary text, descriptions, notes, chips |
-| body | 12.5 px | table cells, list items, key and value rows, permission text |
-| lead | 14 to 14.5 px | the summary and the recommendation |
-| h3 | 15.5 px | panel titles (the header title is 17.5 px) |
+| micro | 10 px | table column heads, badges, small uppercase labels |
+| small | 11 px | secondary text, descriptions, notes, chips |
+| body | 12 px | table cells, list items, key and value rows, permission text |
+| lead | 13 to 13.5 px | the summary and the recommendation |
+| h3 | 14.5 px | panel titles (the header title is 16 px) |
 
-- **Layout:** the popup is 1120 px wide (was 1060), panels have 20 x 24 px padding and 14 px between them, the score badge is 44 px, the key-fact numbers 28 px and the verdict score 56 px, and the scrollbar is thin and themed.
+- **Layout:** the popup is 1040 px wide, panels have 17 x 20 px padding and 12 px between them, the score badge is 40 px, the key-fact numbers 24 px and the verdict score 48 px, and the scrollbar is thin and themed.
 - **Richer text:** every section heading has an icon tile (`c1AddHeadIcons`, chosen from the heading's own title); the Simple view has a **What to do** callout in the verdict's colour; the Advanced view opens with the same four key-fact cards as the Simple view; the verdict report's flags are class-based rows with a coloured edge, and its recommendation is a callout. None of these used inline font sizes any more.
 - **Edit rule:** change a size by editing the variables or the scoped rule in the "Report popup: type scale and layout" block, not by adding an inline `font-size`. The survey that found the problem (every text element with its computed size) is easy to rerun in a browser console.
-- **Graph:** labels are 15 px (12.5 px when the extension has more than 26 servers), and the label spacing estimate follows the font size.
+- **Graph:** labels are 13.5 px (11.5 px when the extension has more than 26 servers), and the label spacing estimate follows the font size.
 - **Phones:** below 760 px the padding, hero text, gauge and heading sizes step down.
+
+#### Popup reading aids (2026-10-12)
+
+The Advanced view held a lot of correct information in a flat layout: sentences with the key value buried in them, the same fact stated in a note, a table row and a second table, and lists of 60 near-identical rows. These changes are presentation only; no data, score or backend field changed. All of it is `#c1r-modal` scoped, in the "Report popup: reading aids" CSS block.
+
+- **Values are picked out.** A name is a violet mono chip, a time or count is an amber chip, an address is a blue mono chip, and a zero is quiet grey (a count of 0 is not an alert). `_c1Hl()` does this for prose (the Simple view's notes, which also show `"(variable O)"` as `O`); the Advanced panels build the chips directly from the profile's structured data (`_c1HlTag`).
+- **How it is set up** has three parts instead of sentences, a table and a second table: *Worth a look* (flag cards built from the profile: schedule, uninstall page, runtime code, remote scripts, plain http, rewritten traffic, executables, files visible to websites, each with a one line reason where one is useful), *At a glance* (neutral fact tiles; anything already flagged is not repeated), and the browser and data API chips (a name and a count, the few that touch private data tinted). The schedule card lists each alarm as `name` then `every 1 min`; a name set in code shows its own name with a "name set in code" tag. The "Servers named in its code" table is gone from this panel because the Servers panel already lists those hosts.
+- **What it did when run.** Only what was seen is lit (amber chips); what was not seen is one line ("None seen: ..."). Requests show a summary line (how many, to how many hosts, how many sent data, how many over plain http, and who made them), then the first 8 rows with the one that sent data first; the "Made by" column is dropped when every request has the same source. The standard test pages are one tag under the heading (the list is its tooltip); the page-owned counts and "busiest servers" sentence were removed because they describe those sites, not the extension.
+- **Servers and indicators.** Role (Contacted, Opened by it, Named in its code) and type (Its own server, Shared service, Unexplained, Raw IP address) are colour coded badges, with a legend that counts each in the same colours. The first 10 rows show, then "Show all N servers". Hosts that use plain http carry a tag (from the profile). The Domains, IP addresses and URLs lists start folded with a count each; *Copy indicators* copies all of them.
+- **Folding** is one function, `c1Fold(btn)`: it toggles `.open` on the nearest `.c1r-fold`, and CSS hides `.more` rows or lists until then. Print shows everything and hides the buttons. A folded panel (the heading chevron) keeps only its heading, with a rule strong enough to beat the display values the new classes set.
+- **Removed as filler:** the two engine plates, the "Scored against extensions already known..." line, the setup and servers subtitles that restated their titles, and the permissions subtitle was shortened.
+- **Palette.** One small set (`--tn-pu/bl/gr/am/rd`) with a light variant, tints made with `color-mix`. In light theme every lit label is at least 4.5:1 against its tint (checked in the popup test).
+- **HTML report.** Only the real-page block changed (one line instead of a section); the report's other sections are as before.
+
+#### Popup scores, logos and the gate (2026-10-12)
+
+- **Anomaly score from history.** It was never lost: it is saved inside the stored report (`score_breakdown.anomaly_score`) but `db._to_dict` did not read it back, so only an analysis still in memory showed it and every reopened one read 0.0. It is now restored into `static.anomaly_score`. An analysis saved without it shows "Not recorded", never a 0.
+- **Score displays.** The header badge and the Advanced card's big score are rings (a CSS conic gradient filled to the score, in the verdict colour, drawn once). The number driving the arc is a plain custom property, `--c1p`, moved by a short `requestAnimationFrame` ease (`_c1RingIn`); it is deliberately not registered with `@property`, which would apply page-wide and C2 uses its own `--p`. The Simple summary's verdict is a pill with a round icon, and its gauge draws three zones (green, amber, red), a tick at 40 and 70, a gradient arc and an end marker.
+- **Logos.** Each model has a small mark beside its own score (XGBoost: three boosting rounds, each taller than the last; Isolation Forest: a tree with the isolated point in amber), and the Dynamic panel opens with a mark and two short lines for what the sandbox ran in: Windows Sandbox (a closed ring, a shield and a tick), Host process (an open amber ring, partial isolation), Container (dashed blue) and No containment (slashed red), chosen from `isolation.level`, so a history row shows the same mark it had live. They draw in once and never loop; under reduced motion they appear finished. The engine plates removed earlier are not back: these carry no sentences.
+- **Install gate.** A card shows Block while it analyses, and Approve Install only when the verdict is Safe. The greyed out button that used to carry the verdict word is gone (it could not be clicked); a later, worse result removes Approve again.
 
 ### Writing for this panel
 
@@ -1059,7 +1131,7 @@ analysis still has it.
 | Static profile | `profile.py` `build_profile()` | Background process, content scripts declared **and registered from code** (with JS world and sites), alarms with their schedule (names resolved through constants and `importScripts`), domains named in the code, uninstall page, sensitive API use, eval and remote-script counts, declarativeNetRequest rule counts by action, package inventory. Reads the unpacked folder when there is one, because the classifier input is capped at 300 KB. Offline, never raises. |
 | Request attribution | `sandbox.py` `_request_source()` | Each request is tagged `background`, `bait_page`, `browse_page`, `other_page` or `page`. A real site's own traffic (`browse_page`, `other_page`) is **listed but never scored**. |
 | Request detail | `sandbox.py` `summarise_observations()` | One row per distinct call: method, address, who made it, size and **field names** of any body (never values). Plus behaviour counts, pages the extension opened by itself, and the traffic of the visited sites kept apart. |
-| Real-page visit | `sandbox.py` `_browse_real_pages()` | After the bait page, visits `example.com`, a Wikipedia page and a news page so a content blocker or content script has something real to act on. Reported only. Skipped when the extension did not load; failures (no network) are recorded, not fatal. |
+| Real-page visit | `sandbox.py` `_browse_real_pages()` | After the bait page, visits `example.com`, a Wikipedia page and a news page so a content blocker or content script has something real to act on. Reported only, and shown in the popup as one small tag ("Also run on 3 standard test pages"), because it is the same for every extension. Skipped when the extension did not load; failures (no network) are recorded, not fatal. |
 | Content-script world | `sandbox.py` `_track_isolated_world()`, `_display_name()` | Resolves `__MSG_x__` display names from `_locales`, so the content-script world of a translated extension is matched and read (the old "known gap"). Read only: see the limit below about hooking. |
 | Time limits | `sandbox.py` `_bounded()`, `_step()` | Every read-back from the browser (page, worker, content-script world) and every step of the real-page visit has a time limit, and the visit has a 60 s budget, so a busy or hung page costs seconds, never the analysis. Phase lines (`[c1-observe] ...`) go to stdout, which inside the VM is the guest log the host returns when a run times out. |
 | Network intelligence | `netintel.py` `build_network_intel()` | Each host is classed as the extension's own server (named in its code), a shared service, a raw IP or unexplained; DNS adds IP addresses; defanged domain, IP and URL indicators for the extension's own infrastructure only. Query strings are dropped from URL indicators because they often carry an install identifier. |
@@ -1143,9 +1215,13 @@ score_final = (0.7 * score_static) + (0.3 * score_dynamic)
 ```
 
 ### Verdict Rules
-- MALICIOUS if score_final >= 70
-- SUSPICIOUS if score_final >= 40
+- MALICIOUS if the score is 70 or more
+- SUSPICIOUS if it is 40 or more
 - SAFE otherwise
+
+The score is the **whole number the dashboard shows** (half up), not the decimal behind it. `report.verdict_for()` is the single place that decides, and `analyzer.py` uses it. Before 2026-10-12 the comparison used the unrounded score, so a score of 69.84 was shown as 70 (the malicious threshold) but labelled SUSPICIOUS. The dashboard's colours (`c1Color`, `c1BadgeClass`) round the same way, so label and colour cannot disagree with the number.
+
+An analysis saved under the old rule is corrected when it is read back (`db._to_dict`): only a label the old rule itself produced, for a score in the rounding gap (69.5 to 69.99, or 39.5 to 39.99), is changed, and the report text that states the verdict (`risk_level`, `recommendation`, the summary opener, the plain summary opener) is rewritten to match by `report.restate_verdict()`. The stored row is not rewritten, and a verdict the old rule would not have produced (an authority decision such as a blocklist hit) is left as stored.
 
 ### Evidence Output
 - Human-readable report string
@@ -1162,6 +1238,8 @@ score_final = (0.7 * score_static) + (0.3 * score_dynamic)
 | sandbox.py | Playwright sandbox runner (headed Chromium) |
 | blocklist.py | Finalized blocklist loader, gap detection, and CSV write-back |
 | enrich.py | Live evidence resolution (name/version/store/hash) + reason derivation |
+| ../../packaging/c1_guest.spec | Builds the guest runtime the installer ships for the disposable VM (see "The disposable VM in an installed build") |
+| ../../electron/installer/c1_sandbox.nsh, enable-windows-sandbox.ps1 | The installer's optional "Turn on Windows Sandbox" page and the script behind it (see "Turning on Windows Sandbox at install time") |
 | isolation/ | Sandbox containment backends — `base.py` (contract + IsolationReport), `inprocess.py` (host fallback), `windows_sandbox.py` (disposable VM), `guest_agent.py` (runs inside the VM) |
 | report.py | Human-readable report + flag catalogue + plain-language summary |
 | profile.py | Static extension profile: background and content scripts, alarms, endpoints, API use, rule sets, package |

@@ -297,10 +297,26 @@ _SETTINGS_DEFAULTS: dict = {
     "live_preview": True,            # C2 Live Analysis: send a small page thumbnail with each result
 }
 
+# Installed builds ship the C2 fusion tuning from the developer's settings.json
+# (packaging/backend.spec writes it; tuning keys only, never API keys).
+_TUNED_DEFAULTS_FILE = os.path.join(os.path.dirname(__file__), "c2_tuned_defaults.json")
+try:
+    with open(_TUNED_DEFAULTS_FILE, "r", encoding="utf-8") as _tf:
+        _SETTINGS_DEFAULTS.update({k: v for k, v in json.load(_tf).items()
+                                   if k in ("weights", "verdict_suspicious", "verdict_phishing",
+                                            "warn_threshold", "block_threshold")})
+    print(f"[C2-fusion] Using shipped tuned weights: {_SETTINGS_DEFAULTS['weights']}")
+except (FileNotFoundError, json.JSONDecodeError, AttributeError):
+    pass
+
 def _load_settings() -> dict:
     try:
         with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+        # Saved weights identical to the built-in defaults were never tuned (any
+        # save writes the whole settings dict), so the shipped tuning wins there.
+        if data.get("weights") == _DEFAULT_WEIGHTS:
+            data.pop("weights")
         merged = dict(_SETTINGS_DEFAULTS)
         merged.update(data)
         return merged
@@ -1372,12 +1388,20 @@ async def block_install(req: ApproveInstallReq):
     return {"status": "blocked", "ext_id": req.ext_id}
 
 
+def _script_cmd(script: str, *args: str) -> list:
+    """Command line that runs a Python helper script. When frozen, sys.executable is the backend exe,
+    which would start another backend, so route through server_entry's --run-script mode."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--run-script", script, *args]
+    return [sys.executable, script, *args]
+
+
 def _run_test_component(label: str, script: str) -> dict:
     """Run a test script as a subprocess and parse unittest -v output."""
     start = _time.time()
     try:
         proc = subprocess.run(
-            [sys.executable, script, "-v"],
+            _script_cmd(script, "-v"),
             capture_output=True, text=True, timeout=120,
             cwd=_REPO_ROOT, encoding="utf-8", errors="replace"
         )
@@ -2283,9 +2307,9 @@ async def _tc_c3_ngrok_beacon():
         await _step(f"Starting the inert C2 mimicry server on port {_C3_NGROK_PORT}. It answers every "
                     f"check-in with the same fixed reply and never contacts anyone itself")
         server_proc = subprocess.Popen(
-            [sys.executable, os.path.join(_REPO_ROOT, "test", "C3", "tc03_mimicry_server.py"),
-             "--port", str(_C3_NGROK_PORT), "--interval-ms", str(_C3_NGROK_INTERVAL_MS),
-             "--jitter-pct", str(_C3_NGROK_JITTER_PCT)],
+            _script_cmd(os.path.join(_REPO_ROOT, "test", "C3", "tc03_mimicry_server.py"),
+                        "--port", str(_C3_NGROK_PORT), "--interval-ms", str(_C3_NGROK_INTERVAL_MS),
+                        "--jitter-pct", str(_C3_NGROK_JITTER_PCT)),
             cwd=_REPO_ROOT, **quiet)
         import socket
         for _ in range(40):
@@ -3266,6 +3290,14 @@ async def run_tests_stream_endpoint(component: str = "all", step: bool = False, 
              and (not case or tc["id"] == case)]
 
     async def generate():
+        try:
+            async for chunk in generate_inner():
+                yield chunk
+        except Exception as e:   # never drop the connection: report why the run stopped
+            import traceback; traceback.print_exc()
+            yield f"data: {json.dumps({'type':'done','passed':0,'failed':1,'total':1,'error':str(e)})}\n\n"
+
+    async def generate_inner():
         global _STEP_CTX
         total = len(cases)
         yield f"data: {json.dumps({'type':'init','total':total,'step':step})}\n\n"

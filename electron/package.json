@@ -37,6 +37,14 @@
       {
         "from": "../dist/ms-playwright",
         "to": "ms-playwright"
+      },
+      {
+        "from": "installer/enable-windows-sandbox.ps1",
+        "to": "c1/enable-windows-sandbox.ps1"
+      },
+      {
+        "from": "../dist/c1_guest",
+        "to": "c1_guest"
       }
     ],
     "win": {

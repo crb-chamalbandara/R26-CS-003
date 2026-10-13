@@ -877,7 +877,8 @@ class TestReputationVirusTotalScoring(unittest.IsolatedAsyncioTestCase):
     async def test_auth_or_ratelimit_error_drops_source(self):
         for code in (401, 429, 500):
             eng = self._engine_with_response(code, None)
-            self.assertEqual(await eng._check_virustotal("x.example"), ("virustotal", None))
+            # The source is dropped, and the status is kept so "no TI data" can say why.
+            self.assertEqual(await eng._check_virustotal("x.example"), ("virustotal", None, f"HTTP {code}"))
 
     async def test_no_key_returns_none(self):
         from core.c3.reputation_engine import C3ReputationEngine, set_virustotal_key

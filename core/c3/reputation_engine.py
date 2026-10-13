@@ -115,24 +115,32 @@ class C3ReputationEngine:
 
         # Run both sources concurrently
         tasks: list = [
-            self._check_abuseipdb(ips[0]) if ips else self._noop("abuseipdb"),
+            self._check_abuseipdb(ips[0]) if ips else self._noop("abuseipdb", "no public IP"),
             self._check_virustotal(clean_host),
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         sources: dict[str, float] = {}
+        failures: list[str] = []
         for result in results:
             if isinstance(result, Exception):
+                failures.append(self._why(result))
                 continue
-            name, value = result
+            name, value = result[0], result[1]
             if value is not None:
                 sources[name] = round(float(value), 4)
+            elif len(result) > 2 and result[2]:
+                failures.append(f"{name}: {result[2]}")
 
         combined = max(sources.values()) if sources else 0.0
         flagged  = combined >= 0.5
 
         parts = [f"{k}={v:.2f}" for k, v in sources.items()]
         detail = ("FLAGGED: " if flagged else "Clean: ") + ", ".join(parts) if parts else "no TI data"
+        if not parts and failures:
+            # Without the reason, a bad key, a rate limit and a TLS failure all look the same.
+            detail += " (" + "; ".join(failures) + ")"
+            print(f"[C3-TI] lookup for {clean_host} returned nothing: {'; '.join(failures)}")
 
         payload = {
             "score":   round(combined, 4),
@@ -140,12 +148,14 @@ class C3ReputationEngine:
             "sources": sources,
             "detail":  detail,
         }
-        self._cache[clean_host] = {"expires_at": time.time() + self._CACHE_TTL, "payload": payload}
+        # A lookup where every source failed is not cached, so the next confirmation retries it.
+        if parts or not failures:
+            self._cache[clean_host] = {"expires_at": time.time() + self._CACHE_TTL, "payload": payload}
         return payload
 
     # ── Sources ───────────────────────────────────────────────────────────────
 
-    async def _check_abuseipdb(self, ip: str) -> tuple[str, Optional[float]]:
+    async def _check_abuseipdb(self, ip: str) -> tuple:
         if not _abuseipdb_key:
             return "abuseipdb", None
         try:
@@ -156,14 +166,14 @@ class C3ReputationEngine:
                 headers={"Key": _abuseipdb_key, "Accept": "application/json"},
             )
             if resp.status_code != 200:
-                return "abuseipdb", None
+                return "abuseipdb", None, f"HTTP {resp.status_code}"
             data = resp.json()
             raw = float(((data.get("data") or {}).get("abuseConfidenceScore") or 0.0))
             return "abuseipdb", max(0.0, min(1.0, raw / 100.0))
-        except Exception:
-            return "abuseipdb", None
+        except Exception as exc:
+            return "abuseipdb", None, self._why(exc)
 
-    async def _check_virustotal(self, host: str) -> tuple[str, Optional[float]]:
+    async def _check_virustotal(self, host: str) -> tuple:
         """VirusTotal API v3 domain report. Score is derived from how many of
         VT's ~90 scanning engines flag the beacon's destination domain.
 
@@ -196,7 +206,7 @@ class C3ReputationEngine:
             if resp.status_code == 404:
                 return "virustotal", 0.0
             if resp.status_code != 200:
-                return "virustotal", None
+                return "virustotal", None, f"HTTP {resp.status_code}"
             attrs = ((resp.json().get("data") or {}).get("attributes") or {})
             stats = attrs.get("last_analysis_stats") or {}
             malicious = int(stats.get("malicious") or 0)
@@ -208,8 +218,8 @@ class C3ReputationEngine:
             if suspicious >= 4:
                 return "virustotal", 0.30
             return "virustotal", 0.0
-        except Exception:
-            return "virustotal", None
+        except Exception as exc:
+            return "virustotal", None, self._why(exc)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -245,8 +255,13 @@ class C3ReputationEngine:
             return name == "localhost" or name.endswith(".localhost")
 
     @staticmethod
-    async def _noop(name: str) -> tuple[str, None]:
-        return name, None
+    async def _noop(name: str, reason: str = "") -> tuple:
+        return name, None, reason
+
+    @staticmethod
+    def _why(exc: BaseException) -> str:
+        text = str(exc).strip().splitlines()[0][:120] if str(exc).strip() else ""
+        return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
 
     @staticmethod
     def _empty(reason: str) -> dict:

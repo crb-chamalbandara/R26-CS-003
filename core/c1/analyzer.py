@@ -18,7 +18,7 @@ Detection pipeline order:
                                    XGBoost doesn't recognise it as malicious
   6. Dynamic sandbox (optional) → dynamic_score (0–100)  only if score ≥ 50
   7. Score fusion               → 0.7 × static + 0.3 × dynamic
-  8. Verdict thresholds         → MALICIOUS ≥ 70 | SUSPICIOUS ≥ 40 | SAFE < 40
+  8. Verdict thresholds         → MALICIOUS ≥ 70 | SUSPICIOUS ≥ 40 | SAFE < 40 (on the displayed whole number)
   9. Report generation          → human-readable explanation for dashboard
 """
 from __future__ import annotations
@@ -32,7 +32,7 @@ from .features    import extract_manifest_features, build_feature_vector  # feat
 from .static_model import (                                                 # ML model runner
     load_model, load_feature_columns, predict_score, predict_anomaly_score,
 )
-from .report       import build_report                                      # human-readable report
+from .report       import build_report, verdict_for                         # human-readable report, verdict rule
 from .blocklist    import (                                                 # finalized blocklist loader/writer
     load_blocklist, blocklist_stats, entry_gaps, apply_updates, update_entry,
     incomplete_ids, BlocklistEntry,
@@ -699,9 +699,9 @@ async def analyze_extension(
         final_score = static_score    # sandbox didn't run — static score is the final score
 
     # ── Step 8: Verdict thresholds ────────────────────────────────
-    if   final_score >= 70: verdict = "MALICIOUS"
-    elif final_score >= 40: verdict = "SUSPICIOUS"
-    else:                   verdict = "SAFE"
+    # Decided on the whole number the dashboard shows, so a score displayed as 70
+    # can never be labelled SUSPICIOUS (see report.verdict_for).
+    verdict = verdict_for(final_score)
 
     # One-line detail string for the dashboard score display
     detail = (

@@ -1725,13 +1725,7 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
 .c1r-jump:hover{border-color:var(--c1);color:var(--c1);background:var(--c1b)}
 
 /* ── Advanced view shell ────────────────────────────────────────
-   These two panels hold unrelated amounts of content. Left to stretch
-   with nothing to fill it, the shorter one grew a dead strip down its
-   bottom half, which is why this was align-items:start for a while.
-   The engine signature is the real fix: each panel now ends with a
-   block pinned to its bottom edge (.c1r-engine-slot, margin-top:auto),
-   so the two finish level AND the slack is occupied by something worth
-   reading rather than by nothing.                                    */
+   The two analysis panels sit side by side and keep their own height. */
 .c1r-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:stretch}
 .c1r-split > .c1r-panel{display:flex;flex-direction:column}
 #c1r-simple,#c1r-advanced{display:flex;flex-direction:column;gap:10px}
@@ -1876,21 +1870,13 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
   .c1r-hero-id{background:#f4f4f4!important;border-color:#ddd!important;color:#222!important}
   .c1-vb{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .c1r-hero::before,.c1r-hero::after{display:none!important}
-  /* Both panels keep their engine block on paper; the bar segments are
-     painted surfaces so they need colour-adjust to survive the printer. */
-  .c1r-engine{background:#fafafa!important;border-color:#ddd!important}
-  .c1r-engine-name{color:#111!important}
-  .c1r-engine-tag,.c1r-engine-eyebrow{color:#444!important}
-  .c1r-engine.is-idle .c1r-engine-mark svg{filter:none!important}
+  /* The bar segments are painted surfaces, so they need colour-adjust to survive the printer. */
   .c1-iso-eyebrow,.c1-iso-tl-lbl,.c1-iso-tl-note,.c1-iso-tl-key .p{color:#555!important}
   .c1-iso-tl-total,.c1-iso-tl-key.is-main .k{color:#111!important}
   .c1-iso-tl-key,.c1-iso-tl-key .v{color:#333!important}
   .c1-iso-tl-bar{background:#eee!important;border-color:#ccc!important}
   .c1-iso-tl-seg,.c1-iso-tl-dot{animation:none!important;transform:none!important;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .c1r-engine::after{display:none!important}
-  .c1r-engine-spec{background:#f0f0f0!important;border-color:#ccc!important;
-    color:#444!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .c1r-meter-name,.c1r-meter-val{color:#111!important}
   .c1r-meter-note{color:#555!important}
   .c1r-meter-track{background:#eee!important;border-color:#ccc!important}
@@ -2039,49 +2025,6 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
 .c1-iso-tl-key.is-main .k{color:var(--t0);font-weight:700}
 @media (prefers-reduced-motion:reduce){.c1-iso-tl-seg{animation:none}}
 
-/* ── Engine signature ───────────────────────────────────────────
-   Each analysis panel closes with the machinery that produced its
-   numbers: a mark, the engine name, and one line on what that engine
-   actually does. Sitting in a slot with margin-top:auto, it doubles as
-   the thing that levels the two panels off (see .c1r-split above).   */
-.c1r-engine-slot{flex:1;padding-top:12px;display:flex;flex-direction:column;
-  justify-content:flex-end}
-/* flex:1 is what turns the leftover height into part of the plate instead of
-   a void below it: the shorter panel's slack becomes breathing room around a
-   centred mark, which reads as deliberate. */
-.c1r-engine{flex:1;display:flex;align-items:center;gap:13px;padding:13px;
-  position:relative;overflow:hidden;
-  border:1px solid var(--b1);border-radius:var(--radius);
-  background:linear-gradient(135deg,var(--bg1) 0%,var(--bg0) 100%);
-  transition:border-color .2s}
-.c1r-engine::after{content:'';position:absolute;right:-46px;top:50%;
-  width:172px;height:172px;transform:translateY(-50%);border-radius:50%;
-  pointer-events:none;
-  background:radial-gradient(circle,rgba(145,101,247,.10),transparent 68%)}
-.c1r-engine.is-dyn::after{background:radial-gradient(circle,rgba(16,185,129,.10),transparent 68%)}
-.c1r-engine > *{position:relative;z-index:1}
-.c1r-engine-specs{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
-.c1r-engine-spec{font-size:8.5px;font-weight:700;letter-spacing:.05em;
-  text-transform:uppercase;padding:3px 8px;border-radius:20px;
-  background:var(--bg3);border:1px solid var(--b1);color:var(--t2)}
-.c1r-panel:hover .c1r-engine{border-color:var(--b2)}
-.c1r-engine-mark{flex-shrink:0;width:46px;height:46px;display:block}
-.c1r-engine-mark svg{display:block;width:46px;height:46px}
-.c1r-engine-text{min-width:0}
-.c1r-engine-eyebrow{display:block;font-size:8.5px;font-weight:800;
-  letter-spacing:.13em;text-transform:uppercase;color:var(--t2);margin-bottom:3px}
-.c1r-engine-name{display:block;font-size:11px;font-weight:800;color:var(--t0);
-  letter-spacing:.015em;line-height:1.3}
-.c1r-engine-name i{font-style:normal;font-weight:400;color:var(--b3);margin:0 6px}
-.c1r-engine-tag{display:block;font-size:9.5px;color:var(--t2);
-  line-height:1.55;margin-top:4px}
-/* An engine that did not run is shown, not omitted — a missing panel reads
-   as "nothing to report", which is the opposite of what it means. */
-/* No glow behind an engine that did not run — the flourish reads as
-   activity, which is the opposite of what an idle plate is saying. */
-.c1r-engine.is-idle::after{display:none}
-.c1r-engine.is-idle{opacity:.75}
-.c1r-engine.is-idle .c1r-engine-mark svg{filter:grayscale(.85)}
 /* ── C1 button family, continued: chips, switches, icon buttons, links ─────────
    The same hover, pressed and focus behaviour as .c1-btn for everything else in
    C1 that is clicked. */
@@ -2251,210 +2194,400 @@ body:has(#panel-c1.active) #c3-beacon-overlay:not(.active) #c3-beacon-ring{anima
 
 /* ══ Report popup: type scale and layout ══════════════════════════════════════════
    The popup's text used to run at 8 to 11px (314 of 339 text elements were under
-   12.5px), which is too small to read comfortably for the length of a report. A first
-   attempt at 13.5px body text was too large on a scaled 1080p display, so this is the
-   balanced middle. One scale governs it, all in #c1r-modal:
-     micro   10.5px  column heads, badges, small labels (uppercase, letter-spaced)
-     small   11.5px  secondary text, descriptions, notes, chips
-     body    12.5px  table cells, list items, key and value rows, permission text
-     lead    14px    the summary and the recommendation
-     h3      15.5px  panel titles                   h2   17.5px  the header
+   12.5px), which is too small to read comfortably for the length of a report. Two
+   attempts at 13.5px and then 12.5px body text were still a little large at real desktop
+   size, so this is the settled middle. One scale governs it, all in #c1r-modal:
+     micro   10px    column heads, badges, small labels (uppercase, letter-spaced)
+     small   11px    secondary text, descriptions, notes, chips
+     body    12px    table cells, list items, key and value rows, permission text
+     lead    13px    the recommendation          summary 13.5px
+     h3      14.5px  panel titles                   h2   16px  the header
    The layout breathes to match: a wider popup, roomier panels, an icon tile on every
    section heading, a "What to do" callout in the Simple view and key-fact cards in the
    Advanced view. Mobile gets its own, tighter values at the end. */
-#c1r-modal{--fs-micro:10.5px;--fs-small:11.5px;--fs-body:12.5px;--fs-lead:14px;--fs-h3:15.5px}
-#c1r-modal.c1r-modal{padding:24px 24px}
-#c1r-modal .c1r-modal-shell{max-width:1120px;border-radius:12px}
-#c1r-modal .c1r-modal-bar{padding:14px 20px 16px;gap:16px}
-#c1r-modal .c1r-modal-dot{width:44px;height:44px;border-radius:12px;font-size:16.5px}
-#c1r-modal .c1r-modal-title{font-size:17.5px}
-#c1r-modal .c1r-modal-sub{gap:7px;margin-top:7px;font-size:11.5px}
-#c1r-modal .c1r-vchip{font-size:11.5px;padding:3px 9px;border-radius:6px}
-#c1r-modal .c1r-vpill{font-size:10px;padding:3px 10px}
+#c1r-modal{--fs-micro:10px;--fs-small:11px;--fs-body:12px;--fs-lead:13px;--fs-h3:14.5px}
+#c1r-modal.c1r-modal{padding:22px 22px}
+#c1r-modal .c1r-modal-shell{max-width:1040px;border-radius:12px}
+#c1r-modal .c1r-modal-bar{padding:12px 18px 14px;gap:14px}
+#c1r-modal .c1r-modal-dot{width:40px;height:40px;border-radius:11px;font-size:15px}
+#c1r-modal .c1r-modal-title{font-size:16px}
+#c1r-modal .c1r-modal-sub{gap:6px;margin-top:6px;font-size:11px}
+#c1r-modal .c1r-vchip{font-size:11px;padding:2px 8px;border-radius:6px}
+#c1r-modal .c1r-vpill{font-size:10px;padding:3px 9px}
 #c1r-modal .c1r-seg{padding:3px}
-#c1r-modal .c1r-segbtn{font-size:12.5px;min-height:32px;padding:0 16px;border-radius:7px}
-#c1r-modal .c1r-modal-x{width:34px;height:34px;border-radius:9px}
-#c1r-modal .c1r-jumpbar{padding:8px 20px}
-#c1r-modal .c1r-jchip,#c1r-modal .c1r-jtool{min-height:32px;font-size:12.5px;padding:0 13px}
-#c1r-modal .c1r-collapse{width:30px;height:30px}
-#c1r-modal .c1r-modal-body{padding:18px 22px 32px;scrollbar-width:thin;scrollbar-color:var(--c1-line-hi) transparent}
+#c1r-modal .c1r-segbtn{font-size:12px;min-height:30px;padding:0 14px;border-radius:7px}
+#c1r-modal .c1r-modal-x{width:32px;height:32px;border-radius:9px}
+#c1r-modal .c1r-jumpbar{padding:7px 18px}
+#c1r-modal .c1r-jchip,#c1r-modal .c1r-jtool{min-height:30px;font-size:12px;padding:0 12px}
+#c1r-modal .c1r-collapse{width:28px;height:28px}
+#c1r-modal .c1r-modal-body{padding:16px 20px 28px;scrollbar-width:thin;scrollbar-color:var(--c1-line-hi) transparent}
 #c1r-modal .c1r-modal-body::-webkit-scrollbar{width:10px}
 #c1r-modal .c1r-modal-body::-webkit-scrollbar-thumb{background:var(--c1-line-hi);border-radius:8px;border:2px solid transparent;background-clip:content-box}
-#c1r-modal #c1r-simple,#c1r-modal #c1r-advanced{gap:14px}
-#c1r-modal .c1-btn{font-size:12px;min-height:36px}
-#c1r-modal .c1-btn.sm{min-height:28px;font-size:11px}
+#c1r-modal #c1r-simple,#c1r-modal #c1r-advanced{gap:12px}
+#c1r-modal .c1-btn{font-size:11.5px;min-height:34px}
+#c1r-modal .c1-btn.sm{min-height:26px;font-size:10.5px}
 
 /* panels and their headings */
-#c1r-modal .c1r-panel{padding:20px 24px;border-radius:9px}
-#c1r-modal .c1r-phead{gap:12px;margin-bottom:16px}
-#c1r-modal .c1r-accent{width:4px;min-height:32px}
+#c1r-modal .c1r-panel{padding:17px 20px;border-radius:9px}
+#c1r-modal .c1r-phead{gap:11px;margin-bottom:13px}
+#c1r-modal .c1r-accent{width:4px;min-height:28px}
 #c1r-modal .c1r-ptitle{font-size:var(--fs-h3);font-weight:800;letter-spacing:-.01em;line-height:1.25}
 #c1r-modal .c1r-psub{font-size:var(--fs-small);line-height:1.5;margin-top:4px;color:var(--t2)}
-.c1r-ico{width:36px;height:36px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;
+.c1r-ico{width:32px;height:32px;flex-shrink:0;border-radius:9px;display:grid;place-items:center;
   color:var(--ic,var(--c1-acc));background:var(--ic-bg,rgba(145,101,247,.14));border:1px solid var(--ic-bd,rgba(145,101,247,.32))}
 .c1r-ico.blue{--ic:#4d8ef8;--ic-bg:rgba(77,142,248,.14);--ic-bd:rgba(77,142,248,.34)}
 .c1r-ico.amber{--ic:#f5a623;--ic-bg:rgba(245,166,35,.14);--ic-bd:rgba(245,166,35,.36)}
 .c1r-phead.has-ico > .c1r-accent{display:none}
 
 /* the summary and the numbers */
-#c1r-modal .c1r-hero{padding:26px 30px;gap:32px;border-radius:9px}
-#c1r-modal .c1r-hero-plain{font-size:14.5px;line-height:1.7;max-width:72ch}
-#c1r-modal .c1r-hero-id{font-size:var(--fs-small);padding:7px 12px}
-#c1r-modal .c1-vb.lg{font-size:20px}
-#c1r-modal .c1r-gauge{width:150px;height:96px}
-#c1r-modal .c1r-gauge svg{width:150px;height:84px}
-#c1r-modal .c1r-gauge-val{top:43px;font-size:26px}
-#c1r-modal .c1r-gauge-cap{top:75px;font-size:10px;letter-spacing:.14em}
-#c1r-modal .c1r-stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
-#c1r-modal .c1r-stat{padding:16px 18px;border-radius:9px}
-#c1r-modal .c1r-stat-lbl{font-size:var(--fs-micro);letter-spacing:.1em;margin-bottom:10px}
-#c1r-modal .c1r-stat-num{font-size:28px}
-#c1r-modal .c1r-stat-sub{font-size:var(--fs-small);margin-top:6px}
+#c1r-modal .c1r-hero{padding:22px 26px;gap:28px;border-radius:9px}
+#c1r-modal .c1r-hero-plain{font-size:13.5px;line-height:1.65;max-width:70ch}
+#c1r-modal .c1r-hero-id{font-size:var(--fs-small);padding:6px 11px}
+#c1r-modal .c1-vb.lg{font-size:18px}
+#c1r-modal .c1r-gauge{width:132px;height:84px}
+#c1r-modal .c1r-gauge svg{width:132px;height:74px}
+#c1r-modal .c1r-gauge-val{top:38px;font-size:23px}
+#c1r-modal .c1r-gauge-cap{top:66px;font-size:10px;letter-spacing:.14em}
+#c1r-modal .c1r-stats{grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px}
+#c1r-modal .c1r-stat{padding:14px 16px;border-radius:9px}
+#c1r-modal .c1r-stat-lbl{font-size:var(--fs-micro);letter-spacing:.1em;margin-bottom:8px}
+#c1r-modal .c1r-stat-num{font-size:24px}
+#c1r-modal .c1r-stat-sub{font-size:var(--fs-small);margin-top:5px}
 #c1-adv-stats:empty,#c1r-adv-stats:empty{display:none}
 
 /* "What to do": the recommendation, said plainly under the summary */
-.c1r-reco{display:flex;align-items:flex-start;gap:14px;padding:16px 20px;border-radius:9px;border:1px solid var(--rc-bd);
+.c1r-reco{display:flex;align-items:flex-start;gap:12px;padding:13px 18px;border-radius:9px;border:1px solid var(--rc-bd);
   background:var(--rc-bg);--rc:var(--c1-acc);--rc-bg:rgba(145,101,247,.08);--rc-bd:rgba(145,101,247,.3)}
 .c1r-reco.mal{--rc:var(--danger);--rc-bg:rgba(240,71,71,.08);--rc-bd:rgba(240,71,71,.38)}
 .c1r-reco.sus{--rc:var(--warn);--rc-bg:rgba(245,166,35,.08);--rc-bd:rgba(245,166,35,.4)}
 .c1r-reco.safe{--rc:var(--safe);--rc-bg:rgba(16,185,129,.08);--rc-bd:rgba(16,185,129,.4)}
-.c1r-reco-ico{width:36px;height:36px;flex-shrink:0;border-radius:10px;display:grid;place-items:center;color:var(--rc);
+.c1r-reco-ico{width:32px;height:32px;flex-shrink:0;border-radius:9px;display:grid;place-items:center;color:var(--rc);
   background:var(--rc-bg);border:1px solid var(--rc-bd)}
-.c1r-reco-lbl{font:800 10.5px/1 var(--c1-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--rc);margin:2px 0 6px}
-.c1r-reco-txt{font-size:var(--fs-lead);line-height:1.6;color:var(--t0)}
+.c1r-reco-lbl{font:800 10px/1 var(--c1-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--rc);margin:2px 0 5px}
+.c1r-reco-txt{font-size:var(--fs-lead);line-height:1.55;color:var(--t0)}
 
 /* permissions, notes, key and value rows, tables, chips */
-#c1r-modal .c1r-perm{padding:13px 16px;gap:14px;border-radius:9px;margin-bottom:8px}
-#c1r-modal .c1r-perm-sev{font-size:10px;padding:4px 8px;min-width:72px;border-radius:6px;letter-spacing:.08em}
-#c1r-modal .c1r-perm-name{font-size:13px;margin-bottom:4px}
-#c1r-modal .c1r-perm-desc{font-size:var(--fs-body);line-height:1.58}
-#c1r-modal .c1r-notes{gap:8px;margin-bottom:16px}
-#c1r-modal .c1r-notes li{font-size:var(--fs-body);line-height:1.58;padding:11px 16px;border-radius:8px;border-left-width:4px;color:var(--t0)}
-#c1r-modal .c1r-kv{font-size:var(--fs-body);grid-template-columns:minmax(140px,210px) 1fr}
-#c1r-modal .c1r-kv>div{padding:10px 0;line-height:1.55}
+#c1r-modal .c1r-perm{padding:11px 14px;gap:12px;border-radius:9px;margin-bottom:7px}
+#c1r-modal .c1r-perm-sev{font-size:10px;padding:4px 8px;min-width:66px;border-radius:6px;letter-spacing:.08em}
+#c1r-modal .c1r-perm-name{font-size:12.5px;margin-bottom:3px}
+#c1r-modal .c1r-perm-desc{font-size:var(--fs-body);line-height:1.55}
+#c1r-modal .c1r-notes{gap:7px;margin-bottom:14px}
+#c1r-modal .c1r-notes li{font-size:var(--fs-body);line-height:1.55;padding:9px 14px;border-radius:8px;border-left-width:4px;color:var(--t0)}
+#c1r-modal .c1r-kv{font-size:var(--fs-body);grid-template-columns:minmax(130px,190px) 1fr}
+#c1r-modal .c1r-kv>div{padding:8px 0;line-height:1.5}
 #c1r-modal .c1r-kv .k{font-size:var(--fs-small);font-weight:700}
-#c1r-modal .c1r-kv code,#c1r-modal .c1r-tbl code{font-size:12px}
-#c1r-modal .c1r-sub{font-size:var(--fs-micro);letter-spacing:.11em;margin:22px 0 10px;color:var(--t2)}
-#c1r-modal .c1r-tbl{font-size:12.5px}
-#c1r-modal .c1r-tbl th{font-size:var(--fs-micro);padding:10px 14px;letter-spacing:.09em}
-#c1r-modal .c1r-tbl td{padding:11px 14px;line-height:1.5}
-#c1r-modal .c1r-url{font-size:12px}
-#c1r-modal .c1r-chips{gap:7px}
-#c1r-modal .c1r-chips span{font-size:var(--fs-small);padding:5px 11px}
-#c1r-modal .c1r-code{font-size:12px;padding:9px 12px;margin-bottom:5px}
-#c1r-modal .c1r-note,#c1r-modal .c1r-small{font-size:var(--fs-small);line-height:1.65;color:var(--t2)}
+#c1r-modal .c1r-kv code,#c1r-modal .c1r-tbl code{font-size:11.5px}
+#c1r-modal .c1r-sub{font-size:var(--fs-micro);letter-spacing:.11em;margin:18px 0 8px;color:var(--t2)}
+#c1r-modal .c1r-tbl{font-size:12px}
+#c1r-modal .c1r-tbl th{font-size:var(--fs-micro);padding:8px 12px;letter-spacing:.09em}
+#c1r-modal .c1r-tbl td{padding:9px 12px;line-height:1.5}
+#c1r-modal .c1r-url{font-size:11.5px}
+#c1r-modal .c1r-chips{gap:6px}
+#c1r-modal .c1r-chips span{font-size:var(--fs-small);padding:4px 10px}
+#c1r-modal .c1r-code{font-size:11.5px;padding:8px 11px;margin-bottom:5px}
+#c1r-modal .c1r-note,#c1r-modal .c1r-small{font-size:var(--fs-small);line-height:1.6;color:var(--t2)}
 #c1r-modal .c1r-body{font-size:var(--fs-body)}
-#c1r-modal .c1r-pill{font-size:10.5px;padding:3px 9px}
-#c1r-modal .c1r-more{font-size:12px;padding:7px 12px}
-#c1r-modal .c1r-jump{font-size:12.5px;min-height:44px}
-#c1r-modal .c1r-export{padding:13px 18px;border-radius:9px;gap:8px}
+#c1r-modal .c1r-pill{font-size:10px;padding:3px 8px}
+#c1r-modal .c1r-more{font-size:11.5px;padding:6px 11px}
+#c1r-modal .c1r-jump{font-size:12px;min-height:40px}
+#c1r-modal .c1r-export{padding:11px 16px;border-radius:9px;gap:8px}
 #c1r-modal .c1r-export-lbl{font-size:var(--fs-small);font-weight:700}
-#c1r-modal .c1r-xbtn{min-height:34px;font-size:12px;padding:0 14px}
+#c1r-modal .c1r-xbtn{min-height:32px;font-size:11.5px;padding:0 13px}
 
 /* static and dynamic analysis */
-#c1r-modal .c1r-split{gap:14px}
-#c1r-modal .c1r-meter{margin-bottom:16px}
+#c1r-modal .c1r-split{gap:12px}
+#c1r-modal .c1r-meter{margin-bottom:14px}
 #c1r-modal .c1r-meter-name{font-size:var(--fs-body)}
-#c1r-modal .c1r-meter-val{font-size:14px}
-#c1r-modal .c1r-meter-track{height:7px}
-#c1r-modal .c1r-meter-note{font-size:var(--fs-small);margin-top:6px;line-height:1.55}
-#c1r-modal .c1r-facts{gap:7px;margin-top:14px}
-#c1r-modal .c1r-fact{font-size:var(--fs-small);padding:7px 12px;border-radius:7px}
+#c1r-modal .c1r-meter-val{font-size:13px}
+#c1r-modal .c1r-meter-track{height:6px}
+#c1r-modal .c1r-meter-note{font-size:var(--fs-small);margin-top:5px;line-height:1.5}
+#c1r-modal .c1r-facts{gap:6px;margin-top:12px}
+#c1r-modal .c1r-fact{font-size:var(--fs-small);padding:6px 11px;border-radius:7px}
 #c1r-modal .c1r-fact b{font-size:var(--fs-body)}
-#c1r-modal .c1r-engine{padding:14px 16px;gap:14px}
-#c1r-modal .c1r-engine-mark,#c1r-modal .c1r-engine-mark svg{width:50px;height:50px}
-#c1r-modal .c1r-engine-eyebrow{font-size:var(--fs-micro)}
-#c1r-modal .c1r-engine-name{font-size:14px;margin:3px 0 4px}
-#c1r-modal .c1r-engine-tag{font-size:var(--fs-small);line-height:1.58}
-#c1r-modal .c1r-engine-specs{gap:6px;margin-top:10px}
-#c1r-modal .c1r-engine-spec{font-size:var(--fs-micro);padding:4px 9px}
 
 /* the verdict card at the top of the Advanced view */
-#c1r-modal .c1-card{padding:22px 26px;border-radius:9px}
-#c1r-modal .c1-verdict-block{gap:20px;margin-bottom:18px}
-#c1r-modal .c1-big-score{font-size:56px}
-#c1r-modal .c1-verdict-label{font-size:22px;letter-spacing:.03em}
+#c1r-modal .c1-card{padding:18px 22px;border-radius:9px}
+#c1r-modal .c1-verdict-block{gap:18px;margin-bottom:16px}
+#c1r-modal .c1-big-score{font-size:48px}
+#c1r-modal .c1-verdict-label{font-size:19px;letter-spacing:.03em}
 #c1r-modal .c1-verdict-meta{font-size:var(--fs-small);margin-top:6px}
-#c1r-modal .c1-verdict-detail{font-size:12px;line-height:1.6;margin-top:7px;font-family:var(--c1-mono)}
-#c1r-modal .c1-score-row{gap:14px;margin-bottom:10px}
-#c1r-modal .c1-score-name{font-size:var(--fs-body);width:130px;font-weight:600;color:var(--t1)}
-#c1r-modal .c1-bar-wrap{height:7px;border-radius:5px}
+#c1r-modal .c1-verdict-detail{font-size:11.5px;line-height:1.55;margin-top:6px;font-family:var(--c1-mono)}
+#c1r-modal .c1-score-row{gap:12px;margin-bottom:9px}
+#c1r-modal .c1-score-name{font-size:var(--fs-body);width:120px;font-weight:600;color:var(--t1)}
+#c1r-modal .c1-bar-wrap{height:6px;border-radius:5px}
 #c1r-modal .c1-bar{border-radius:5px}
-#c1r-modal .c1-score-val{font-size:var(--fs-body);width:44px;font-weight:800;font-family:var(--c1-mono)}
-#c1r-modal .c1-flags{gap:7px;margin-top:14px}
-#c1r-modal .c1-flag,#c1r-modal .c1-signal{font-size:11.5px;padding:4px 11px;border-radius:7px}
-#c1r-modal .c1-sandbox-note{font-size:var(--fs-small);padding:11px 15px;line-height:1.58}
-#c1r-modal #c1-install-bar{margin-top:18px!important;padding-top:18px!important;gap:14px!important}
+#c1r-modal .c1-score-val{font-size:var(--fs-body);width:40px;font-weight:800;font-family:var(--c1-mono)}
+#c1r-modal .c1-flags{gap:6px;margin-top:12px}
+#c1r-modal .c1-flag,#c1r-modal .c1-signal{font-size:11px;padding:3px 10px;border-radius:7px}
+#c1r-modal .c1-sandbox-note{font-size:var(--fs-small);padding:10px 13px;line-height:1.55}
+#c1r-modal #c1-install-bar{margin-top:16px!important;padding-top:16px!important;gap:12px!important}
 .c1r-install-hint{font-size:var(--fs-small);color:var(--t2);line-height:1.5}
 .c1r-install-spin{align-items:center;gap:8px;font-size:var(--fs-small);color:var(--t2)}
 
 /* containment */
-#c1r-modal .c1-iso{padding:18px 22px;margin-top:0;border-radius:9px}
-#c1r-modal .c1-iso-eyebrow{font-size:var(--fs-micro);margin-bottom:7px}
-#c1r-modal .c1-iso-hdr{font-size:var(--fs-body);gap:9px;margin-bottom:10px}
-#c1r-modal .c1-iso-hdr b{font-size:15.5px}
-#c1r-modal .c1-iso-backend{font-size:11px;padding:2px 9px}
-#c1r-modal .c1-iso-facts{font-size:var(--fs-small);gap:6px 16px;margin-bottom:10px}
-#c1r-modal .c1-iso-warn li{font-size:var(--fs-small);line-height:1.58;margin-bottom:4px}
-#c1r-modal .c1-iso-timing{font-size:11.5px}
-#c1r-modal .c1-iso-tl{margin-top:14px;padding-top:13px}
+#c1r-modal .c1-iso{padding:15px 19px;margin-top:0;border-radius:9px}
+#c1r-modal .c1-iso-eyebrow{font-size:var(--fs-micro);margin-bottom:6px}
+#c1r-modal .c1-iso-hdr{font-size:var(--fs-body);gap:8px;margin-bottom:9px}
+#c1r-modal .c1-iso-hdr b{font-size:14.5px}
+#c1r-modal .c1-iso-backend{font-size:10.5px;padding:2px 8px}
+#c1r-modal .c1-iso-facts{font-size:var(--fs-small);gap:5px 14px;margin-bottom:9px}
+#c1r-modal .c1-iso-warn li{font-size:var(--fs-small);line-height:1.55;margin-bottom:4px}
+#c1r-modal .c1-iso-timing{font-size:11px}
+#c1r-modal .c1-iso-tl{margin-top:12px;padding-top:11px}
 #c1r-modal .c1-iso-tl-lbl{font-size:var(--fs-micro)}
-#c1r-modal .c1-iso-tl-total{font-size:13px}
-#c1r-modal .c1-iso-tl-note{font-size:11px}
-#c1r-modal .c1-iso-tl-bar{height:9px}
-#c1r-modal .c1-iso-tl-keys{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:5px 16px;margin-top:11px}
+#c1r-modal .c1-iso-tl-total{font-size:12.5px}
+#c1r-modal .c1-iso-tl-note{font-size:10.5px}
+#c1r-modal .c1-iso-tl-bar{height:8px}
+#c1r-modal .c1-iso-tl-keys{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:4px 14px;margin-top:10px}
 #c1r-modal .c1-iso-tl-key{font-size:var(--fs-small)}
-#c1r-modal .c1-iso-tl-key .p{font-size:11px}
+#c1r-modal .c1-iso-tl-key .p{font-size:10.5px}
 
 /* a blocklist match */
-#c1r-modal .c1-bl-badge{font-size:10.5px;padding:3px 10px}
-#c1r-modal .c1-bl-name{font-size:15.5px}
-#c1r-modal .c1-bl-grid{gap:14px 24px}
-#c1r-modal .c1-bl-label{font-size:10.5px}
+#c1r-modal .c1-bl-badge{font-size:10px;padding:3px 9px}
+#c1r-modal .c1-bl-name{font-size:14.5px}
+#c1r-modal .c1-bl-grid{gap:12px 22px}
+#c1r-modal .c1-bl-label{font-size:10px}
 #c1r-modal .c1-bl-value,#c1r-modal .c1-bl-store,#c1r-modal .c1-bl-unknown{font-size:var(--fs-body)}
-#c1r-modal .c1-bl-why{padding:12px 14px}
-#c1r-modal .c1-bl-why-hdr{font-size:10.5px}
-#c1r-modal .c1-bl-why li{font-size:12.5px;line-height:1.6}
-#c1r-modal .c1-bl-why-foot{font-size:11.5px}
-#c1r-modal .c1-bl-metric b{font-size:15px}
-#c1r-modal .c1-bl-metric span{font-size:10.5px}
-#c1r-modal .c1-bl-tag{font-size:10.5px;padding:3px 8px}
-#c1r-modal .c1-bl-sync{font-size:var(--fs-small);padding:9px 12px}
-#c1r-modal .c1-bl-hash-cta{font-size:11.5px}
+#c1r-modal .c1-bl-why{padding:11px 13px}
+#c1r-modal .c1-bl-why-hdr{font-size:10px}
+#c1r-modal .c1-bl-why li{font-size:12px;line-height:1.55}
+#c1r-modal .c1-bl-why-foot{font-size:11px}
+#c1r-modal .c1-bl-metric b{font-size:14px}
+#c1r-modal .c1-bl-metric span{font-size:10px}
+#c1r-modal .c1-bl-tag{font-size:10px;padding:3px 8px}
+#c1r-modal .c1-bl-sync{font-size:var(--fs-small);padding:8px 11px}
+#c1r-modal .c1-bl-hash-cta{font-size:11px}
 
 /* the verdict report */
-#c1r-modal .c1r-vsummary{font-size:var(--fs-lead);line-height:1.65;color:var(--t0);margin:0 0 14px}
-#c1r-modal .c1r-formula{font:600 12px/1.5 var(--c1-mono);color:var(--t1);margin-bottom:14px;padding:10px 14px;
+#c1r-modal .c1r-vsummary{font-size:var(--fs-lead);line-height:1.6;color:var(--t0);margin:0 0 12px}
+#c1r-modal .c1r-formula{font:600 11.5px/1.5 var(--c1-mono);color:var(--t1);margin-bottom:12px;padding:9px 12px;
   background:var(--bg0);border:1px solid var(--b2);border-radius:8px;letter-spacing:.01em}
-#c1r-modal .c1r-flaglist{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
-#c1r-modal .c1r-flagrow{padding:13px 16px;border-radius:9px;background:var(--bg1);border:1px solid var(--b1);border-left:4px solid var(--fc)}
-#c1r-modal .c1r-flagrow-top{display:flex;align-items:center;gap:9px;margin-bottom:6px;flex-wrap:wrap}
+#c1r-modal .c1r-flaglist{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
+#c1r-modal .c1r-flagrow{padding:11px 14px;border-radius:9px;background:var(--bg1);border:1px solid var(--b1);border-left:4px solid var(--fc)}
+#c1r-modal .c1r-flagrow-top{display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap}
 #c1r-modal .c1r-flagrow-sev{font-size:10px;font-weight:800;letter-spacing:.08em;padding:4px 9px;border-radius:6px;color:var(--fc);
   background:color-mix(in srgb,var(--fc) 14%,transparent);border:1px solid color-mix(in srgb,var(--fc) 42%,transparent)}
-#c1r-modal .c1r-flagrow-name{font:700 12.5px var(--c1-mono);color:var(--t0)}
-#c1r-modal .c1r-flagrow-desc{font-size:var(--fs-body);color:var(--t2);line-height:1.6}
-#c1r-modal .c1r-vreco{font-size:var(--fs-body);line-height:1.65;color:var(--t1);padding:13px 16px;border-radius:9px;
+#c1r-modal .c1r-flagrow-name{font:700 12px var(--c1-mono);color:var(--t0)}
+#c1r-modal .c1r-flagrow-desc{font-size:var(--fs-body);color:var(--t2);line-height:1.55}
+#c1r-modal .c1r-vreco{font-size:var(--fs-body);line-height:1.6;color:var(--t1);padding:11px 14px;border-radius:9px;
   background:rgba(145,101,247,.08);border:1px solid rgba(145,101,247,.3)}
 #c1r-modal .c1r-vreco:empty{display:none}
-#c1r-modal .c1r-riskbadge{font-size:10.5px;padding:4px 11px;letter-spacing:.1em}
+#c1r-modal .c1r-riskbadge{font-size:10px;padding:4px 10px;letter-spacing:.1em}
 
 /* the graph's own controls and card */
-#c1r-modal .c1g-lg{font-size:11.5px}
+#c1r-modal .c1g-lg{font-size:11px}
 
 @media (max-width:760px){
   #c1r-modal .c1r-modal-body{padding:14px 12px 30px}
   #c1r-modal .c1r-panel{padding:18px 16px}
   #c1r-modal .c1r-hero{padding:22px 20px;gap:22px}
-  #c1r-modal .c1r-hero-plain{font-size:14px}
+  #c1r-modal .c1r-hero-plain{font-size:13px}
   #c1r-modal .c1-card,#c1r-modal .c1-iso{padding:20px 18px}
-  #c1r-modal .c1r-ico{width:34px;height:34px}
-  #c1r-modal .c1r-ptitle{font-size:14.5px}
+  #c1r-modal .c1r-ico{width:32px;height:32px}
+  #c1r-modal .c1r-ptitle{font-size:14px}
   #c1r-modal .c1r-reco{padding:16px 16px;gap:12px}
-  #c1r-modal .c1r-gauge{width:132px;height:84px}
-  #c1r-modal .c1r-gauge svg{width:132px;height:74px}
-  #c1r-modal .c1r-gauge-val{top:38px;font-size:23px}
-  #c1r-modal .c1r-gauge-cap{top:64px}
-  #c1r-modal .c1-big-score{font-size:52px}
+  #c1r-modal .c1r-gauge{width:120px;height:76px}
+  #c1r-modal .c1r-gauge svg{width:120px;height:67px}
+  #c1r-modal .c1r-gauge-val{top:34px;font-size:21px}
+  #c1r-modal .c1r-gauge-cap{top:58px}
+  #c1r-modal .c1-big-score{font-size:44px}
+}
+
+/* ══ Report popup: reading aids ═════════════════════════════════════════════════
+   The popup holds a lot, so it helps the eye: the values that matter are picked out (a name, a
+   time, a count, an address), each kind of thing has its own colour, and long lists show their
+   first rows and fold the rest. Colours come from one small palette that has a light variant. */
+#c1r-modal{--tn-pu:#cdb9ff;--tn-bl:#9cc2ff;--tn-gr:#5fe0ae;--tn-am:#f7c35c;--tn-rd:#ff9a9a}
+:root[data-theme="light"] #c1r-modal{--tn-pu:#4c1d95;--tn-bl:#1e3a8a;--tn-gr:#035a3f;--tn-am:#6e4000;--tn-rd:#9b1c1c}
+#c1r-modal .c1r-split{align-items:start}
+
+/* the value itself: amber for times and counts, violet for names, blue for addresses */
+#c1r-modal .c1r-hl{--hc:var(--tn-am);color:var(--hc);background:color-mix(in srgb,var(--hc) 15%,transparent);
+  padding:1px 6px;border-radius:5px;font-weight:700;font-style:normal}
+#c1r-modal .c1r-hl.n{--hc:var(--tn-pu);font-family:var(--c1-mono);font-weight:600;font-size:.95em}
+#c1r-modal .c1r-hl.u{--hc:var(--tn-bl);font-family:var(--c1-mono);font-weight:600;font-size:.95em;overflow-wrap:anywhere}
+#c1r-modal .c1r-hl.z{--hc:var(--t2);font-weight:600}
+
+/* a label with its own colour: roles, types, methods, counts */
+#c1r-modal .c1r-bdg{--tn:var(--t2);display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:99px;
+  font-size:var(--fs-small);font-weight:700;line-height:1.5;white-space:nowrap;color:var(--tn);
+  background:color-mix(in srgb,var(--tn) 13%,transparent);border:1px solid color-mix(in srgb,var(--tn) 38%,transparent)}
+#c1r-modal .c1r-bdg b{font-family:var(--c1-mono);font-weight:800}
+#c1r-modal .c1r-bdg small{font-size:var(--fs-micro);font-weight:600;opacity:.8}
+#c1r-modal .c1r-bdg.pu{--tn:var(--tn-pu)}
+#c1r-modal .c1r-bdg.bl{--tn:var(--tn-bl)}
+#c1r-modal .c1r-bdg.gr{--tn:var(--tn-gr)}
+#c1r-modal .c1r-bdg.am{--tn:var(--tn-am)}
+#c1r-modal .c1r-bdg.rd{--tn:var(--tn-rd)}
+#c1r-modal .c1r-bdg.mu{background:transparent;border-color:var(--b2)}
+#c1r-modal .c1r-bdg.sq{border-radius:6px;padding:1px 7px;font-family:var(--c1-mono);font-size:var(--fs-micro);letter-spacing:.03em}
+#c1r-modal .c1r-tagpill{display:inline-flex;align-items:center;padding:1px 9px;border-radius:99px;font-size:var(--fs-micro);font-weight:600;
+  color:var(--t2);border:1px dashed var(--b2)}
+#c1r-modal .c1r-tagpill.is-warn{color:var(--tn-am);border-color:color-mix(in srgb,var(--tn-am) 45%,transparent)}
+#c1r-modal .c1r-phead + .c1r-sub,#c1r-modal .c1r-phead + .c1r-leg,#c1r-modal .c1r-phead + .c1r-facts{margin-top:0}
+
+/* How it is set up: worth a look, then at a glance */
+#c1r-modal .c1r-fls{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:9px}
+#c1r-modal .c1r-fl{display:flex;gap:11px;padding:11px 14px;border-radius:9px;background:var(--bg1);border:1px solid var(--b1);border-left:3px solid var(--tn-bl)}
+#c1r-modal .c1r-fl.wide{grid-column:1/-1}
+#c1r-modal .c1r-fl-ico{flex-shrink:0;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--tn-bl);
+  background:color-mix(in srgb,var(--tn-bl) 14%,transparent)}
+#c1r-modal .c1r-fl-b{min-width:0;flex:1}
+#c1r-modal .c1r-fl-t{font:800 var(--fs-micro)/1 var(--c1-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--t2);margin:3px 0 7px}
+#c1r-modal .c1r-fl-v{font-size:var(--fs-body);color:var(--t0);line-height:1.75}
+#c1r-modal .c1r-fl-w{font-size:var(--fs-small);color:var(--t2);margin-top:3px;line-height:1.5}
+#c1r-modal .c1r-sched{display:flex;flex-direction:column;gap:6px}
+#c1r-modal .c1r-sched-r{display:flex;flex-wrap:wrap;align-items:center;gap:4px 9px}
+#c1r-modal .c1r-calm{display:flex;align-items:center;gap:8px;font-size:var(--fs-body);color:var(--t1);padding:2px 0}
+#c1r-modal .c1r-calm svg{color:var(--tn-gr);flex-shrink:0}
+#c1r-modal .c1r-fks{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+#c1r-modal .c1r-fk{padding:9px 12px;border-radius:8px;background:var(--bg1);border:1px solid var(--b1);min-width:0}
+#c1r-modal .c1r-fk .l{font:700 var(--fs-micro)/1 var(--c1-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--t3);margin-bottom:7px}
+#c1r-modal .c1r-fk .v{font-size:var(--fs-body);color:var(--t0);line-height:1.45;font-weight:600;word-break:break-word}
+#c1r-modal .c1r-fk .s{font-size:var(--fs-small);color:var(--t2);margin-top:3px;line-height:1.45}
+#c1r-modal .c1r-apis{display:flex;flex-wrap:wrap;gap:6px}
+#c1r-modal .c1r-api{display:inline-flex;align-items:center;gap:7px;padding:3px 4px 3px 11px;border-radius:99px;background:var(--bg1);
+  border:1px solid var(--b2);font-size:var(--fs-small)}
+#c1r-modal .c1r-api b{font-weight:700;color:var(--t0)}
+#c1r-modal .c1r-api i{font:700 var(--fs-micro)/1.5 var(--c1-mono);font-style:normal;min-width:20px;text-align:center;padding:0 7px;border-radius:99px;
+  background:var(--bg3);color:var(--t2)}
+#c1r-modal .c1r-api.sens{border-color:color-mix(in srgb,var(--tn-am) 50%,transparent);background:color-mix(in srgb,var(--tn-am) 9%,transparent)}
+#c1r-modal .c1r-api.sens i{background:color-mix(in srgb,var(--tn-am) 22%,transparent);color:var(--tn-am)}
+
+/* What it did when run */
+#c1r-modal .c1r-fact.is-on{border-color:color-mix(in srgb,var(--tn-am) 50%,transparent);background:color-mix(in srgb,var(--tn-am) 9%,transparent)}
+#c1r-modal .c1r-fact.is-on b{color:var(--tn-am)}
+#c1r-modal .c1r-none{display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:var(--fs-small);color:var(--t2);line-height:1.5}
+#c1r-modal .c1r-none svg{color:var(--tn-gr);flex-shrink:0;margin-top:2px}
+#c1r-modal .c1r-reqsum{font-size:var(--fs-body);color:var(--t1);line-height:1.9;margin:0 0 10px}
+#c1r-modal .c1r-dot{color:var(--t3);margin:0 8px}
+#c1r-modal .c1r-url b{font-weight:700;color:var(--t0)}
+#c1r-modal .c1r-url .p{color:var(--t3)}
+#c1r-modal .c1r-sent{color:var(--tn-am);font-weight:700}
+#c1r-modal .c1r-sent small{font-size:var(--fs-small);font-weight:500;color:var(--t2)}
+
+/* Servers and indicators */
+#c1r-modal .c1r-leg{display:flex;flex-wrap:wrap;align-items:center;gap:7px 6px;margin-bottom:12px}
+#c1r-modal .c1r-leg-sep{width:1px;height:16px;background:var(--b2);margin:0 6px}
+#c1r-modal .c1r-ip{font-family:var(--c1-mono);font-size:var(--fs-small);color:var(--t2);white-space:nowrap}
+#c1r-modal .c1r-iochead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:18px}
+#c1r-modal .c1r-iochead .c1r-sub{margin:0}
+#c1r-modal .c1r-iocs{display:flex;flex-direction:column;gap:7px;margin-top:9px}
+#c1r-modal .c1r-ioc{border:1px solid var(--b1);border-radius:9px;background:var(--bg1)}
+#c1r-modal .c1r-ioc > button{width:100%;display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:36px;background:none;border:0;color:var(--t0);
+  font-family:inherit;font-size:var(--fs-body);font-weight:700;line-height:1.3;text-align:left;cursor:pointer;border-radius:9px}
+#c1r-modal .c1r-ioc > button:hover{background:var(--bg2)}
+#c1r-modal .c1r-ioc > button svg{margin-left:auto;color:var(--t2);transition:transform .15s}
+#c1r-modal .c1r-ioc.open > button svg{transform:rotate(180deg)}
+#c1r-modal .c1r-ioc .c1r-chips{padding:2px 12px 12px}
+
+/* a folded panel keeps only its heading, whatever display its contents were given above */
+#c1r-modal .c1r-panel.is-collapsed > :not(.c1r-phead){display:none}
+
+/* long lists show their first rows; the button opens the rest */
+#c1r-modal .c1r-fold:not(.open) .more{display:none}
+#c1r-modal .c1r-fold > .c1r-more{margin-top:8px}
+@media print{
+  #c1r-modal tr.more{display:table-row!important}
+  #c1r-modal .c1r-chips.more{display:flex!important}
+  #c1r-modal .c1r-fold > .c1r-more{display:none!important}
+}
+
+/* ══ Report popup: scores and engine logos ═════════════════════════════════════
+   The score is drawn, not boxed: a ring in the header and in the Advanced card, a zoned gauge in
+   the Simple summary, and a pill for the verdict. The two models and the sandbox each carry a
+   small mark that draws in once. Nothing loops; reduced motion shows the final state at once. */
+#c1r-modal .c1r-ringed{--c1p:0;--rw:5px;--rk:var(--k,var(--c1-acc));position:relative;isolation:isolate;display:grid;place-items:center;
+  border-radius:50%;border:0;color:var(--t0);font:800 15px/1 var(--c1-mono);letter-spacing:-.03em;
+  background:color-mix(in srgb,var(--rk) 11%,var(--bg1));
+  box-shadow:0 10px 22px -12px color-mix(in srgb,var(--rk) 75%,transparent)}
+#c1r-modal .c1r-ringed::before{content:'';position:absolute;inset:0;border-radius:50%;z-index:-1;
+  background:conic-gradient(color-mix(in srgb,var(--rk) 52%,#fff),var(--rk) calc(var(--c1p) * 1%),color-mix(in srgb,var(--rk) 17%,transparent) 0);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - var(--rw)),#000 calc(100% - var(--rw) + 1px));
+          mask:radial-gradient(farthest-side,transparent calc(100% - var(--rw)),#000 calc(100% - var(--rw) + 1px))}
+#c1r-modal .c1r-modal-dot.c1r-ringed{width:46px;height:46px;font-size:15px}
+#c1r-modal .c1-big-score.c1r-ringed{--rw:7px;width:88px;height:88px;font-size:30px;font-weight:900}
+
+/* the verdict pill in the summary: a round icon, a soft tint, one entrance */
+#c1r-modal .c1-vb.lg{--vb-h:38px;--vb-ico:17px;height:38px;border-radius:99px;overflow:visible;padding:0 20px 0 52px;font-size:18px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--k) 24%,transparent),color-mix(in srgb,var(--k) 6%,transparent));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--k) 46%,transparent),0 10px 24px -16px var(--k);
+  animation:c1PillIn .55s cubic-bezier(.22,1,.36,1) both}
+#c1r-modal .c1-vb.lg::before{left:5px;top:5px;width:28px;height:28px;z-index:1;-webkit-mask-size:var(--vb-ico) var(--vb-ico)}
+#c1r-modal .c1-vb.lg::after{content:'';position:absolute;left:5px;top:5px;width:28px;height:28px;border-radius:50%;z-index:0;background:var(--k);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--k) 20%,transparent)}
+@keyframes c1PillIn{from{opacity:0;transform:translateY(6px) scale(.94)}to{opacity:1;transform:none}}
+
+/* the gauge: three zones, a tick at each threshold, a gradient arc, a marker at the end */
+#c1r-modal .c1r-gauge svg .zn{fill:none;stroke-width:8;stroke-linecap:butt}
+#c1r-modal .c1r-gauge svg .z1{stroke:var(--tn-gr);opacity:.2}
+#c1r-modal .c1r-gauge svg .z2{stroke:var(--tn-am);opacity:.2}
+#c1r-modal .c1r-gauge svg .z3{stroke:var(--tn-rd);opacity:.2}
+#c1r-modal .c1r-gauge svg .tk{stroke:var(--bg1);stroke-width:1.6}
+#c1r-modal .c1r-gauge svg .ga{filter:drop-shadow(0 0 4px currentColor)}
+#c1r-modal .c1r-gauge svg .gd{fill:var(--bg1);stroke-width:2.6;animation:c1GaugeDot .4s .8s cubic-bezier(.22,1,.36,1) both}
+@keyframes c1GaugeDot{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:none}}
+#c1r-modal .c1r-gauge svg .gd{transform-box:fill-box;transform-origin:center}
+
+/* the two models, beside their own scores */
+#c1r-modal .c1r-meter-name{display:inline-flex;align-items:center}
+#c1r-modal .c1r-meter-top{align-items:center}
+#c1r-modal .c1r-logo{--lg:var(--tn-bl);display:inline-grid;place-items:center;width:28px;height:28px;margin-right:10px;border-radius:9px;flex-shrink:0;
+  color:var(--lg);background:linear-gradient(145deg,color-mix(in srgb,var(--lg) 26%,transparent),color-mix(in srgb,var(--lg) 7%,transparent));
+  border:1px solid color-mix(in srgb,var(--lg) 42%,transparent);transition:transform .2s,box-shadow .2s}
+#c1r-modal .c1r-logo.iso{--lg:var(--tn-pu)}
+#c1r-modal .c1r-logo svg{width:22px;height:22px;overflow:visible}
+#c1r-modal .c1r-logo:hover{transform:translateY(-1px) rotate(-5deg);box-shadow:0 8px 16px -8px var(--lg)}
+#c1r-modal .c1r-logo .b{fill:currentColor;transform-box:fill-box;transform-origin:bottom;animation:c1MkRise .6s cubic-bezier(.22,1,.36,1) both}
+#c1r-modal .c1r-logo .b1{opacity:.55}
+#c1r-modal .c1r-logo .b2{opacity:.78;animation-delay:.1s}
+#c1r-modal .c1r-logo .b3{animation-delay:.2s}
+#c1r-modal .c1r-logo .bl{stroke:currentColor;stroke-width:1.4;stroke-linecap:round;opacity:.5;fill:none}
+#c1r-modal .c1r-logo .ln{stroke:currentColor;stroke-width:1.7;stroke-linecap:round;fill:none;stroke-dasharray:60;animation:c1MkDraw .8s .1s ease-out both}
+#c1r-modal .c1r-logo .nd{fill:currentColor;transform-box:fill-box;transform-origin:center;animation:c1MkPop .4s .5s cubic-bezier(.22,1,.36,1) both}
+#c1r-modal .c1r-logo .od{fill:var(--tn-am);transform-box:fill-box;transform-origin:center;animation:c1MkPop .45s .75s cubic-bezier(.22,1,.36,1) both}
+
+/* what the sandbox ran in */
+#c1r-modal .c1r-runner{--tn:var(--t2);display:flex;align-items:center;gap:12px;padding:8px 14px 8px 8px;margin-bottom:12px;border-radius:14px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--tn) 13%,transparent),color-mix(in srgb,var(--tn) 3%,transparent));
+  border:1px solid color-mix(in srgb,var(--tn) 34%,transparent)}
+#c1r-modal .c1r-runner.gr{--tn:var(--tn-gr)}
+#c1r-modal .c1r-runner.bl{--tn:var(--tn-bl)}
+#c1r-modal .c1r-runner.am{--tn:var(--tn-am)}
+#c1r-modal .c1r-runner.rd{--tn:var(--tn-rd)}
+#c1r-modal .c1r-runner b{display:block;font-size:var(--fs-body);font-weight:800;color:var(--t0);line-height:1.25}
+#c1r-modal .c1r-runner .s{display:block;font-size:var(--fs-small);font-weight:600;color:var(--tn);margin-top:2px}
+#c1r-modal .c1r-rmark{width:48px;height:48px;flex-shrink:0;color:var(--tn);transition:transform .22s}
+#c1r-modal .c1r-runner:hover .c1r-rmark{transform:rotate(-6deg) scale(1.07)}
+#c1r-modal .c1r-rmark svg{width:100%;height:100%;overflow:visible}
+#c1r-modal .c1r-rmark .rg{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;transform:rotate(-90deg);transform-origin:center;
+  animation:c1MkRing 1s cubic-bezier(.22,1,.36,1) both}
+#c1r-modal .c1r-rmark .rg.dsh{opacity:.75;animation:c1MkPop .6s both}
+#c1r-modal .c1r-rmark .sh{fill:color-mix(in srgb,currentColor 14%,transparent);stroke:currentColor;stroke-width:1.2;stroke-linejoin:round;
+  transform-box:fill-box;transform-origin:center;animation:c1MkPop .5s .3s cubic-bezier(.22,1,.36,1) both}
+#c1r-modal .c1r-rmark .gl{transform-box:fill-box;transform-origin:center;animation:c1MkPop .5s .45s cubic-bezier(.22,1,.36,1) both}
+#c1r-modal .c1r-rmark .wn{fill:color-mix(in srgb,var(--bg0) 70%,transparent);stroke:currentColor;stroke-width:1.8}
+#c1r-modal .c1r-rmark .st{stroke:currentColor;stroke-width:1.6;fill:none}
+#c1r-modal .c1r-rmark .fl{fill:currentColor}
+#c1r-modal .c1r-rmark .cb path,#c1r-modal .c1r-rmark .cb polyline,#c1r-modal .c1r-rmark .cb line{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
+#c1r-modal .c1r-rmark .ok{transform-box:fill-box;transform-origin:center;animation:c1MkPop .45s .9s cubic-bezier(.22,1,.36,1) both}
+#c1r-modal .c1r-rmark .ok circle{fill:currentColor}
+#c1r-modal .c1r-rmark .ok path{fill:none;stroke:var(--bg0);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#c1r-modal .c1r-rmark .sl{stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-dasharray:40;animation:c1MkDraw .6s .7s ease-out both}
+@keyframes c1MkRing{from{stroke-dashoffset:var(--arc,100)}to{stroke-dashoffset:0}}
+@keyframes c1MkPop{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:none}}
+@keyframes c1MkRise{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes c1MkDraw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){
+  #c1r-modal .c1-vb.lg,#c1r-modal .c1r-gauge svg .gd,#c1r-modal .c1r-logo *,#c1r-modal .c1r-rmark *{animation:none!important}
+}
+@media (max-width:760px){
+  #c1r-modal .c1r-modal-dot.c1r-ringed{width:40px;height:40px;font-size:13px}
+  #c1r-modal .c1-big-score.c1r-ringed{width:76px;height:76px;font-size:26px}
+}
+@media print{
+  #c1r-modal .c1r-ringed::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #c1r-modal .c1-vb.lg,#c1r-modal .c1r-gauge svg .gd,#c1r-modal .c1r-logo *,#c1r-modal .c1r-rmark *{animation:none!important}
 }
 
 /* ── C4 Forensic Engine ─────────────────────────────────── */
@@ -10084,12 +10217,15 @@ function _c1Busy(spinEl, labelEl, base) {
 function _c1Id(s) { return String(s || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); }
 
 // ── Score / color helpers ─────────────────────────────────────────────────
+// The whole number the reader sees decides the colour, as it decides the verdict (see report.verdict_for).
 function c1Color(score) {
+  score = Math.round(Number(score) || 0);
   if (score >= 70) return '#ef4444';
   if (score >= 40) return '#f59e0b';
   return '#10b981';
 }
 function c1BadgeClass(score) {
+  score = Math.round(Number(score) || 0);
   if (score >= 70) return 'danger';
   if (score >= 40) return 'warn';
   return 'safe';
@@ -10214,13 +10350,80 @@ function c1IsolationHtml(iso) {
   );
 }
 
+// ── Score ring and engine logos ─────────────────────────────────────────────
+// A ring is a CSS conic gradient driven by one number (--c1p), so it costs no extra nodes. The number
+// is moved by a short requestAnimationFrame ease so the arc draws in once. It is a plain custom
+// property on purpose: registering it with @property would apply to the whole page, and C2 has its own --p.
+function _c1RingIn(el, pct, colour) {
+  if (!el) return;
+  const to = Math.max(0, Math.min(100, Number(pct) || 0));
+  if (colour) el.style.setProperty('--rk', colour);
+  if (el._c1RingRaf) cancelAnimationFrame(el._c1RingRaf);
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || !to) { el.style.setProperty('--c1p', String(to)); return; }
+  el.style.setProperty('--c1p', '0');
+  const t0 = performance.now(), ms = 1100;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms);
+    el.style.setProperty('--c1p', (to * (1 - Math.pow(1 - k, 4))).toFixed(2));        // eases out onto the score
+    el._c1RingRaf = k < 1 ? requestAnimationFrame(step) : 0;
+  };
+  el._c1RingRaf = requestAnimationFrame(step);
+}
+
+// The two models, drawn from what they do. Boosting adds rounds that each stand taller than the
+// last; an isolation forest cuts a tree until a point stands alone, and the odd one out is amber.
+const _C1_LOGO = {
+  xgb: '<span class="c1r-logo xgb" title="XGBoost: gradient boosted trees" aria-hidden="true">' +
+    '<svg viewBox="0 0 32 32"><rect class="b b1" x="6" y="17" width="5" height="8" rx="1.6"/><rect class="b b2" x="13.5" y="12" width="5" height="13" rx="1.6"/>' +
+    '<rect class="b b3" x="21" y="6.5" width="5" height="18.5" rx="1.6"/><path class="bl" d="M5 27.5h22"/></svg></span>',
+  iso: '<span class="c1r-logo iso" title="Isolation Forest: anomaly detection" aria-hidden="true">' +
+    '<svg viewBox="0 0 32 32"><path class="ln" d="M16 7.5 9.5 15.5M16 7.5 23 15.5M9.5 15.5 6.5 24M9.5 15.5 13 24"/>' +
+    '<circle class="nd" cx="16" cy="7" r="2.3"/><circle class="nd" cx="9.5" cy="15.5" r="2.1"/><circle class="nd" cx="6.5" cy="24.5" r="1.9"/>' +
+    '<circle class="nd" cx="13" cy="24.5" r="1.9"/><circle class="od" cx="23.5" cy="16" r="3"/></svg></span>',
+};
+
+// What the sandbox ran in, as a mark and two short words. Disposable VM and host process are the two
+// that matter; the rest are the same family so a changed setting still has a mark.
+const _C1_RUNNER = {
+  ephemeral_vm:    { name: 'Windows Sandbox', sub: 'Disposable virtual machine', tone: 'gr' },
+  container:       { name: 'Container',       sub: 'Shares the host kernel',     tone: 'bl' },
+  browser_profile: { name: 'Host process',    sub: 'Partially isolated',         tone: 'am' },
+  none:            { name: 'No containment',  sub: 'Ran on the host',            tone: 'rd' },
+};
+function _c1RunnerMark(level) {
+  // The placing transforms sit on outer groups: the entrance animation moves the inner element, and a CSS
+  // transform on the same element would replace the SVG one and drop the shape at the corner.
+  const win = k => '<g transform="translate(32 32) scale(' + k + ') translate(-32 -32)"><g class="gl"><rect x="21.5" y="24" width="21" height="16" rx="3" class="wn"/>' +
+    '<path d="M21.5 29.2h21" class="st"/><circle cx="24.8" cy="26.7" r=".9" class="fl"/><path d="M29.5 32l5.5 2.9-5.5 2.9z" class="fl"/></g></g>';
+  const ring = (arc, dashed) => '<circle class="rg' + (dashed ? ' dsh' : '') + '" cx="32" cy="32" r="28" pathLength="100" style="--arc:' + arc + '" stroke-dasharray="' + (dashed ? '3.2 4.1' : arc + ' ' + (100 - arc)) + '"/>';
+  let inner;
+  if (level === 'ephemeral_vm') {
+    inner = ring(100) + '<g transform="translate(13 11.5) scale(1.62)"><path class="sh" d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></g>' + win(0.62) +
+      '<g class="ok"><circle cx="50" cy="14" r="6.5"/><path d="M46.8 14.2l2.2 2.2 4.2-4.4"/></g>';
+  } else if (level === 'container') {
+    inner = ring(100, true) + '<g transform="translate(18.5 17.5) scale(1.2)"><g class="gl cb"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" transform="translate(-1.5 -1)"/>' +
+      '<polyline points="1.5 5.96 10.5 11 19.5 5.96"/><line x1="10.5" y1="21" x2="10.5" y2="11"/></g></g>';
+  } else if (level === 'browser_profile') {
+    inner = ring(66) + win(1);
+  } else {
+    inner = ring(100, true) + win(1) + '<path class="sl" d="M18 46L46 18"/>';
+  }
+  return '<svg viewBox="0 0 64 64" aria-hidden="true">' + inner + '</svg>';
+}
+function _c1RunnerHtml(level) {
+  const m = _C1_RUNNER[level] || _C1_RUNNER.none;
+  return '<div class="c1r-runner ' + m.tone + '"><span class="c1r-rmark">' + _c1RunnerMark(level) + '</span>' +
+    '<div><b>' + _c1Esc(m.name) + '</b><span class="s">' + _c1Esc(m.sub) + '</span></div></div>';
+}
+
 // One model output, drawn. The value is unchanged from what the classifier
 // returned — this is presentation, not a different measurement.
-function c1MeterHtml(name, valueText, pct, colour, note) {
+function c1MeterHtml(name, valueText, pct, colour, note, logo) {
   const w = Math.max(0, Math.min(100, Number(pct) || 0));
   return '<div class="c1r-meter">' +
       '<div class="c1r-meter-top">' +
-        '<span class="c1r-meter-name">' + _c1Esc(name) + '</span>' +
+        '<span class="c1r-meter-name">' + (logo || '') + _c1Esc(name) + '</span>' +
         '<span class="c1r-meter-val">' + _c1Esc(valueText) + '</span>' +
       '</div>' +
       '<div class="c1r-meter-track">' +
@@ -10228,144 +10431,6 @@ function c1MeterHtml(name, valueText, pct, colour, note) {
         '%;background:' + colour + '"></div>' +
       '</div>' +
       (note ? '<div class="c1r-meter-note">' + _c1Esc(note) + '</div>' : '') +
-    '</div>';
-}
-
-// ── Engine signature ────────────────────────────────────────────────────────
-// Each analysis panel closes with the machinery that produced its numbers.
-// The marks are inline SVG rather than image files: they inherit the theme,
-// stay sharp at any DPI, print correctly, and add nothing to load. Both are
-// drawn on the same 64-unit grid with the same outer ring so they read as one
-// family rather than two clip-art borrowings.
-
-// Static: an X split by two crossing blades. The top wedge is a recursive
-// partition with one point cut off on its own (amber) — what an isolation
-// forest does; the bottom wedge is three boosting rounds, each taller than the
-// last — what gradient boosting does. The mark states the two algorithms.
-const _C1_MARK_STATIC =
-  '<svg viewBox="0 0 64 64" width="46" height="46" role="img" ' +
-       'aria-label="XGBoost and Isolation Forest">' +
-    '<defs><linearGradient id="c1mkS" x1="0" y1="0" x2="1" y2="1">' +
-      '<stop offset="0" stop-color="#a78bfa"/><stop offset="1" stop-color="#4f86e8"/>' +
-    '</linearGradient></defs>' +
-    '<circle cx="32" cy="32" r="30" fill="none" stroke="url(#c1mkS)" ' +
-            'stroke-width="1.6" opacity=".55"/>' +
-    '<circle cx="32" cy="32" r="25" fill="rgba(145,101,247,.10)" ' +
-            'stroke="rgba(145,101,247,.30)" stroke-width="1"/>' +
-    '<path d="M19 19 L45 45" stroke="url(#c1mkS)" stroke-width="4.6" stroke-linecap="round"/>' +
-    '<path d="M45 19 L19 45" stroke="url(#c1mkS)" stroke-width="4.6" stroke-linecap="round"/>' +
-    '<g stroke="#8fb4e8" stroke-width="1.6" stroke-linecap="round" fill="none">' +
-      '<path d="M32 12.5 V16.5"/><path d="M32 16.5 L27.5 21.4"/><path d="M32 16.5 L36.5 21.4"/>' +
-    '</g>' +
-    '<circle cx="27.5" cy="22.6" r="2" fill="#f5a623"/>' +
-    '<circle cx="36.5" cy="22.6" r="2" fill="#8fb4e8" opacity=".7"/>' +
-    '<g>' +
-      '<rect x="25.2" y="47.4" width="3.4" height="5.4" rx="1.3" fill="#4f86e8" opacity=".8"/>' +
-      '<rect x="30.3" y="44.4" width="3.4" height="8.4" rx="1.3" fill="#7c9df0" opacity=".9"/>' +
-      '<rect x="35.4" y="41.4" width="3.4" height="11.4" rx="1.3" fill="#a78bfa"/>' +
-    '</g>' +
-    '<circle cx="13.6" cy="32" r="1.7" fill="#4a6fa5"/>' +
-    '<circle cx="50.4" cy="32" r="1.7" fill="#4a6fa5"/>' +
-  '</svg>';
-
-// Dynamic: a browser mid-run, inside a shield, inside a dashed boundary. The
-// dashes are the point — the machine holding it exists only for this analysis.
-const _C1_MARK_DYN =
-  '<svg viewBox="0 0 64 64" width="46" height="46" role="img" ' +
-       'aria-label="Disposable virtual machine">' +
-    '<defs><linearGradient id="c1mkD" x1="0" y1="0" x2="1" y2="1">' +
-      '<stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#4f86e8"/>' +
-    '</linearGradient></defs>' +
-    '<circle cx="32" cy="32" r="30" fill="none" stroke="url(#c1mkD)" ' +
-            'stroke-width="1.6" opacity=".55"/>' +
-    '<circle cx="32" cy="32" r="25.5" fill="rgba(16,185,129,.08)"/>' +
-    '<circle cx="32" cy="32" r="25.5" fill="none" stroke="#10b981" stroke-width="1.2" ' +
-            'stroke-dasharray="3.5 4.5" opacity=".55"/>' +
-    '<g transform="translate(9.2,9.2) scale(1.9)">' +
-      '<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z" ' +
-            'fill="rgba(16,185,129,.13)" stroke="url(#c1mkD)" stroke-width="1.5" ' +
-            'stroke-linejoin="round"/>' +
-    '</g>' +
-    '<rect x="24" y="24.5" width="16" height="12.5" rx="2.2" fill="rgba(5,9,15,.55)" ' +
-          'stroke="#8fb4e8" stroke-width="1.4"/>' +
-    '<path d="M24 28.2 H40" stroke="#8fb4e8" stroke-width="1.4"/>' +
-    '<circle cx="26.4" cy="26.4" r=".9" fill="#f5a623"/>' +
-    '<circle cx="29" cy="26.4" r=".9" fill="#8fb4e8" opacity=".6"/>' +
-    '<path d="M29.6 30.6 L34.6 33 L29.6 35.4 Z" fill="#10b981"/>' +
-  '</svg>';
-
-// What produced the dynamic result depends on the containment the run got, so
-// the wordmark is derived rather than fixed: a container run must not be
-// signed "disposable virtual machine".
-const _C1_ENGINE_DYN = {
-  ephemeral_vm: ['Windows Sandbox', 'Hyper-V VM',
-    'The extension is installed and run inside a virtual machine built from a ' +
-    'clean image for this analysis alone, then destroyed. Nothing it does ' +
-    'reaches the host.'],
-  container: ['Container', 'shared kernel',
-    'The extension runs in an isolated container with its own filesystem, ' +
-    'though it shares a kernel with this machine.'],
-  browser_profile: ['Throwaway browser profile', 'host process',
-    'The extension runs in a disposable browser profile that is discarded ' +
-    'afterwards, but the process itself is running on this machine.'],
-  none: ['Instrumented Chromium', 'no containment',
-    'The extension was executed with no containment layer between it and this ' +
-    'machine.'],
-};
-
-function c1EngineHtml(kind, opts) {
-  opts = opts || {};
-  let mark, eyebrow, name, tag, specs = [], idle = false;
-
-  if (kind === 'static') {
-    mark = _C1_MARK_STATIC;
-    eyebrow = 'Static engine';
-    specs = ['Reads manifest + source', 'Never executes'];
-    if (opts.modelsRan === false) {
-      // Signing this "XGBoost + Isolation Forest" would credit a verdict to
-      // two classifiers that were never asked.
-      name = 'Blocklist authority<i>|</i>models not run';
-      tag  = 'The extension ID matched a fully documented blocklist record, so ' +
-             'the verdict was settled without consulting the classifiers.';
-      idle = true;
-    } else {
-      name = 'XGBoost<i>|</i>Isolation Forest';
-      tag  = 'A gradient-boosted classifier scores the manifest and source ' +
-             'against known malicious extensions, while an isolation forest ' +
-             'flags anything unlike a normal one. Neither ever runs the code.';
-    }
-  } else {
-    mark = _C1_MARK_DYN;
-    eyebrow = 'Dynamic engine';
-    specs = opts.level === 'ephemeral_vm'
-      ? ['Runs the extension', 'Machine destroyed after']
-      : ['Runs the extension', 'Behaviour recorded live'];
-    if (!opts.executed) {
-      name = 'Sandbox<i>|</i>not run';
-      tag  = 'No behaviour was observed for this extension, so the verdict ' +
-             'rests on static analysis alone.';
-      specs = ['No behaviour observed'];
-      idle = true;
-    } else {
-      const e = _C1_ENGINE_DYN[opts.level] || _C1_ENGINE_DYN.none;
-      name = _c1Esc(e[0]) + '<i>|</i>' + _c1Esc(e[1]);
-      tag  = e[2];
-    }
-  }
-
-  return '<div class="c1r-engine' + (kind === 'static' ? '' : ' is-dyn') +
-             (idle ? ' is-idle' : '') + '">' +
-      '<span class="c1r-engine-mark">' + mark + '</span>' +
-      '<span class="c1r-engine-text">' +
-        '<span class="c1r-engine-eyebrow">' + _c1Esc(eyebrow) + '</span>' +
-        '<span class="c1r-engine-name">' + name + '</span>' +
-        '<span class="c1r-engine-tag">' + _c1Esc(tag) + '</span>' +
-        (specs.length
-          ? '<span class="c1r-engine-specs">' +
-              specs.map(t => '<span class="c1r-engine-spec">' + _c1Esc(t) + '</span>').join('') +
-            '</span>'
-          : '') +
-      '</span>' +
     '</div>';
 }
 
@@ -10608,11 +10673,11 @@ function c1OpenReport(data) {
     sub.innerHTML = bits.join('<span class="sep">  \u00b7  </span>');
   }
   if (dot) {
-    // A score badge in the verdict colour; dark ink on the amber and green fills for contrast.
+    // A score ring: the arc is the score out of 100, drawn once, in the verdict colour.
+    dot.className = 'c1r-modal-dot c1r-ringed k-' + _c1VerdictKind(d.verdict);
     dot.textContent = String(score);
     dot.title = 'Threat score ' + score + ' out of 100';
-    dot.style.background = c1Color(score);
-    dot.style.color = score >= 70 ? '#fff' : '#101426';
+    _c1RingIn(dot, score);
   }
   const shell = m.querySelector('.c1r-modal-shell');
   if (shell) shell.scrollTop = 0;
@@ -10705,20 +10770,27 @@ function _c1Prose(s) {
 // would read as "we are only 12% sure this is safe", the exact inverse of
 // what the pipeline measured.
 function c1GaugeHtml(score, colour) {
-  const pct  = Math.max(0, Math.min(100, Number(score) || 0));
+  const pct = Math.max(0, Math.min(100, Number(score) || 0));
   const R = 52, CX = 66, CY = 62;
-  const len  = Math.PI * R;                       // arc length of a semicircle
-  const dash = (pct / 100) * len;
-  const arc  = `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`;
+  const arc = `M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`;
+  const at  = (p, r) => { const a = Math.PI * (1 - p / 100); return [(CX + r * Math.cos(a)).toFixed(2), (CY - r * Math.sin(a)).toFixed(2)]; };
+  // the scale is drawn, not written: green, amber and red zones, with a tick where each begins
+  const tick = p => { const a = at(p, R - 8), b = at(p, R + 8); return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" class="tk"/>`; };
+  const end  = at(pct, R);
   return `
     <div class="c1r-gauge">
       <svg viewBox="0 0 132 74" role="img" aria-label="Threat score ${pct} out of 100">
-        <path d="${arc}" fill="none" stroke="var(--b1)" stroke-width="9" stroke-linecap="round"/>
-        <path id="c1r-gauge-arc" d="${arc}" fill="none" stroke="${colour}" stroke-width="9"
-              stroke-linecap="round"
-              stroke-dasharray="0 ${len.toFixed(2)}"
-              data-dash="${dash.toFixed(2)}" data-len="${len.toFixed(2)}"
-              style="transition:stroke-dasharray .9s cubic-bezier(.22,1,.36,1)"/>
+        <defs><linearGradient id="c1gg" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="${colour}" stop-opacity=".5"/><stop offset="1" stop-color="${colour}"/>
+        </linearGradient></defs>
+        <path d="${arc}" pathLength="100" class="zn z1" stroke-dasharray="39 100"/>
+        <path d="${arc}" pathLength="100" class="zn z2" stroke-dasharray="29 100" stroke-dashoffset="-40.5"/>
+        <path d="${arc}" pathLength="100" class="zn z3" stroke-dasharray="29 100" stroke-dashoffset="-71"/>
+        ${tick(40)}${tick(70)}
+        <path id="c1r-gauge-arc" class="ga" d="${arc}" pathLength="100" fill="none" stroke="url(#c1gg)" stroke-width="8"
+              stroke-linecap="round" stroke-dasharray="0 200" data-dash="${pct}" data-len="100"
+              style="color:${colour};transition:stroke-dasharray .9s cubic-bezier(.22,1,.36,1)"/>
+        <circle class="gd" cx="${end[0]}" cy="${end[1]}" r="5" style="stroke:${colour}"/>
       </svg>
       <div class="c1r-gauge-val" id="c1r-gauge-val" style="color:${colour}"
            data-target="${pct}">0%</div>
@@ -10772,7 +10844,7 @@ function c1AnimateReport() {
     // Two frames: one to commit the 0 state, one to trigger the transition.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const d = parseFloat(arc.dataset.dash), L = parseFloat(arc.dataset.len);
-      arc.setAttribute('stroke-dasharray', `${d} ${L - d}`);
+      arc.setAttribute('stroke-dasharray', `${d} ${L * 2}`);       // a long gap: a repeat would draw a round cap at the far end
     }));
   }
   const gv = document.getElementById('c1r-gauge-val');
@@ -10936,7 +11008,7 @@ function c1PermPanelHtml(data, compact) {
         <span class="c1r-accent static"></span>
         <div>
           <div class="c1r-ptitle">What this extension is allowed to do</div>
-          <div class="c1r-psub">Declared in its manifest and granted at install, whether or not it is ever used</div>
+          <div class="c1r-psub">Declared in its manifest, whether or not it uses them</div>
         </div>
       </div>
       ${rows}${more}
@@ -11029,7 +11101,7 @@ function c1GraphHtml(data) {
   const W = 1300, H = 620, CX = W / 2, CY = H / 2, N = nodes.length;
   const own = nodes.filter(n => n.grp !== 'site').length, nSite = N - own;
   // A crowded graph gets smaller labels (and so tighter spacing); a normal one keeps the reading size.
-  const dense = own > 26, cw = dense ? 6.9 : 8.3;
+  const dense = own > 26, cw = dense ? 6.3 : 7.5;
 
   // The extension's own servers fill the full circle, on one or two concentric rings
   // so a long list still has room for its labels. The visited sites' servers get an
@@ -11065,8 +11137,8 @@ function c1GraphHtml(data) {
     const short = n.host.length > max ? n.host.slice(0, max - 2) + '\u2026' : n.host;
     // Near the top or bottom the label goes above or below; elsewhere to the side.
     let anchor, lx, ly;
-    if (Math.abs(cos) < 0.22) { anchor = 'middle'; lx = 0; ly = sin < 0 ? -(r + 9) : r + 22; }
-    else { anchor = cos > 0 ? 'start' : 'end'; lx = cos > 0 ? r + 9 : -(r + 9); ly = 5; }
+    if (Math.abs(cos) < 0.22) { anchor = 'middle'; lx = 0; ly = sin < 0 ? -(r + 8) : r + 20; }
+    else { anchor = cos > 0 ? 'start' : 'end'; lx = cos > 0 ? r + 8 : -(r + 8); ly = 4; }
     const pt = { n, cos, sin, r, short, anchor, lx, ly, x: CX + cos * RX[ring], y: CY + sin * RY[ring] };
     return fit(pt);
   });
@@ -11075,7 +11147,7 @@ function c1GraphHtml(data) {
   // Cheap and deterministic, and it only ever moves things away from the hub.
   const lab = p => {
     const w = p.short.length * cw, x0 = p.anchor === 'start' ? p.x + p.lx : p.anchor === 'end' ? p.x + p.lx - w : p.x - w / 2;
-    return [x0, p.y + p.ly - 13, x0 + w, p.y + p.ly + 5];
+    return [x0, p.y + p.ly - 12, x0 + w, p.y + p.ly + 4];
   };
   const dot = p => [p.x - p.r - 2, p.y - p.r - 2, p.x + p.r + 2, p.y + p.r + 2];
   const hit = (u, v) => u[0] < v[2] + 3 && v[0] < u[2] + 3 && u[1] < v[3] + 1 && v[1] < u[3] + 1;
@@ -11339,7 +11411,7 @@ const _C1_GRAPH_CSS = `
 .c1g{position:relative}
 .c1g-legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .c1g-lg{display:inline-flex;align-items:center;gap:7px;padding:4px 12px;border-radius:99px;border:1px solid var(--g-line);
-  background:transparent;color:var(--g-mut);font-family:inherit;font-size:11.5px;font-weight:600;line-height:1.3;cursor:pointer;
+  background:transparent;color:var(--g-mut);font-family:inherit;font-size:11px;font-weight:600;line-height:1.3;cursor:pointer;
   transition:opacity .18s,background-color .18s,border-color .18s}
 span.c1g-lg{cursor:default}
 .c1g-lg:hover{border-color:var(--c,var(--g-acc));color:var(--g-ink)}
@@ -11360,8 +11432,8 @@ span.c1g-lg{cursor:default}
 .c1g-node{cursor:pointer;outline:none;transition:opacity .18s}
 .c1g-pop{transform-box:fill-box;transform-origin:center}
 .c1g-dot{transform-box:fill-box;transform-origin:center;transition:transform .2s cubic-bezier(.2,1.2,.4,1)}
-.c1g.dense .c1g-lbl{font-size:12.5px}
-.c1g-lbl{font-size:15px;fill:var(--g-mut);pointer-events:none;paint-order:stroke;stroke:var(--g-bg);stroke-width:4px;stroke-linejoin:round;
+.c1g.dense .c1g-lbl{font-size:11.5px}
+.c1g-lbl{font-size:13.5px;fill:var(--g-mut);pointer-events:none;paint-order:stroke;stroke:var(--g-bg);stroke-width:4px;stroke-linejoin:round;
   transition:fill .18s}
 .c1g-node:focus-visible .c1g-dot{stroke:var(--g-ink);stroke-width:2.5}
 .c1g-flag{fill:none;stroke:var(--g-bad);stroke-width:1.6;stroke-dasharray:3 3}
@@ -11374,8 +11446,8 @@ span.c1g-lg{cursor:default}
 .c1g-node.hl .c1g-lbl{fill:var(--g-ink);font-weight:700}
 .c1g .c1g-node.off,.c1g .c1g-edge.off{opacity:0!important;pointer-events:none}
 .c1g-hub{fill:var(--g-panel);stroke:var(--g-acc);stroke-width:2.4}
-.c1g-hub-t{font-size:15px;font-weight:800;fill:var(--g-ink);text-anchor:middle}
-.c1g-hub-s{font-size:11px;fill:var(--g-faint);text-anchor:middle}
+.c1g-hub-t{font-size:13.5px;font-weight:800;fill:var(--g-ink);text-anchor:middle}
+.c1g-hub-s{font-size:10.5px;fill:var(--g-faint);text-anchor:middle}
 .c1g-hubpop{transform-box:fill-box;transform-origin:center}
 .c1g-ripple{fill:none;stroke:var(--g-acc);stroke-width:2;opacity:0;transform-box:fill-box;transform-origin:center}
 /* Decoration must never catch the mouse: the ripple ends up nine times its size. */
@@ -11389,16 +11461,16 @@ span.c1g-lg{cursor:default}
 .c1g-lg:active{transform:translateY(1px)}
 .c1g-lg:focus-visible{outline:2px solid var(--g-acc);outline-offset:2px}
 .c1g-tools button:focus-visible{outline:2px solid var(--g-acc)}
-.c1g-zoomval{min-width:44px;text-align:center;font-size:11.5px;font-weight:700;color:var(--g-mut)}
-.c1g-hint{position:absolute;left:12px;bottom:10px;max-width:calc(100% - 24px);font-size:11.5px;color:var(--g-faint);pointer-events:none;
+.c1g-zoomval{min-width:42px;text-align:center;font-size:11px;font-weight:700;color:var(--g-mut)}
+.c1g-hint{position:absolute;left:12px;bottom:10px;max-width:calc(100% - 24px);font-size:11px;color:var(--g-faint);pointer-events:none;
   transition:opacity .25s}
 .c1g.hov .c1g-hint{opacity:0}
 .c1g-card{position:absolute;left:12px;bottom:12px;max-width:min(400px,calc(100% - 24px));padding:10px 13px;border-radius:10px;
   background:var(--g-panel);border:1px solid var(--g-line);box-shadow:0 8px 24px rgba(0,0,0,.28);opacity:0;transform:translateY(6px);
   transition:opacity .16s,transform .16s;pointer-events:none}
 .c1g-card.on{opacity:1;transform:none}
-.c1g-ch{font-weight:700;font-size:14px;color:var(--g-ink);word-break:break-all}
-.c1g-cb{margin-top:5px;display:grid;gap:3px;font-size:12.5px;color:var(--g-mut);line-height:1.5}
+.c1g-ch{font-weight:700;font-size:13px;color:var(--g-ink);word-break:break-all}
+.c1g-cb{margin-top:5px;display:grid;gap:3px;font-size:11.5px;color:var(--g-mut);line-height:1.5}
 .c1g-cb b{color:var(--g-ink);font-weight:600}
 @keyframes c1gPop{from{transform:scale(0)}to{transform:scale(1)}}
 @keyframes c1gGrow{from{transform:scale(0)}to{transform:scale(1)}}
@@ -11621,19 +11693,169 @@ function _c1BehaviourFacts(b, ran) {
   return f.filter(x => x[1] != null);
 }
 
-// The one-line description of each real-page visit, honest about what it is not.
-function _c1BrowseLine(br) {
-  if (!br || br.enabled === false) return 'The real-page visit was switched off for this run.';
-  const v = (br.visited || []).length, f = (br.failed || []).length;
-  if (!v && f) return 'The sandbox could not reach the real pages (' + f + ' failed), so only the test page was observed.';
-  if (!v) return '';
-  return 'Visited ' + v + ' real page' + (v === 1 ? '' : 's') + (f ? ' (' + f + ' could not be reached)' : '') + '. What those sites did is shown for context only and is never held against the extension.';
+// ── Reading aids ────────────────────────────────────────────────────────────
+// The values a reader should not have to hunt for (a name, a time, a count, an address) are picked
+// out, the odd one out gets its own colour, and long lists show their first rows and fold the rest.
+const _C1_HL_RX = /(https?:\/\/[^\s)"]+[^\s).,;"])|("[^"]{1,60}")|(\b\d[\d,]*(?:\.\d+)?(?:\s(?:min|hours?|days?))?\b)/g;
+function _c1Hl(text) {
+  const t = String(text == null ? '' : text).replace(/"\(variable ([^")]+)\)"/g, (m, v) => '"' + v.split('.').pop() + '"');
+  let out = '', last = 0, m;
+  _C1_HL_RX.lastIndex = 0;
+  while ((m = _C1_HL_RX.exec(t))) {
+    out += _c1Esc(t.slice(last, m.index));
+    out += '<b class="c1r-hl ' + (m[1] ? 'u' : m[2] ? 'n' : m[0] === '0' ? 'z' : 'v') + '">' + _c1Esc(m[2] ? m[2].slice(1, -1) : m[0]) + '</b>';
+    last = m.index + m[0].length;
+  }
+  return out + _c1Esc(t.slice(last));
+}
+function _c1HlTag(s, kind) { return '<b class="c1r-hl' + (kind ? ' ' + kind : String(s) === '0' ? ' z' : '') + '">' + _c1Esc(s) + '</b>'; }
+
+// Show or hide the rows (or the list) that follow a "Show all" button.
+function c1Fold(btn) {
+  const w = btn.closest('.c1r-fold');
+  if (!w) return;
+  const open = w.classList.toggle('open');
+  btn.setAttribute('aria-expanded', String(open));
+  if (btn.dataset.more) btn.textContent = open ? (btn.dataset.less || 'Show fewer') : btn.dataset.more;
 }
 
+const _C1_ICO = {
+  clock:    '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  link:     '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  code:     '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  eyeoff:   '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+  globe:    '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  unlock:   '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+  filter:   '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+  box:      '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  layers:   '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  eye:      '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  check:    '<polyline points="20 6 9 17 4 12"/>',
+  chev:     '<polyline points="6 9 12 15 18 9"/>',
+};
+function _c1Ico(k, size) {
+  return '<svg width="' + (size || 16) + '" height="' + (size || 16) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + _C1_ICO[k] + '</svg>';
+}
+
+// A request address with the host in front and the path quieter behind it.
+function _c1UrlHtml(u) {
+  u = String(u || '');
+  const m = /^[a-z][a-z0-9+.-]*:\/\/([^\/?#]+)(.*)$/i.exec(u);
+  if (!m) return _c1Esc(_c1ShortUrl(u));
+  return '<b>' + _c1Esc(m[1]) + '</b><span class="p">' + _c1Esc(_c1ShortUrl(m[2])) + '</span>';
+}
+function _c1HostOf(u) {
+  const m = /^[a-z][a-z0-9+.-]*:\/\/([^\/?#:]+)/i.exec(String(u || ''));
+  return m ? m[1].toLowerCase() : '';
+}
+
+// One scheduled task: its name, then how often it fires.
+function _c1AlarmRow(a) {
+  const n = _c1AlarmName(a.name);
+  const when = a.period_minutes ? 'every ' + _c1HlTag(_c1Every(a.period_minutes))
+             : a.delay_minutes  ? 'once, after ' + _c1HlTag(_c1Every(a.delay_minutes))
+             : '<span class="c1r-dim">timing set in code</span>';
+  return '<div class="c1r-sched-r">' + _c1HlTag(n.text, 'n') + ' ' + (n.variable ? '<span class="c1r-dim">name set in code</span> ' : '') + '<span>' + when + '</span></div>';
+}
+
+// What is worth a look in the setup. Each item restates something measured in the profile; none is a verdict.
+function _c1SetupFlags(p) {
+  const E = _c1Esc, out = [];
+  const add = (ico, label, html, why, wide) => out.push({ ico: ico, label: label, html: html, why: why || '', wide: !!wide });
+  const cs = p.content_scripts || {}, rt = cs.runtime || {};
+  if (rt.registered_in_code) {
+    add('layers', 'Content scripts added from code',
+      'Run on ' + _c1HlTag(rt.all_sites ? 'every website' : 'websites') + ((rt.worlds || []).indexOf('MAIN') !== -1 ? ', including the page’s own JavaScript world' : ''),
+      (cs.declared || []).length ? 'On top of the ones in its manifest' : 'Its manifest lists none');
+  }
+  const alarms = p.alarms || [];
+  if (alarms.length) {
+    add('clock', 'Runs on a schedule',
+      '<div class="c1r-sched">' + alarms.slice(0, 6).map(_c1AlarmRow).join('') +
+      (alarms.length > 6 ? '<div class="c1r-dim">and ' + (alarms.length - 6) + ' more</div>' : '') + '</div>', '', alarms.length > 2);
+  }
+  const un = p.uninstall || {};
+  if (un.set) add('link', 'Opens a page when uninstalled', un.hint ? _c1HlTag(un.hint.split('?')[0], 'u') : 'Address set in code', un.hint ? 'Likely address, read from its code' : '');
+  const c = p.code || {};
+  if (c.eval_calls || c.new_function) add('code', 'Builds code while running', 'eval ' + _c1HlTag(_c1N(c.eval_calls)) + ' and new Function ' + _c1HlTag(_c1N(c.new_function)));
+  if (c.remote_scripts) add('download', 'Loads script from a remote address', _c1HlTag(_c1N(c.remote_scripts)) + ' place' + (c.remote_scripts === 1 ? '' : 's'), 'Its behaviour can change after review');
+  if ((c.obfuscated_names || 0) >= 20) add('eyeoff', 'Machine-generated names', _c1HlTag(_c1N(c.obfuscated_names)) + ' hex identifiers', 'A sign of an obfuscator');
+  const eps = p.endpoints || [];
+  const ip = eps.find(e => e.ip_literal);
+  if (ip) add('globe', 'Hard-coded IP address', _c1HlTag(ip.host, 'n'));
+  const clear = eps.filter(e => e.cleartext && !e.ip_literal);
+  if (clear.length) add('unlock', 'Uses plain http',
+    clear.slice(0, 3).map(e => _c1HlTag(e.host, 'n')).join(' ') + (clear.length > 3 ? ' and ' + _c1HlTag(clear.length - 3) + ' more' : ''),
+    'Traffic can be read or altered on the network');
+  const act = (p.network_rules || {}).by_action || {};
+  if (act.redirect || act.modifyHeaders) add('filter', 'Rewrites network traffic', _c1HlTag(_c1N(act.redirect)) + ' redirect and ' + _c1HlTag(_c1N(act.modifyHeaders)) + ' header changing rules');
+  const bins = (p.package || {}).binaries || [];
+  if (bins.length) add('box', 'Ships executable files', bins.slice(0, 4).map(b => _c1HlTag(b, 'n')).join(' '));
+  const wa = p.web_accessible || {};
+  if (wa.any_site) add('eye', 'Files visible to every website', _c1HlTag(_c1N(wa.count)) + ' file' + (wa.count === 1 ? '' : 's'), 'Lets a site detect that it is installed');
+  return out;
+}
+
+// Plain facts about the setup, as label and value tiles. What is flagged above is not repeated here.
+function _c1SetupFacts(p) {
+  const E = _c1Esc, code = s => '<code>' + E(s) + '</code>', f = [];
+  const bg = p.background || {};
+  f.push(['Background process', bg.kind === 'service_worker' ? 'Service worker ' + (bg.files || []).slice(0, 2).map(code).join(', ')
+    : bg.kind === 'page' ? 'Background page ' + (bg.files || []).slice(0, 2).map(code).join(', ')
+    : bg.kind === 'scripts' ? 'Background scripts ' + (bg.files || []).slice(0, 2).map(code).join(', ') : 'None declared']);
+  const sa = p.site_access || {};
+  f.push(['Websites it can reach', sa.scope === 'all_sites' ? _c1HlTag('Every website')
+    : sa.scope === 'limited' ? E(sa.count) + ' site pattern' + (sa.count === 1 ? '' : 's') : 'None',
+    sa.scope === 'limited' ? (sa.patterns || []).slice(0, 2).map(code).join(', ') : '']);
+  f.push(['Content scripts', (p.content_scripts || {}).declared && p.content_scripts.declared.length ? p.content_scripts.declared.length + ' in the manifest' : 'None in the manifest']);
+  const us = (p.manifest || {}).update_source;
+  f.push(['Updates come from', us === 'store' ? 'The Chrome Web Store' : us === 'custom' ? 'A custom update server' : 'No update address']);
+  const c = p.code || {};
+  if (c.js_files) f.push(['Code', c.js_files + ' JavaScript file' + (c.js_files === 1 ? '' : 's') + ', ' + _c1Bytes(c.js_bytes),
+    [c.minified_files ? c.minified_files + ' minified' : '', c.atob_calls ? 'base64 decode ' + c.atob_calls : ''].filter(Boolean).join(', ')]);
+  const pk = p.package;
+  if (pk && pk.files) f.push(['Package', _c1N(pk.files) + ' files, ' + _c1Bytes(pk.bytes)]);
+  const nr = p.network_rules;
+  if (nr && nr.total) {
+    const a = nr.by_action || {};
+    f.push(['Network rules', _c1N(nr.total) + (nr.total === 1 ? ' rule' : ' rules'), ['block', 'allow', 'redirect', 'modifyHeaders'].filter(k => a[k])
+      .map(k => _c1N(a[k]) + ' ' + (k === 'modifyHeaders' ? 'change headers' : k)).join(', ')]);
+  }
+  const wa = p.web_accessible || {};
+  if (wa.count && !wa.any_site) f.push(['Files visible to websites', wa.count + ', limited sites']);
+  return f;
+}
+
+// Browser API and data use, as name and count. The few that touch private data carry a tint.
+const _C1_SENSITIVE_API = ['proxy', 'cookies', 'webRequest', 'webRequestBlocking', 'debugger', 'history', 'nativeMessaging', 'management',
+  'document.cookie', 'keyboard events', 'form access', 'clipboard'];
+function _c1ApiPairs(p) {
+  const u = (p && p.api_usage) || {}, out = [];
+  [['browser', 'Browser APIs'], ['data', 'Data and network']].forEach(([k, label]) => {
+    const items = Object.keys(u[k] || {}).sort((a, b) => u[k][b] - u[k][a]);
+    if (items.length) out.push([label, items.map(n => [n, u[k][n]])]);
+  });
+  return out;
+}
+
+// The sandbox also opens the same few standard pages for every extension. That is a fact about the test, not the
+// extension, so it is one quiet tag rather than a section.
+function _c1BrowseTag(br) {
+  if (!br || br.enabled === false) return '';
+  const v = br.visited || [], f = br.failed || [];
+  if (v.length) return '<span class="c1r-tagpill" title="' + _c1Esc(v.map(u => u.replace(/^https?:\/\//, '').replace(/\/$/, '')).join(', ')) +
+    '">Also run on ' + v.length + ' standard test page' + (v.length === 1 ? '' : 's') + '</span>';
+  if (f.length) return '<span class="c1r-tagpill is-warn">Standard test pages could not be reached</span>';
+  return '';
+}
+const _C1_SRC_PHRASE = { background: 'its background worker', content_script: 'its content script', page: 'the page context', unknown: 'the network layer' };
+
 // ── Panels in the app ───────────────────────────────────────────────────────
-function _c1PanelHead(title, sub, accent) {
+function _c1PanelHead(title, sub, accent, subHtml) {
+  const inner = subHtml !== undefined ? subHtml : (sub ? _c1Esc(sub) : '');
   return '<div class="c1r-phead"><span class="c1r-accent' + (accent ? ' ' + accent : '') + '"></span><div>' +
-         '<div class="c1r-ptitle">' + _c1Esc(title) + '</div><div class="c1r-psub">' + _c1Esc(sub) + '</div></div></div>';
+         '<div class="c1r-ptitle">' + _c1Esc(title) + '</div>' + (inner ? '<div class="c1r-psub">' + inner + '</div>' : '') + '</div></div>';
 }
 
 // Short, plain observations for the Simple view. A handful of lines, no tables.
@@ -11642,84 +11864,119 @@ function c1NotesPanelHtml(data) {
   if (!notes.length) return '';
   return '<div class="c1r-panel">' +
     _c1PanelHead('Worth knowing about how it works', 'Facts from its code and setup, not a verdict', 'static') +
-    '<ul class="c1r-notes">' + notes.map(n => '<li>' + _c1Esc(_c1Prose(n)) + '</li>').join('') + '</ul></div>';
+    '<ul class="c1r-notes">' + notes.map(n => '<li>' + _c1Hl(_c1Prose(n)) + '</li>').join('') + '</ul></div>';
 }
 
 function c1ProfilePanelHtml(data) {
   const p = _c1Evidence(data).profile;
-  const rows = _c1ProfileRows(p);
-  if (!rows.length) return '';
-  const E = _c1Esc;
-  const notes = (p.notes || []).map(n => '<li>' + E(_c1Prose(n)) + '</li>').join('');
-  const alarms = p.alarms || [], eps = p.endpoints || [];
+  if (!_c1ProfileRows(p).length) return '';
+  const E = _c1Esc, flags = _c1SetupFlags(p), facts = _c1SetupFacts(p), apis = _c1ApiPairs(p);
   return '<div class="c1r-panel">' +
-    _c1PanelHead('How it is set up', 'Read from its manifest and code, without running it', 'static') +
-    (notes ? '<ul class="c1r-notes">' + notes + '</ul>' : '') +
-    '<div class="c1r-kv">' + rows.map(r => '<div class="k">' + E(r[0]) + '</div><div>' + r[1] + '</div>').join('') + '</div>' +
-    (alarms.length
-      ? '<div class="c1r-sub">Scheduled tasks</div><div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Name</th><th>First run</th><th>Repeats every</th></tr></thead><tbody>' +
-        alarms.map(a => { const n = _c1AlarmName(a.name); return '<tr><td><code>' + E(n.text) + '</code>' + (n.variable ? ' <span class="c1r-dim">variable</span>' : '') +
-          '</td><td>' + E(_c1Every(a.delay_minutes)) + '</td><td>' + E(_c1Every(a.period_minutes)) + '</td></tr>'; }).join('') +
-        '</tbody></table></div>' : '') +
-    (eps.length
-      ? '<div class="c1r-sub">Servers named in its code</div><div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Host</th><th>Mentions</th><th>Example</th></tr></thead><tbody>' +
-        eps.slice(0, 12).map(e => '<tr><td><code>' + E(e.host) + '</code>' + (e.cleartext ? ' <span class="c1r-pill flag">plain http</span>' : '') +
-          '</td><td>' + E(e.count) + '</td><td class="c1r-dim">' + E(_c1ShortUrl((e.samples || [])[0] || '')) + '</td></tr>').join('') +
-        '</tbody></table></div>' : '') +
-    _c1ApiList(p).map(g => '<div class="c1r-sub">' + E(g[0]) + ' use in its code</div><div class="c1r-chips">' +
-        g[1].map(i => '<span>' + E(i) + '</span>').join('') + '</div>').join('') +
+    _c1PanelHead('How it is set up', '', 'static') +
+    (flags.length
+      ? '<div class="c1r-sub">Worth a look</div><div class="c1r-fls">' + flags.map(f =>
+          '<div class="c1r-fl' + (f.wide ? ' wide' : '') + '"><span class="c1r-fl-ico">' + _c1Ico(f.ico, 16) + '</span><div class="c1r-fl-b">' +
+          '<div class="c1r-fl-t">' + E(f.label) + '</div><div class="c1r-fl-v">' + f.html + '</div>' +
+          (f.why ? '<div class="c1r-fl-w">' + E(f.why) + '</div>' : '') + '</div></div>').join('') + '</div>'
+      : '<div class="c1r-calm">' + _c1Ico('check', 15) + 'Nothing notable in how it is set up</div>') +
+    '<div class="c1r-sub">At a glance</div><div class="c1r-fks">' + facts.map(f =>
+      '<div class="c1r-fk"><div class="l">' + E(f[0]) + '</div><div class="v">' + f[1] + '</div>' + (f[2] ? '<div class="s">' + f[2] + '</div>' : '') + '</div>').join('') + '</div>' +
+    apis.map(g => '<div class="c1r-sub">' + E(g[0]) + ' in its code</div><div class="c1r-apis">' + g[1].map(i =>
+      '<span class="c1r-api' + (_C1_SENSITIVE_API.indexOf(i[0]) !== -1 ? ' sens' : '') + '"><b>' + E(i[0]) + '</b><i>' + E(i[1]) + '</i></span>').join('') + '</div>').join('') +
     '</div>';
 }
 
 function c1CallsPanelHtml(data) {
   const ev = _c1Evidence(data);
   if (!ev.ran) return '';
-  const E = _c1Esc, obs = ev.obs, reqs = obs.requests || [], br = ev.browse || {};
+  const E = _c1Esc, obs = ev.obs, br = ev.browse || {};
+  const tabs = obs.opened_tabs || [], evals = ev.beh.eval_samples || [];
+  const reqs = (obs.requests || []).slice();
   const facts = _c1BehaviourFacts(ev.beh, true);
-  const tabs = obs.opened_tabs || [], outside = obs.page_hosts || [];
-  const evals = (ev.beh.eval_samples || []);
-  if (!reqs.length && !facts.length && !tabs.length && !(br.visited || []).length) return '';
-  const srcLabel = s => (_C1R_SRC[s] || { label: s }).label;
-  const dataCell = r => r.has_body
-    ? E(_c1Bytes(r.body_size)) + ((r.body_keys || []).length ? ' <span class="c1r-dim">fields: ' + E(r.body_keys.join(', ')) + '</span>' : '')
-    : '<span class="c1r-dim">None</span>';
+  if (!reqs.length && !facts.length && !tabs.length) return '';
+
+  // what happened is lit, what did not is one quiet line
+  const cs = br.content_script || {};
+  const onPages = (br.visited || []).length
+    ? [['Requests on real pages', cs.requests], ['Cookie reads on real pages', cs.cookie_reads], ['Keyboard listeners on real pages', cs.key_listeners]].filter(x => x[1]) : [];
+  const seen = facts.filter(f => f[1]).concat(onPages), none = facts.filter(f => !f[1]).map(f => f[0].toLowerCase());
+
+  let req = '';
+  if (reqs.length) {
+    const LIM = 8, lim = reqs.length > LIM + 2 ? LIM : Infinity;
+    reqs.sort((a, b) => (b.has_body ? 1 : 0) - (a.has_body ? 1 : 0));          // what sent data comes first
+    const hosts = new Set(reqs.map(r => _c1HostOf(r.url)).filter(Boolean)).size;
+    const sent = reqs.filter(r => r.has_body).length, plain = reqs.filter(r => /^http:\/\//i.test(r.url || '')).length;
+    const srcs = Array.from(new Set(reqs.map(r => r.source)));
+    const one = srcs.length === 1 ? (_C1_SRC_PHRASE[srcs[0]] || '') : '';
+    const srcLabel = s => (_C1R_SRC[s] || { label: s }).label;
+    const bits = [_c1HlTag(_c1N(reqs.length)) + ' request' + (reqs.length === 1 ? '' : 's') + ' to ' + _c1HlTag(_c1N(hosts)) + ' host' + (hosts === 1 ? '' : 's'),
+      sent ? _c1HlTag(_c1N(sent)) + ' sent data' : 'none sent data'];
+    if (plain) bits.push(_c1HlTag(_c1N(plain)) + ' over plain http');
+    if (one) bits.push('all from ' + one);
+    req = '<div class="c1r-sub">Requests it made' + (obs.requests_truncated ? ' (first ' + reqs.length + ')' : '') + '</div>' +
+      '<div class="c1r-reqsum">' + bits.join('<span class="c1r-dot">·</span>') + '</div>' +
+      '<div class="c1r-fold"><div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Method</th><th>Address</th>' + (one ? '' : '<th>Made by</th>') +
+      '<th>Data sent</th><th>Times</th></tr></thead><tbody>' +
+      reqs.map((r, i) => '<tr' + (i >= lim ? ' class="more"' : '') + '><td><span class="c1r-bdg sq ' + (r.method === 'GET' ? 'mu' : 'am') + '">' + E(r.method) + '</span></td>' +
+        '<td class="c1r-url">' + _c1UrlHtml(r.url) + '</td>' +
+        (one ? '' : '<td><span class="c1r-bdg mu">' + E(srcLabel(r.source)) + '</span></td>') +
+        '<td>' + (r.has_body ? '<span class="c1r-sent">' + E(_c1Bytes(r.body_size)) + ((r.body_keys || []).length ? ' <small>' + E(r.body_keys.join(', ')) + '</small>' : '') + '</span>' : '<span class="c1r-dim">None</span>') + '</td>' +
+        '<td>' + (r.count > 1 ? _c1HlTag(r.count) : '<span class="c1r-dim">' + E(r.count) + '</span>') + '</td></tr>').join('') +
+      '</tbody></table></div>' +
+      (lim < Infinity ? '<button type="button" class="c1r-more" aria-expanded="false" onclick="c1Fold(this)" data-more="Show all ' + reqs.length + ' requests" data-less="Show fewer">Show all ' + reqs.length + ' requests</button>' : '') +
+      '</div>';
+  }
+
   return '<div class="c1r-panel">' +
-    _c1PanelHead('What it did when run', 'Counted in the sandbox. Only the extension’s own activity is scored') +
-    (facts.length ? '<div class="c1r-facts" style="margin-top:0">' + facts.map(f => '<span class="c1r-fact">' + E(f[0]) + ' <b>' + E(_c1N(f[1])) + '</b></span>').join('') + '</div>' : '') +
+    _c1PanelHead('What it did when run', '', undefined, _c1BrowseTag(br)) +
+    (seen.length ? '<div class="c1r-facts">' + seen.map(f => '<span class="c1r-fact' + (f[0] === 'Page changes' ? '' : ' is-on') + '">' + E(f[0]) + ' <b>' + E(_c1N(f[1])) + '</b></span>').join('') + '</div>' : '') +
+    (none.length ? '<div class="c1r-none">' + _c1Ico('check', 14) + '<span>None seen: ' + E(none.join(', ')) + '</span></div>' : '') +
     (evals.length ? '<div class="c1r-sub">Code it ran with eval</div>' + evals.map(s => '<div class="c1r-code">' + E(s) + '</div>').join('') : '') +
     (tabs.length ? '<div class="c1r-sub">Pages it opened by itself</div>' + tabs.map(t => '<div class="c1r-code">' + E(_c1ShortUrl(t)) + '</div>').join('') : '') +
-    (reqs.length
-      ? '<div class="c1r-sub">Requests it made' + (obs.requests_truncated ? ' (first ' + reqs.length + ')' : '') + '</div><div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Method</th><th>Address</th><th>Made by</th><th>Data sent</th><th>Times</th></tr></thead><tbody>' +
-        reqs.map(r => '<tr><td><b>' + E(r.method) + '</b></td><td class="c1r-url">' + E(_c1ShortUrl(r.url)) + '</td><td>' + E(srcLabel(r.source)) +
-          '</td><td>' + dataCell(r) + '</td><td>' + E(r.count) + '</td></tr>').join('') + '</tbody></table></div>' : '') +
-    (_c1BrowseLine(br)
-      ? '<div class="c1r-sub">Real pages visited</div><div class="c1r-note">' + E(_c1BrowseLine(br)) + '</div>' +
-        ((br.visited || []).length ? '<div class="c1r-chips" style="margin-top:8px">' + br.visited.map(u => '<span>' + E(u.replace(/^https?:\/\//, '')) + '</span>').join('') + '</div>' : '') +
-        ((br.visited || []).length ? '<div class="c1r-facts"><span class="c1r-fact">Page changes <b>' + E(_c1N(br.dom_mutations)) + '</b></span>' +
-           '<span class="c1r-fact">Cookie reads by the sites <b>' + E(_c1N(br.page_cookie_reads)) + '</b></span>' +
-           '<span class="c1r-fact">Content script requests <b>' + E(_c1N((br.content_script || {}).requests)) + '</b></span></div>' : '') +
-        (outside.length ? '<div class="c1r-note" style="margin-top:8px">Busiest servers those pages contacted, not attributed to the extension: ' +
-           outside.slice(0, 6).map(h => E(h.host) + ' (' + E(h.requests) + ')').join(', ') + '.</div>' : '')
-      : '') +
+    req +
     '</div>';
 }
 
 function c1IntelPanelHtml(data) {
   const ev = _c1Evidence(data), ni = ev.intel, doms = ni.domains || [];
   if (!doms.length) return '';
-  const E = _c1Esc, ioc = ni.iocs || {};
-  const group = (label, items) => items && items.length
-    ? '<div class="c1r-sub">' + E(label) + ' (' + items.length + ')</div><div class="c1r-chips mono">' + items.map(i => '<span>' + E(i) + '</span>').join('') + '</div>' : '';
+  const E = _c1Esc, ioc = ni.iocs || {}, LIM = 10, lim = doms.length > LIM + 2 ? LIM : Infinity;
+  const roleTone = { contacted: 'pu', opened: 'bl', declared: 'mu' };
+  const kindTone = { declared: 'gr', known_service: 'bl', unexplained: 'am', ip_literal: 'rd' };
+  const plain = {};
+  (ev.profile.endpoints || []).forEach(e => { if (e.cleartext) plain[e.host] = true; });
+
+  // a count per kind, in the colour the rows use, so the colours explain themselves
+  const roleN = {}, kindN = {};
+  doms.forEach(d => { roleN[d.role] = (roleN[d.role] || 0) + 1; kindN[d.kind] = (kindN[d.kind] || 0) + 1; });
+  const chip = (txt, tone, n) => '<span class="c1r-bdg ' + tone + '">' + E(txt) + ' <b>' + n + '</b></span>';
+  const legend = Object.keys(_C1_ROLE).filter(k => roleN[k]).map(k => chip(_C1_ROLE[k], roleTone[k], roleN[k])).join('') +
+    '<span class="c1r-leg-sep"></span>' + Object.keys(_C1_KIND).filter(k => kindN[k]).map(k => chip(_C1_KIND[k], kindTone[k], kindN[k])).join('');
+
+  const ipCell = d => { const ips = d.ips || []; return ips.length ? E(ips[0]) + (ips.length > 1 ? ' <span class="c1r-dim">+' + (ips.length - 1) + '</span>' : '') : '<span class="c1r-dim">Not resolved</span>'; };
+  const rows = doms.map((d, i) => '<tr' + (i >= lim ? ' class="more"' : '') + '><td><code>' + E(d.host) + '</code>' + (plain[d.host] ? ' <span class="c1r-bdg rd sq">plain http</span>' : '') + '</td>' +
+    '<td><span class="c1r-bdg ' + (roleTone[d.role] || 'mu') + '">' + E(_C1_ROLE[d.role] || d.role) + (d.requests ? ' <small>' + E(d.requests) + ' req</small>' : '') + '</span></td>' +
+    '<td><span class="c1r-bdg ' + (kindTone[d.kind] || 'mu') + '">' + E(_C1_KIND[d.kind] || d.kind) + '</span></td>' +
+    '<td class="c1r-ip">' + ipCell(d) + '</td></tr>').join('');
+
+  // the lists to copy start folded: they are for pasting into a blocklist, not for reading
+  const groups = [['Domains', ioc.domains, 'bl'], ['IP addresses', ioc.ips, 'am'], ['URLs', ioc.urls, 'pu']].filter(g => g[1] && g[1].length);
+  const iocs = groups.length
+    ? '<div class="c1r-iochead"><span class="c1r-sub">Indicators to block</span>' +
+      ((ioc.domains || []).length || (ioc.ips || []).length
+        ? '<button class="c1r-xbtn" onclick="c1CopyIocs()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy indicators</button>' : '') +
+      '</div><div class="c1r-iocs">' + groups.map(g =>
+        '<div class="c1r-ioc c1r-fold"><button type="button" aria-expanded="false" onclick="c1Fold(this)"><span class="c1r-bdg ' + g[2] + '"><b>' + g[1].length + '</b></span>' + E(g[0]) + _c1Ico('chev', 14) + '</button>' +
+        '<div class="c1r-chips mono more">' + g[1].map(i => '<span>' + E(i) + '</span>').join('') + '</div></div>').join('') + '</div>'
+    : '';
+
   return '<div class="c1r-panel">' +
-    _c1PanelHead('Servers and indicators', 'Who the extension talks to or names, and what to block if you decide to') +
-    '<div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Host</th><th>Role</th><th>What it is</th><th>IP addresses</th></tr></thead><tbody>' +
-    doms.map(d => '<tr><td><code>' + E(d.host) + '</code></td><td>' + E(_C1_ROLE[d.role] || d.role) + (d.requests ? ' <span class="c1r-dim">' + E(d.requests) + ' req</span>' : '') +
-      '</td><td>' + E(_C1_KIND[d.kind] || d.kind) + '</td><td class="c1r-dim">' + (E((d.ips || []).slice(0, 3).join(', ')) || 'Not resolved') +
-      '</td></tr>').join('') + '</tbody></table></div>' +
-    group('Domains', ioc.domains) + group('IP addresses', ioc.ips) + group('URLs', ioc.urls) +
-    ((ioc.domains || []).length || (ioc.ips || []).length
-      ? '<button class="c1r-xbtn" style="margin-top:12px" onclick="c1CopyIocs()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy indicators</button>' : '') +
-    '</div>';
+    _c1PanelHead('Servers and indicators', '') +
+    '<div class="c1r-leg">' + legend + '</div>' +
+    '<div class="c1r-fold"><div class="c1r-tblw"><table class="c1r-tbl"><thead><tr><th>Host</th><th>Role</th><th>Type</th><th>IP address</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (lim < Infinity ? '<button type="button" class="c1r-more" aria-expanded="false" onclick="c1Fold(this)" data-more="Show all ' + doms.length + ' servers" data-less="Show fewer">Show all ' + doms.length + ' servers</button>' : '') +
+    '</div>' + iocs + '</div>';
 }
 
 // Indicators are defanged (hxxp, [.]) so a pasted copy cannot be clicked by accident.
@@ -11767,7 +12024,7 @@ function _c1RptSetup(data, num) {
 function _c1RptCalls(data) {
   const ev = _c1Evidence(data);
   if (!ev.ran) return '';
-  const E = _c1Esc, obs = ev.obs, reqs = obs.requests || [], br = ev.browse || {}, tabs = obs.opened_tabs || [], outside = obs.page_hosts || [];
+  const E = _c1Esc, obs = ev.obs, reqs = obs.requests || [], br = ev.browse || {}, tabs = obs.opened_tabs || [];
   const facts = _c1BehaviourFacts(ev.beh, true), evals = ev.beh.eval_samples || [];
   let h = '';
   if (facts.length) h += '<div class="sub2">Behaviour counted</div><div class="mini">' +
@@ -11780,15 +12037,9 @@ function _c1RptCalls(data) {
       E(_C1_RPT_SRC[r.source] || r.source) + '</td><td>' + (r.has_body ? E(_c1Bytes(r.body_size)) +
         ((r.body_keys || []).length ? ' <span class="na">fields: ' + E(r.body_keys.join(', ')) + '</span>' : '') : '<span class="na">None</span>') +
       '</td><td>' + E(r.count) + '</td></tr>').join('') + '</tbody></table></div>';
-  const line = _c1BrowseLine(br);
-  if (line) {
-    h += '<div class="sub2">Real pages visited</div><p style="margin:0 0 8px;color:var(--mut)">' + E(line) + '</p>';
-    if ((br.visited || []).length) h += '<div class="chips">' + br.visited.map(u => '<span>' + E(u.replace(/^https?:\/\//, '')) + '</span>').join('') + '</div>' +
-      '<div class="mini" style="margin-top:10px"><div><b>' + E(_c1N(br.dom_mutations)) + '</b><span>Page changes</span></div><div><b>' + E(_c1N(br.page_cookie_reads)) +
-      '</b><span>Cookie reads by the sites</span></div><div><b>' + E(_c1N((br.content_script || {}).requests)) + '</b><span>Content script requests</span></div></div>';
-    if (outside.length) h += '<p style="margin:10px 0 0;color:var(--mut);font-size:13.5px">Busiest servers those pages contacted, not attributed to the extension: ' +
-      outside.slice(0, 6).map(x => E(x.host) + ' (' + E(x.requests) + ')').join(', ') + '.</p>';
-  }
+  const v = (br.visited || []).length;
+  if (v) h += '<p style="margin:12px 0 0;color:var(--mut)">Also run on ' + v + ' standard test page' + (v === 1 ? '' : 's') + ' (' +
+    E(br.visited.map(u => u.replace(/^https?:\/\//, '').replace(/\/$/, '')).join(', ')) + '), the same for every extension.</p>';
   return h;
 }
 
@@ -12220,7 +12471,7 @@ function c1BuildHtmlReport(data) {
   const extId = ident.ext_id || data.extension_id || data.ext_id || '';
   const ran   = !!dy.executed;
   const plain = _c1Prose(rpt.plain_summary || rpt.summary || data.detail || '');
-  const bandColor = v => v >= 70 ? 'var(--bad)' : v >= 40 ? 'var(--warn)' : 'var(--safe)';
+  const bandColor = v => (v = Math.round(v)) >= 70 ? 'var(--bad)' : v >= 40 ? 'var(--warn)' : 'var(--safe)';
   const glyph = { safe: '&#10003;', sus: '!', mal: '&#10005;' }[kind];
   const when  = data.timestamp ? new Date(data.timestamp) : null;
   const whenTxt = when && !isNaN(when) ? when.toLocaleString() : '';
@@ -12446,7 +12697,7 @@ function c1Render(data) {
   _c1CountUp(document.getElementById('c1-val-static'),  staticPct,  850);
   _c1CountUp(document.getElementById('c1-val-dynamic'), dynPct,     850);
   const bigScore = document.getElementById('c1-big-score');
-  if (bigScore) _c1CountUp(bigScore, finalScore, 900);
+  if (bigScore) { _c1CountUp(bigScore, finalScore, 900); _c1RingIn(bigScore, finalScore, clr); }
 
   const flagsEl = document.getElementById('c1-flags');
   flagsEl.innerHTML = (data.flags || []).map(f =>
@@ -12456,6 +12707,7 @@ function c1Render(data) {
   c1ShowBlocklistCard(data.static?.blocklist_details || null);
 
   const st = data.static || {};
+  const hasAnomaly = st.anomaly_score !== undefined && st.anomaly_score !== null;
   const anomalyPct = ((st.anomaly_score||0)*100).toFixed(1);
   // A blocklist hit on a fully documented row never reaches the models — its
   // ml_score/anomaly_score are placeholders, so printing them as classifier
@@ -12470,13 +12722,16 @@ function c1Render(data) {
       'matched a fully documented blocklist record, so the verdict needed no ' +
       'classifier.</div>'
     : c1MeterHtml('ML probability (XGBoost)', mlPct.toFixed(1) + '%', mlPct,
-        c1Color(mlPct),
-        'Scored against extensions already known to be malicious or benign.') +
-      c1MeterHtml('Anomaly score (Isolation Forest)', anomalyPct + '/100', anomNum,
-        c1Color(anomNum),
-        anomNum >= 50
-          ? 'Unlike any known-benign extension the model was trained on.'
-          : 'Within the range of ordinary extensions.');
+        c1Color(mlPct), '', _C1_LOGO.xgb) +
+      (hasAnomaly
+        ? c1MeterHtml('Anomaly score (Isolation Forest)', anomalyPct + '/100', anomNum,
+            c1Color(anomNum),
+            anomNum >= 50
+              ? 'Unlike any known-benign extension the model was trained on.'
+              : 'Within the range of ordinary extensions.', _C1_LOGO.iso)
+        // older analyses saved before the score was kept: say so rather than show a 0
+        : c1MeterHtml('Anomaly score (Isolation Forest)', 'Not recorded', 0, c1Color(0),
+            'This analysis was saved without it.', _C1_LOGO.iso));
 
   // The remaining facts are single values, not distributions, so they stay as
   // chips rather than being dressed up as bars they cannot honestly fill.
@@ -12503,9 +12758,6 @@ function c1Render(data) {
       'The 100 above comes from the blocklist, not the classifier.</div>';
   }
   document.getElementById('c1-static-detail').innerHTML = staticHtml;
-
-  const staticEngine = document.getElementById('c1-static-engine');
-  if (staticEngine) staticEngine.innerHTML = c1EngineHtml('static', { modelsRan: !blInstant });
 
   const dy = data.dynamic || {};
   const signals = dy.signals || [];
@@ -12536,16 +12788,12 @@ function c1Render(data) {
     signals.forEach(s => { dynHtml += `<span class="c1-signal">${_c1Esc(s)}</span>`; });
     dynHtml += '</div>';
   }
+  if (dy.executed || dy.extension_loaded === false) dynHtml = _c1RunnerHtml((dy.isolation || {}).level) + dynHtml;
   document.getElementById('c1-dynamic-detail').innerHTML = dynHtml;
   // Containment is rendered as its own full-width card below the two panels,
   // not appended here — see the markup note next to #c1-isolation-card.
   const isoCard = document.getElementById('c1-isolation-card');
   if (isoCard) isoCard.innerHTML = c1IsolationHtml(dy.isolation);
-  const dynEngine = document.getElementById('c1-dynamic-engine');
-  if (dynEngine) dynEngine.innerHTML = c1EngineHtml('dynamic', {
-    executed: !!dy.executed && dy.extension_loaded !== false,
-    level: (dy.isolation || {}).level,
-  });
   document.getElementById('c1-result-area').style.display = 'block';
 
   // ── Verdict Report card ──────────────────────────────────────────────────
@@ -13324,7 +13572,6 @@ function c1LiveCreateCard(extId, url) {
     '</div>' +
     '<div class="c1-lc-actions" id="c1-lc-actions-' + id + '">' +
       '<button class="c1-btn ghost danger" onclick="c1LiveBlock(\'' + id + '\')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Block</button>' +
-      '<button class="c1-btn primary success" id="c1-lc-approve-' + id + '" disabled style="opacity:.4"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Analyzing…</button>' +
     '</div>';
 
   const host = document.getElementById('c1-live-cards');
@@ -13380,7 +13627,7 @@ function c1LiveUpdateCard(extId, state, result, error) {
     body.innerHTML = '<span style="color:var(--danger)">' + _C1_LIVE_ICON.error +
       ' Analysis failed: ' + _c1Esc(error || 'Unknown') + '</span>';
     card.classList.add('verdict-' + state);
-    if (btn) { btn.textContent = 'Cannot approve'; btn.disabled = true; }
+    if (btn) btn.remove();
     return;
   }
 
@@ -13443,13 +13690,19 @@ function c1LiveUpdateCard(extId, state, result, error) {
 
     card.classList.add('verdict-' + state);
 
-    if (btn) {
-      btn.disabled = !isSafe;
-      btn.style.opacity = isSafe ? '1' : '0.4';
-      btn.innerHTML = isSafe
-        ? _C1_APPROVE_ICON + 'Approve Install'
-        : _C1_LIVE_ICON.malicious.replace('<svg ', '<svg style="margin-right:5px" ') + _c1Esc(verdict);
-      if (isSafe) btn.onclick = () => c1LiveApprove(extId);
+    // Only a Safe verdict can be approved, so only then is there an Approve button. A greyed out
+    // button labelled with the verdict was a control that could not be used.
+    const actions = document.getElementById('c1-lc-actions-' + id);
+    const have    = document.getElementById('c1-lc-approve-' + id);
+    if (isSafe && actions && !have) {
+      const ok = document.createElement('button');
+      ok.className = 'c1-btn primary success';
+      ok.id = 'c1-lc-approve-' + id;
+      ok.innerHTML = _C1_APPROVE_ICON + 'Approve Install';
+      ok.onclick = () => c1LiveApprove(extId);
+      actions.appendChild(ok);
+    } else if (!isSafe && have) {
+      have.remove();
     }
 
     c1AddHistory(result);
@@ -15398,7 +15651,8 @@ function _testsStart(component, caseId) {
       const col = msg.failed > 0 ? 'var(--danger)' : 'var(--safe)';
       document.getElementById('tests-summary').innerHTML =
         `<span style="color:${col}">${msg.passed}/${msg.total} passed</span> · ` +
-        `<span style="color:var(--t3)">${((Date.now()-_testsStartTime)/1000).toFixed(1)}s total</span>`;
+        `<span style="color:var(--t3)">${((Date.now()-_testsStartTime)/1000).toFixed(1)}s total</span>` +
+        (msg.error ? ` · <span style="color:var(--danger)">${String(msg.error).replace(/</g,'&lt;')}</span>` : '');
       document.getElementById('tests-progress-bar').style.background =
         msg.failed > 0 ? 'var(--danger)' : 'var(--safe)';
     }
@@ -15410,7 +15664,19 @@ function _testsStart(component, caseId) {
     _testsShowNextBtn(false);
     document.getElementById('tests-stop-btn').style.display = 'none';
     document.getElementById('tests-run-all').disabled = false;
-    document.getElementById('tests-summary').textContent = 'Connection error';
+    const sumEl = document.getElementById('tests-summary');
+    sumEl.textContent = 'Connection error';
+    // EventSource hides why it failed; ask the same URL once to learn the HTTP status.
+    const ctl = new AbortController();
+    const tmo = setTimeout(() => ctl.abort(), 4000);
+    fetch(API + '/dev/run_tests_stream?component=none', {signal: ctl.signal})
+      .then(r => r.text().then(t => {
+        sumEl.textContent = r.ok
+          ? 'Connection error: the test stream dropped (HTTP ' + r.status + ')'
+          : 'Test stream failed: HTTP ' + r.status + ' ' + t.slice(0, 200);
+      }))
+      .catch(() => { sumEl.textContent = 'Connection error: the backend is not reachable'; })
+      .finally(() => clearTimeout(tmo));
   };
 }
 
@@ -15539,7 +15805,7 @@ function _testsUpdateItem(msg) {
       <div id="c1r-advanced" style="display:none">
       <div class="c1-card">
         <div class="c1-verdict-block">
-          <div id="c1-big-score" class="c1-big-score">--</div>
+          <div id="c1-big-score" class="c1-big-score c1r-ringed">--</div>
           <div>
             <div id="c1-verdict-label" class="c1-verdict-label">--</div>
             <div id="c1-verdict-meta"  class="c1-verdict-meta"></div>
@@ -15602,7 +15868,6 @@ function _testsUpdateItem(msg) {
             </div>
           </div>
           <div id="c1-static-detail" class="c1r-body"></div>
-          <div id="c1-static-engine" class="c1r-engine-slot"></div>
         </div>
         <div class="c1r-panel c1r-anim c1r-d2">
           <div class="c1r-phead">
@@ -15613,7 +15878,6 @@ function _testsUpdateItem(msg) {
             </div>
           </div>
           <div id="c1-dynamic-detail" class="c1r-body"></div>
-          <div id="c1-dynamic-engine" class="c1r-engine-slot"></div>
         </div>
       </div>
 
