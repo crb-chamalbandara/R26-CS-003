@@ -34,7 +34,7 @@
 ; ── The options page, shown after the install-folder page ──────────────────
 !macro customPageAfterChangeDir
   Page custom ScOptionsCreate ScOptionsLeave
-  Page custom C1SbCreate C1SbLeave   ; C1: Windows Sandbox (skipped when it is already on)
+  Page custom C1SbCreate C1SbLeave   ; C1: Windows Sandbox (always shown; disabled when it is already on)
 !macroend
 
 !ifndef BUILD_UNINSTALLER

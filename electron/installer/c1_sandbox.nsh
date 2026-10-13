@@ -7,8 +7,9 @@
 ; the exit codes read below).
 ;
 ; It never turns the feature on twice:
-;   * the page is skipped when Windows Sandbox is already on (the same test the app uses: the launcher
-;     System32\WindowsSandbox.exe exists), so nothing is asked and nothing is run;
+;   * the page is always shown. When Windows Sandbox is already on (the same test the app uses: the launcher
+;     System32\WindowsSandbox.exe exists) the box is ticked and disabled with an "already on" note, and
+;     nothing is asked and nothing is run;
 ;   * it is checked again just before the script runs, and the script checks once more.
 ; When it was turned on (or was already waiting for a restart) the installer sets the reboot flag, so the
 ; Finish page asks whether to restart now or later; the analyzer uses the VM from the next start of Windows.
@@ -56,12 +57,9 @@ Function C1SbDetect
   ${EndIf}
 FunctionEnd
 
-; The page. Skipped when there is nothing to choose.
+; The page. Always shown; the box is disabled when there is nothing to choose.
 Function C1SbCreate
   Call C1SbDetect
-  ${If} $C1SbState == 1
-    Abort
-  ${EndIf}
 
   !insertmacro MUI_HEADER_TEXT "Extension Analyzer" "Windows Sandbox gives the analyzer a disposable virtual machine."
   nsDialogs::Create 1018
@@ -76,7 +74,13 @@ Function C1SbCreate
   ${NSD_CreateCheckbox} 0 46u 100% 12u "Turn on &Windows Sandbox for me (recommended)"
   Pop $C1SbBox
 
-  ${If} $C1SbState == 2
+  ${If} $C1SbState == 1
+    ${NSD_SetText} $C1SbBox "Windows Sandbox is already on"
+    SendMessage $C1SbBox ${BM_SETCHECK} ${BST_CHECKED} 0
+    EnableWindow $C1SbBox 0
+    ${NSD_CreateLabel} 12u 62u 95% 36u "Windows Sandbox is already turned on on this PC, so there is nothing to do here and no restart is needed."
+    Pop $0
+  ${ElseIf} $C1SbState == 2
     EnableWindow $C1SbBox 0
     ${NSD_CreateLabel} 12u 62u 95% 36u "Windows Sandbox is not available on this version of Windows. It needs Windows 10 or 11 Pro, Enterprise or Education. WebSentinel will use its less isolated mode."
     Pop $0
@@ -93,6 +97,10 @@ FunctionEnd
 
 Function C1SbLeave
   ${NSD_GetState} $C1SbBox $C1SbOn
+  ; A disabled box (already on / not available) is not a request to change anything.
+  ${If} $C1SbState != 0
+    StrCpy $C1SbOn 0
+  ${EndIf}
 FunctionEnd
 
 ; Run at the end of the install, only when the box was ticked.
